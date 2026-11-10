@@ -1,0 +1,170 @@
+{
+  "scm_l": [
+    "FJ1573"
+  ],
+  "scm_r": [
+    "FJ1595"
+  ],
+  "trap_asc_l": [
+    "FJ1520M"
+  ],
+  "trap_asc_r": [
+    "FJ1520"
+  ],
+  "trap_trans_l": [
+    "FJ1554M"
+  ],
+  "trap_trans_r": [
+    "FJ1554"
+  ],
+  "trap_desc_l": [
+    "FJ1521M"
+  ],
+  "trap_desc_r": [
+    "FJ1521"
+  ],
+  "delt_clav_l": [
+    "FJ1468M"
+  ],
+  "delt_clav_r": [
+    "FJ1468"
+  ],
+  "delt_acro_l": [
+    "FJ1467M"
+  ],
+  "delt_acro_r": [
+    "FJ1467"
+  ],
+  "delt_spin_l": [
+    "FJ1513M"
+  ],
+  "delt_spin_r": [
+    "FJ1513"
+  ],
+  "pec_clav_l": [
+    "FJ1447M"
+  ],
+  "pec_clav_r": [
+    "FJ1447"
+  ],
+  "pec_stern_l": [
+    "FJ1464M"
+  ],
+  "pec_stern_r": [
+    "FJ1464"
+  ],
+  "pec_abd_l": [
+    "FJ1446M"
+  ],
+  "pec_abd_r": [
+    "FJ1446"
+  ],
+  "biceps_long_l": [
+    "FJ1478M"
+  ],
+  "biceps_long_r": [
+    "FJ1478"
+  ],
+  "biceps_short_l": [
+    "FJ1512M"
+  ],
+  "biceps_short_r": [
+    "FJ1512"
+  ],
+  "triceps_long_l": [
+    "FJ1479M"
+  ],
+  "triceps_long_r": [
+    "FJ1479"
+  ],
+  "triceps_lat_l": [
+    "FJ1477M"
+  ],
+  "triceps_lat_r": [
+    "FJ1477"
+  ],
+  "triceps_med_l": [
+    "FJ1480M"
+  ],
+  "triceps_med_r": [
+    "FJ1480"
+  ],
+  "ext_oblique_l": [
+    "FJ1452M"
+  ],
+  "ext_oblique_r": [
+    "FJ1452"
+  ],
+  "glut_max_l": [
+    "FJ1418M"
+  ],
+  "glut_max_r": [
+    "FJ1418"
+  ],
+  "rectus_fem_l": [
+    "FJ1433M"
+  ],
+  "rectus_fem_r": [
+    "FJ1433"
+  ],
+  "vastus_lat_l": [
+    "FJ1442M"
+  ],
+  "vastus_lat_r": [
+    "FJ1442"
+  ],
+  "vastus_med_l": [
+    "FJ1443M"
+  ],
+  "vastus_med_r": [
+    "FJ1443"
+  ],
+  "bf_long_l": [
+    "FJ1395M"
+  ],
+  "bf_long_r": [
+    "FJ1395"
+  ],
+  "bf_short_l": [
+    "FJ1444M"
+  ],
+  "bf_short_r": [
+    "FJ1444"
+  ],
+  "semitend_l": [
+    "FJ1436M"
+  ],
+  "semitend_r": [
+    "FJ1436"
+  ],
+  "semimemb_l": [
+    "FJ1435M"
+  ],
+  "semimemb_r": [
+    "FJ1435"
+  ],
+  "gastroc_lat_l": [
+    "FJ1394M"
+  ],
+  "gastroc_lat_r": [
+    "FJ1394"
+  ],
+  "gastroc_med_l": [
+    "FJ1397M"
+  ],
+  "gastroc_med_r": [
+    "FJ1397"
+  ],
+  "soleus_l": [
+    "FJ1437M"
+  ],
+  "soleus_r": [
+    "FJ1437"
+  ],
+  "tib_ant_l": [
+    "FJ1439M"
+  ],
+  "tib_ant_r": [
+    "FJ1439"
+  ]
+}
