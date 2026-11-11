@@ -23,7 +23,7 @@ import {
   type MuscleRegion,
 } from './data/muscles'
 import { ThoraxScene } from './scene/ThoraxScene'
-import { playCorrectChime, playKeyTap, unlockAudio } from './audio/chime'
+import { playCorrectChime, playKeyTap, playWrongTick, unlockAudio } from './audio/chime'
 
 /** Bonetype three-level model (+ Combined runs all back-to-back). */
 type Level = 'see' | 'hint' | 'memory'
@@ -61,6 +61,7 @@ type QuizEntry = {
   hint: string
   meshNames: string[]
   regionLabel: string
+  aliases: string[]
   match: (typed: string) => boolean
 }
 
@@ -287,6 +288,7 @@ function boneToEntry(b: AxialBone): QuizEntry {
     hint: b.hint,
     meshNames: b.meshNames,
     regionLabel: REGION_LABEL[b.region],
+    aliases: b.aliases,
     match: (typed) => answersMatch(typed, b),
   }
 }
@@ -298,6 +300,7 @@ function muscleToEntry(m: Muscle): QuizEntry {
     hint: m.hint,
     meshNames: m.meshNames,
     regionLabel: MUSCLE_REGION_LABEL[m.region],
+    aliases: m.aliases,
     match: (typed) => muscleAnswersMatch(typed, m),
   }
 }
@@ -323,7 +326,35 @@ function preferredAnswer(bone: QuizEntry): string {
   return bone.displayName
 }
 
-/** Progressive fill: typed prefix bright, remainder dim (letters or blanks by level). */
+/** Letters only — spaces and punctuation do not move the caret. */
+function compactLetters(raw: string): string {
+  return raw
+    .toLowerCase()
+    .normalize('NFKD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9]/g, '')
+}
+
+/** First index in compact typed letters that is not a prefix of any accepted name, or -1. */
+function firstWrongIndex(typed: string, aliases: string[]): number {
+  const compact = compactLetters(typed)
+  if (!compact) return -1
+  const targets = aliases.map(compactLetters).filter(Boolean)
+  if (targets.some((t) => t.startsWith(compact))) return -1
+  let best = 0
+  for (const t of targets) {
+    let i = 0
+    while (i < compact.length && i < t.length && compact[i] === t[i]) i++
+    if (i > best) best = i
+  }
+  return best
+}
+
+function acceptedNames(bone: QuizEntry): string[] {
+  return [bone.displayName, ...bone.aliases]
+}
+
+/** Progressive fill: typed prefix bright, wrong letters flagged, caret on the current letter. */
 function renderTargetWord(bone: QuizEntry | null): void {
   if (!bone) {
     targetWord.innerHTML = `<span class="tw-done">Session complete</span>`
@@ -339,50 +370,45 @@ function renderTargetWord(bone: QuizEntry | null): void {
 
   const answer = preferredAnswer(bone)
   const level = currentLevel()
-  const typed = state.typed
+  const compactTyped = compactLetters(state.typed)
+  const wrongAt = firstWrongIndex(state.typed, acceptedNames(bone))
   const chars = [...answer]
   let html = ''
-
-  for (let i = 0; i < chars.length; i++) {
-    const ch = chars[i]!
-    if (/\s/.test(ch)) {
-      html += `<span class="tw-space"> </span>`
-      continue
-    }
-    // Count non-space index in typed comparison — we type without caring about display spaces much;
-    // typed is normalized lowercase letters; map by stripping spaces from answer for index.
-  }
-
-  // Build display against the raw displayName, matching typed against compact letters
-  const letterOnly = answer.replace(/\s+/g, '')
-  const typedLen = typed.length
   let letterIdx = 0
-  html = ''
+  let caretPlaced = false
+
   for (const ch of chars) {
     if (/\s/.test(ch)) {
       html += `<span class="tw-space">&nbsp;</span>`
       continue
     }
-    if (letterIdx < typedLen) {
-      // Show what was typed at this slot (prefer typed char for feedback)
-      const tch = typed[letterIdx] ?? ch
-      html += `<span class="tw-on">${escapeHtml(tch)}</span>`
-    } else if (level === 'see') {
-      html += `<span class="tw-dim">${escapeHtml(ch.toLowerCase())}</span>`
-    } else if (level === 'hint' && letterIdx === 0) {
-      html += `<span class="tw-dim">${escapeHtml(ch.toLowerCase())}</span>`
+    if (letterIdx < compactTyped.length) {
+      const tch = compactTyped[letterIdx]!
+      const wrong = wrongAt >= 0 && letterIdx >= wrongAt
+      html += `<span class="${wrong ? 'tw-wrong' : 'tw-on'}">${escapeHtml(tch)}</span>`
     } else {
-      html += `<span class="tw-blank">_</span>`
+      let cls = 'tw-blank'
+      let inner = '_'
+      if (level === 'see' || (level === 'hint' && letterIdx === 0)) {
+        cls = 'tw-dim'
+        inner = escapeHtml(ch.toLowerCase())
+      }
+      if (!caretPlaced) {
+        html += `<span class="${cls} tw-caret">${inner}</span>`
+        caretPlaced = true
+      } else {
+        html += `<span class="${cls}">${inner}</span>`
+      }
     }
     letterIdx++
   }
-  // Cursor after typed portion
-  html += `<span class="tw-cursor"></span>`
-  // If typed longer than answer (mismatch), still show typed overflow
-  if (typedLen > letterOnly.length) {
-    // shouldn't happen often — answersMatch fires first
+
+  if (compactTyped.length > letterIdx) {
+    html += [...compactTyped.slice(letterIdx)]
+      .map((ch) => `<span class="tw-wrong">${escapeHtml(ch)}</span>`)
+      .join('')
   }
-  void letterOnly
+  if (!caretPlaced) html += `<span class="tw-cursor"></span>`
   targetWord.innerHTML = html
 }
 
@@ -562,8 +588,9 @@ function onChar(ch: string): void {
   if (state.revealing) return
   const bone = current()
   if (!bone) return
-  playKeyTap()
   state.typed += ch
+  if (firstWrongIndex(state.typed, acceptedNames(bone)) >= 0) playWrongTick()
+  else playKeyTap()
   updateHud()
   if (bone.match(state.typed)) void onCorrect()
 }
@@ -919,10 +946,13 @@ hiddenInput.addEventListener('input', () => {
   const raw = hiddenInput.value
   const cleaned = raw.toLowerCase().replace(/[^a-z0-9 \-]/g, '')
   if (cleaned !== raw) hiddenInput.value = cleaned
-  if (cleaned.length !== state.typed.length) playKeyTap()
-  state.typed = cleaned
-  updateHud()
   const bone = current()
+  const prev = state.typed
+  const added = compactLetters(cleaned).length > compactLetters(prev).length
+  state.typed = cleaned
+  if (added && bone && firstWrongIndex(state.typed, acceptedNames(bone)) >= 0) playWrongTick()
+  else if (cleaned.length !== prev.length) playKeyTap()
+  updateHud()
   if (bone && bone.match(state.typed)) void onCorrect()
 })
 

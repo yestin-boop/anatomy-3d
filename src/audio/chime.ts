@@ -107,3 +107,27 @@ export function playCorrectChime(): void {
     osc.stop(t0 + 0.28)
   })
 }
+
+/** Short low tick when a typed letter does not match. */
+export function playWrongTick(): void {
+  const c = getCtx()
+  if (c.state === 'suspended') void c.resume()
+  const now = c.currentTime
+
+  const master = c.createGain()
+  master.gain.setValueAtTime(0.7, now)
+  master.connect(c.destination)
+
+  const osc = c.createOscillator()
+  const g = c.createGain()
+  osc.type = 'triangle'
+  osc.frequency.setValueAtTime(220, now)
+  osc.frequency.exponentialRampToValueAtTime(110, now + 0.08)
+  g.gain.setValueAtTime(0.0001, now)
+  g.gain.exponentialRampToValueAtTime(0.14, now + 0.008)
+  g.gain.exponentialRampToValueAtTime(0.0001, now + 0.12)
+  osc.connect(g)
+  g.connect(master)
+  osc.start(now)
+  osc.stop(now + 0.14)
+}
