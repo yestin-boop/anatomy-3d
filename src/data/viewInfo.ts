@@ -147,7 +147,7 @@ export const MUSCLE_VIEW: Record<string, MuscleViewInfo> = {
     origin:
       'External surfaces of ribs 5–12, interdigitating superiorly with serratus anterior and inferiorly with latissimus dorsi.',
     insertion:
-      'Linea alba, the pubic tubercle, and the anterior half of the iliac crest, via a broad aponeurosis. The thickened free inferior border of the aponeurosis stretches from the anterior superior iliac spine to the pubic tubercle as the inguinal ligament. (This model has no linea-alba mesh; the pin marks the iliac attachment on the hip bone.)',
+      'Linea alba, the pubic tubercle, and the anterior half of the iliac crest, via a broad aponeurosis. The thickened free inferior border of the aponeurosis stretches from the anterior superior iliac spine to the pubic tubercle as the inguinal ligament. (This model has no linea-alba mesh; the label marks the iliac attachment on the hip bone.)',
     action:
       'Unilateral contraction rotates the trunk to the opposite side and laterally flexes it to the same side. Bilateral contraction flexes the trunk, compresses the abdominal viscera (straining, expiration), and can depress the ribs.',
     innervation:
@@ -203,7 +203,7 @@ export const MUSCLE_VIEW: Record<string, MuscleViewInfo> = {
     origin:
       'Posterior gluteal line and the portion of the ilium behind it, the posterior surface of the sacrum and coccyx, the sacrotuberous ligament, and the gluteal aponeurosis (over gluteus medius).',
     insertion:
-      'Chiefly the iliotibial tract of the fascia lata (which then reaches the lateral tibial condyle at Gerdy’s tubercle). Deeper inferior fibers insert on the gluteal tuberosity of the femur. (This model has no IT-tract mesh; the bony pin marks the femoral attachment.)',
+      'Chiefly the iliotibial tract of the fascia lata (which then reaches the lateral tibial condyle at Gerdy’s tubercle). Deeper inferior fibers insert on the gluteal tuberosity of the femur. (This model has no IT-tract mesh; the bony label marks the femoral attachment.)',
     action:
       'The chief extensor of the flexed thigh (rising from sitting, climbing, sprinting). It also assists lateral rotation of the thigh. Upper fibers may abduct, lower fibers may adduct. It steadies the femur on the tibia when standing, and is relatively quiet in easy standing or slow walking.',
     innervation: 'Inferior gluteal nerve (L5–S2).',
@@ -219,9 +219,9 @@ export const MUSCLE_VIEW: Record<string, MuscleViewInfo> = {
     description:
       'The only quadriceps muscle that crosses both the hip and the knee. It lies in the midline of the anterior thigh, superficial to vastus intermedius, and contributes to the quadriceps tendon. In this pack, vastus intermedius is not a separate mesh.',
     origin:
-      'Straight (direct) head: anterior inferior iliac spine. Reflected (indirect) head: a groove just above the acetabulum (superior acetabular rim) and the fibrous capsule of the hip. Both heads arise from the hip bone, so a single origin pin marks the nearest approach of the muscle to that mesh.',
+      'Straight (direct) head: anterior inferior iliac spine. Reflected (indirect) head: a groove just above the acetabulum (superior acetabular rim) and the fibrous capsule of the hip. Both heads arise from the hip bone, so a single origin label marks the nearest approach of the muscle to that mesh.',
     insertion:
-      'Base of the patella via the quadriceps tendon, then the tibial tuberosity via the patellar ligament. The muscular insertion pin is placed on the patella, the bony attachment this mesh actually reaches.',
+      'Base of the patella via the quadriceps tendon, then the tibial tuberosity via the patellar ligament. The muscular insertion label is placed on the patella, the bony attachment this mesh actually reaches.',
     action:
       'Extends the leg at the knee and flexes the thigh at the hip. Because it is a two-joint muscle, it is a less effective knee extensor when the hip is fully flexed, and a less effective hip flexor when the knee is fully extended.',
     innervation: 'Femoral nerve (L2–L4).',
@@ -238,7 +238,7 @@ export const MUSCLE_VIEW: Record<string, MuscleViewInfo> = {
     origin:
       'Greater trochanter, the intertrochanteric line, the gluteal tuberosity, the lateral lip of the linea aspera, and the lateral intermuscular septum of the thigh.',
     insertion:
-      'Lateral border of the patella (quadriceps tendon) and, via the patellar ligament, the tibial tuberosity. Expansions form the lateral patellar retinaculum and blend with the capsule of the knee. The pin marks the patella, the bony attachment this mesh reaches.',
+      'Lateral border of the patella (quadriceps tendon) and, via the patellar ligament, the tibial tuberosity. Expansions form the lateral patellar retinaculum and blend with the capsule of the knee. The label marks the patella, the bony attachment this mesh reaches.',
     action:
       'Extends the leg at the knee. Together with vastus medialis it also helps guide and stabilize the patella in the trochlear groove during flexion and extension.',
     innervation: 'Femoral nerve (L2–L4).',
@@ -255,7 +255,7 @@ export const MUSCLE_VIEW: Record<string, MuscleViewInfo> = {
     origin:
       'Intertrochanteric line, medial lip of the linea aspera, medial supracondylar line of the femur, and the tendons of adductor longus and adductor magnus, plus the medial intermuscular septum.',
     insertion:
-      'Medial border of the patella (quadriceps tendon) and, via the patellar ligament, the tibial tuberosity. Distal fibers contribute to the medial patellar retinaculum. The pin marks the patella, the bony attachment this mesh reaches.',
+      'Medial border of the patella (quadriceps tendon) and, via the patellar ligament, the tibial tuberosity. Distal fibers contribute to the medial patellar retinaculum. The label marks the patella, the bony attachment this mesh reaches.',
     action:
       'Extends the leg at the knee. The oblique distal fibers pull the patella medially and help prevent lateral dislocation, especially in the last degrees of extension.',
     innervation: 'Femoral nerve (L2–L4).',

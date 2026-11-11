@@ -195,7 +195,7 @@ app.innerHTML = `
         <p class="view-desc" id="view-desc"></p>
         <dl class="view-facts" id="view-facts"></dl>
         <p class="view-note" id="view-note" hidden>
-          Pins mark the closest points between these BodyParts3D meshes at each named attachment — a close approximation, not a clinical landmark atlas.
+          Labels mark the closest points between these BodyParts3D meshes at each named attachment — a close approximation, not a clinical landmark atlas.
         </p>
       </div>
     </div>

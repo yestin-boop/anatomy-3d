@@ -1006,49 +1006,17 @@ export class ThoraxScene {
     kind: 'origin' | 'insertion',
     label: string,
   ): void {
-    const isOrigin = kind === 'origin'
-    const color = isOrigin ? 0xf0c56e : 0x6ed0c6
+    // Labels only — no 3D spheres or stems, which hide the attachment.
     const group = new THREE.Group()
     group.position.copy(worldPoint)
-
-    const core = new THREE.Mesh(
-      new THREE.SphereGeometry(0.028, 20, 16),
-      new THREE.MeshStandardMaterial({
-        color,
-        emissive: color,
-        emissiveIntensity: 0.35,
-        roughness: 0.35,
-        metalness: 0.15,
-        depthTest: true,
-        transparent: false,
-      }),
-    )
-    core.renderOrder = 20
-    ;(core.userData as { isViewMarker?: boolean }).isViewMarker = true
-    group.add(core)
-
-    const stem = new THREE.Mesh(
-      new THREE.CylinderGeometry(0.007, 0.007, 0.07, 10),
-      new THREE.MeshStandardMaterial({
-        color,
-        emissive: color,
-        emissiveIntensity: 0.2,
-        roughness: 0.4,
-        metalness: 0.1,
-      }),
-    )
-    stem.position.copy(outward).multiplyScalar(0.04)
-    stem.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), outward.clone().normalize())
-    stem.renderOrder = 20
-    ;(stem.userData as { isViewMarker?: boolean }).isViewMarker = true
-    group.add(stem)
 
     const el = document.createElement('div')
     el.className = `view-pin view-pin--${kind}`
     el.textContent = label
     el.style.pointerEvents = 'none'
     const tag = new CSS2DObject(el)
-    tag.position.copy(outward).multiplyScalar(0.06)
+    // Sit the word just off the surface so it marks the site without covering it.
+    tag.position.copy(outward).multiplyScalar(0.05)
     group.add(tag)
 
     this.markerGroup.add(group)
