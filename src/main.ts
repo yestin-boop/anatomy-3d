@@ -24,6 +24,7 @@ import {
 } from './data/muscles'
 import { ThoraxScene } from './scene/ThoraxScene'
 import { playCorrectChime, playKeyTap, playWrongTick, unlockAudio } from './audio/chime'
+import { getBoneView, getMuscleView, type ViewAttachmentSite, type ViewSide } from './data/viewInfo'
 
 /** Bonetype three-level model (+ Combined runs all back-to-back). */
 type Level = 'see' | 'hint' | 'memory'
@@ -101,6 +102,17 @@ app.innerHTML = `
       </header>
 
       <section class="menu-section">
+        <h2>Explore</h2>
+        <button type="button" class="mode-card mode-card--wide" id="btn-view">
+          <span class="mode-key">V</span>
+          <div>
+            <span class="mode-title">View</span>
+            <span class="mode-sub">solid model · tap a bone or muscle for origin, insertion, and a short description</span>
+          </div>
+        </button>
+      </section>
+
+      <section class="menu-section">
         <h2>Subject</h2>
         <div class="mode-grid mode-grid--subjects">
           <button type="button" class="mode-card mode-card--on" data-subject="bones" id="subject-bones">
@@ -164,6 +176,31 @@ app.innerHTML = `
     </div>
   </div>
 
+  <!-- View-mode study panel -->
+  <aside class="view-panel" id="view-panel" hidden>
+    <button type="button" class="view-panel-handle" id="view-panel-toggle" aria-expanded="false">
+      <span class="view-panel-handle-bar"></span>
+      <span id="view-panel-handle-label">Tap a structure</span>
+    </button>
+    <div class="view-panel-body" id="view-panel-body">
+      <p class="view-empty" id="view-empty">Tap a bone or muscle to see its name, attachments, and a short description. Drag to rotate, scroll to zoom. Tap empty space to clear.</p>
+      <div class="view-card" id="view-card" hidden>
+        <div class="view-kicker">
+          <span id="view-kind"></span>
+          <span class="view-dot">·</span>
+          <span id="view-region"></span>
+          <span id="view-side" class="view-side" hidden></span>
+        </div>
+        <h2 id="view-name"></h2>
+        <p class="view-desc" id="view-desc"></p>
+        <dl class="view-facts" id="view-facts"></dl>
+        <p class="view-note" id="view-note" hidden>
+          Pins mark the closest points between these BodyParts3D meshes at each named attachment — a close approximation, not a clinical landmark atlas.
+        </p>
+      </div>
+    </div>
+  </aside>
+
   <!-- In-play typing HUD -->
   <div class="hud" id="play-hud" hidden>
     <div class="prompt-block" id="prompt-block">
@@ -187,7 +224,7 @@ app.innerHTML = `
   />
 
   <div class="footer-bar">
-    <span class="footer-tips">TAB REVEAL · ESC MENU · DRAG ROTATE · SCROLL ZOOM</span>
+    <span class="footer-tips" id="footer-tips">TAB REVEAL · ESC MENU · DRAG ROTATE · SCROLL ZOOM</span>
     <span class="footer-meta" id="footer-meta">MODELS: PROCEDURAL · BODY PARTS 3D</span>
   </div>
   <div class="footer-attr">
@@ -225,6 +262,20 @@ const muscleCountEl = document.querySelector<HTMLElement>('#muscle-count')!
 const sessionCountsEl = document.querySelector<HTMLDivElement>('#session-counts')!
 const startBtn = document.querySelector<HTMLButtonElement>('#start-btn')!
 const pillSubject = document.querySelector<HTMLElement>('#pill-subject')!
+const btnView = document.querySelector<HTMLButtonElement>('#btn-view')!
+const viewPanel = document.querySelector<HTMLElement>('#view-panel')!
+const viewPanelToggle = document.querySelector<HTMLButtonElement>('#view-panel-toggle')!
+const viewPanelHandleLabel = document.querySelector<HTMLElement>('#view-panel-handle-label')!
+const viewEmpty = document.querySelector<HTMLParagraphElement>('#view-empty')!
+const viewCard = document.querySelector<HTMLDivElement>('#view-card')!
+const viewKind = document.querySelector<HTMLElement>('#view-kind')!
+const viewRegion = document.querySelector<HTMLElement>('#view-region')!
+const viewSide = document.querySelector<HTMLElement>('#view-side')!
+const viewName = document.querySelector<HTMLElement>('#view-name')!
+const viewDesc = document.querySelector<HTMLParagraphElement>('#view-desc')!
+const viewFacts = document.querySelector<HTMLDListElement>('#view-facts')!
+const viewNote = document.querySelector<HTMLParagraphElement>('#view-note')!
+const footerTips = document.querySelector<HTMLElement>('#footer-tips')!
 
 const scene = new ThoraxScene({
   mainCanvas,
@@ -234,6 +285,7 @@ const scene = new ThoraxScene({
 
 type QuizState = {
   playing: boolean
+  viewing: boolean
   mode: PlayMode
   levels: Level[]
   levelIndex: number
@@ -256,6 +308,7 @@ let moreFiltersOpen = false
 
 const state: QuizState = {
   playing: false,
+  viewing: false,
   mode: 'memory',
   levels: ['memory'],
   levelIndex: 0,
@@ -483,19 +536,202 @@ function wait(ms: number): Promise<void> {
 }
 
 function showMenu(): void {
+  if (state.viewing) {
+    scene.exitView()
+    state.viewing = false
+  }
   state.playing = false
   state.revealing = false
   menuOverlay.hidden = false
   playHud.hidden = true
+  viewPanel.hidden = true
+  viewPanel.classList.remove('is-expanded')
   chromeTop.hidden = true
+  chromeTop.classList.remove('is-view')
   chromeTop.setAttribute('hidden', '')
   sideViews.hidden = true
   hiddenInput.value = ''
   statusEl.style.display = 'none'
+  footerTips.textContent = 'TAB REVEAL · ESC MENU · DRAG ROTATE · SCROLL ZOOM'
   scene.setSubject(state.subject)
   scene.showMenuView()
   renderMenuFilters()
   updatePoolCount()
+}
+
+
+type PickEntry = {
+  kind: 'bone' | 'muscle'
+  id: string
+  displayName: string
+  regionLabel: string
+  meshNames: string[]
+}
+
+function buildPickIndex(): Map<string, PickEntry> {
+  const map = new Map<string, PickEntry>()
+  const add = (entry: PickEntry) => {
+    for (const name of entry.meshNames) {
+      const prev = map.get(name)
+      // Prefer the more specific entry when a mesh belongs to a group
+      // (e.g. metacarpal3 over the combined "metacarpals").
+      if (!prev || entry.meshNames.length < prev.meshNames.length) {
+        map.set(name, entry)
+      }
+    }
+  }
+  for (const b of AXIAL_BONES) {
+    add({
+      kind: 'bone',
+      id: b.id,
+      displayName: b.displayName,
+      regionLabel: REGION_LABEL[b.region],
+      meshNames: b.meshNames,
+    })
+  }
+  for (const m of MUSCLES) {
+    add({
+      kind: 'muscle',
+      id: m.id,
+      displayName: m.displayName,
+      regionLabel: MUSCLE_REGION_LABEL[m.region],
+      meshNames: m.meshNames,
+    })
+  }
+  return map
+}
+
+const pickIndex = buildPickIndex()
+
+function meshSide(name: string): ViewSide | null {
+  if (name.startsWith('vertebra_')) return null
+  if (/_l\d+$/.test(name) || name.endsWith('_l')) return 'l'
+  if (/_r\d+$/.test(name) || name.endsWith('_r')) return 'r'
+  return null
+}
+
+type ViewSelection = PickEntry & { side: ViewSide | null; clickedMesh: string }
+
+function factRow(term: string, value: string): string {
+  return `<div class="view-fact"><dt>${escapeHtml(term)}</dt><dd>${escapeHtml(value)}</dd></div>`
+}
+
+function renderViewPanel(sel: ViewSelection | null): void {
+  if (!sel) {
+    viewEmpty.hidden = false
+    viewCard.hidden = true
+    viewNote.hidden = true
+    viewPanelHandleLabel.textContent = 'Tap a structure'
+    viewPanel.classList.remove('has-selection')
+    return
+  }
+  viewEmpty.hidden = true
+  viewCard.hidden = false
+  viewPanel.classList.add('has-selection')
+  viewKind.textContent = sel.kind === 'muscle' ? 'Muscle' : 'Bone'
+  viewRegion.textContent = sel.regionLabel
+  if (sel.side) {
+    viewSide.hidden = false
+    viewSide.textContent = sel.side === 'l' ? 'Left' : 'Right'
+  } else {
+    viewSide.hidden = true
+    viewSide.textContent = ''
+  }
+  viewName.textContent = sel.displayName
+  viewPanelHandleLabel.textContent = sel.displayName
+
+  if (sel.kind === 'muscle') {
+    const info = getMuscleView(sel.id)
+    viewDesc.textContent = info?.description ?? sel.displayName
+    const parts: string[] = []
+    if (info?.origin) parts.push(factRow('Origin', info.origin))
+    if (info?.insertion) parts.push(factRow('Insertion', info.insertion))
+    if (info?.action) parts.push(factRow('Action', info.action))
+    if (info?.innervation) parts.push(factRow('Innervation', info.innervation))
+    viewFacts.innerHTML = parts.join('')
+    viewNote.hidden = !info
+  } else {
+    const info = getBoneView(sel.id)
+    viewDesc.textContent = info?.description ?? sel.displayName
+    const parts: string[] = []
+    if (info?.articulations) parts.push(factRow('Articulations', info.articulations))
+    if (info?.features) parts.push(factRow('Notable features', info.features))
+    viewFacts.innerHTML = parts.join('')
+    viewNote.hidden = true
+  }
+}
+
+function attachmentsFor(sel: ViewSelection): ViewAttachmentSite[] {
+  if (sel.kind !== 'muscle') return []
+  const info = getMuscleView(sel.id)
+  if (!info) return []
+  const side: ViewSide = sel.side ?? 'r'
+  return info.sitesForSide(side)
+}
+
+function applyViewSelection(sel: ViewSelection | null): void {
+  renderViewPanel(sel)
+  if (!sel) {
+    scene.clearViewSelection()
+    return
+  }
+  scene.setViewSelection(sel.meshNames, attachmentsFor(sel))
+}
+
+function onViewPick(clientX: number, clientY: number): void {
+  const hit = scene.pickAt(clientX, clientY)
+  if (!hit) {
+    applyViewSelection(null)
+    return
+  }
+  const entry = pickIndex.get(hit.meshName)
+  if (!entry) {
+    applyViewSelection(null)
+    return
+  }
+  const side = meshSide(hit.meshName)
+  // If the user taps the opposite side of the same muscle, refresh pins
+  // to that side even when the entry id is unchanged.
+  applyViewSelection({ ...entry, side, clickedMesh: hit.meshName })
+  if (!viewPanel.classList.contains('is-expanded')) {
+    // Auto-open the sheet on a new selection so the copy is readable.
+    viewPanel.classList.add('is-expanded')
+    viewPanelToggle.setAttribute('aria-expanded', 'true')
+  }
+}
+
+async function startView(): Promise<void> {
+  void unlockAudio()
+  statusEl.style.display = ''
+  statusEl.classList.remove('error')
+  statusEl.textContent = 'Loading study model…'
+  state.playing = false
+  state.revealing = false
+  state.viewing = true
+  hiddenInput.value = ''
+  menuOverlay.hidden = true
+  playHud.hidden = true
+  sideViews.hidden = true
+  chromeTop.hidden = false
+  chromeTop.removeAttribute('hidden')
+  chromeTop.classList.add('is-view')
+  pillSubject.textContent = 'Study'
+  pillMode.textContent = 'View'
+  footerTips.textContent = 'TAP TO SELECT · DRAG ROTATE · SCROLL ZOOM · ESC MENU'
+  viewPanel.hidden = false
+  viewPanel.classList.remove('is-expanded')
+  viewPanelToggle.setAttribute('aria-expanded', 'false')
+  applyViewSelection(null)
+  try {
+    await scene.enterView()
+  } catch (err) {
+    console.error(err)
+    statusEl.classList.add('error')
+    statusEl.textContent = 'Failed to load study model'
+    return
+  }
+  if (!state.viewing) return
+  statusEl.style.display = 'none'
 }
 
 function levelsForMode(mode: PlayMode): Level[] {
@@ -880,16 +1116,44 @@ startBtn.addEventListener('pointerdown', (e) => {
   void startSession()
 })
 
+btnView.addEventListener('pointerdown', (e) => {
+  e.preventDefault()
+  void startView()
+})
+
+viewPanelToggle.addEventListener('pointerdown', (e) => {
+  e.preventDefault()
+  const open = !viewPanel.classList.contains('is-expanded')
+  viewPanel.classList.toggle('is-expanded', open)
+  viewPanelToggle.setAttribute('aria-expanded', open ? 'true' : 'false')
+})
+
 document.querySelector('#btn-menu-top')!.addEventListener('pointerdown', (e) => {
   e.preventDefault()
   showMenu()
 })
 
+window.addEventListener(
+  'keydown',
+  (e) => {
+    if (e.key === 'Escape' && (state.playing || state.viewing)) {
+      e.preventDefault()
+      showMenu()
+    }
+  },
+  true,
+)
+
 window.addEventListener('keydown', (e) => {
   void unlockAudio()
   if (e.key === 'Escape') {
     e.preventDefault()
-    if (state.playing) showMenu()
+    if (state.playing || state.viewing) showMenu()
+    return
+  }
+  if (!state.playing && !state.viewing && (e.key === 'v' || e.key === 'V') && document.activeElement !== hiddenInput) {
+    e.preventDefault()
+    void startView()
     return
   }
   if (e.key === 'Tab' && state.playing) {
@@ -898,6 +1162,7 @@ window.addEventListener('keydown', (e) => {
     return
   }
   if (!state.playing) {
+    if (state.viewing) return
     if (e.key === 'Enter') {
       e.preventDefault()
       void startSession()
@@ -970,9 +1235,38 @@ promptBlock.addEventListener('pointerdown', (e) => {
   focusInput()
 })
 
-mainCanvas.addEventListener('pointerdown', () => {
+const PICK_MOVE_PX = 12
+let pointerStartX = 0
+let pointerStartY = 0
+let pointerIsPick = false
+
+mainCanvas.addEventListener('pointerdown', (e) => {
   void unlockAudio()
+  pointerStartX = e.clientX
+  pointerStartY = e.clientY
+  pointerIsPick = true
   if (state.playing) focusInput()
+})
+
+mainCanvas.addEventListener('pointermove', (e) => {
+  if (!pointerIsPick) return
+  const dx = e.clientX - pointerStartX
+  const dy = e.clientY - pointerStartY
+  if (dx * dx + dy * dy > PICK_MOVE_PX * PICK_MOVE_PX) pointerIsPick = false
+})
+
+mainCanvas.addEventListener('pointerup', (e) => {
+  const wasPick = pointerIsPick
+  pointerIsPick = false
+  if (!wasPick || !state.viewing) return
+  const dx = e.clientX - pointerStartX
+  const dy = e.clientY - pointerStartY
+  if (dx * dx + dy * dy > PICK_MOVE_PX * PICK_MOVE_PX) return
+  onViewPick(e.clientX, e.clientY)
+})
+
+mainCanvas.addEventListener('pointercancel', () => {
+  pointerIsPick = false
 })
 
 async function runQaMode(mode: string): Promise<void> {
@@ -1047,6 +1341,11 @@ async function runQaMode(mode: string): Promise<void> {
       updateHud()
     }
     await wait(500)
+    return
+  }
+  if (mode === 'view') {
+    await startView()
+    await wait(400)
     return
   }
 }

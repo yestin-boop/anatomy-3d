@@ -1,7 +1,9 @@
 import * as THREE from 'three'
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js'
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js'
+import { CSS2DObject, CSS2DRenderer } from 'three/addons/renderers/CSS2DRenderer.js'
 import { assetUrl } from '../assetUrl'
+import type { ViewAttachmentSite, ViewPrefer } from '../data/viewInfo'
 
 const GHOST = {
   color: 0xc8ddf5,
@@ -55,6 +57,46 @@ const BONE_UNDER_MUSCLE = {
   opacity: 0.12,
 }
 
+/** Opaque study-model look for View mode (not the quiz X-ray / ghost palette). */
+const VIEW_BONE = {
+  color: 0xe9dcc8,
+  emissive: 0x000000,
+  emissiveIntensity: 0,
+  roughness: 0.62,
+  metalness: 0.04,
+}
+const VIEW_BONE_SELECTED = {
+  color: 0xfff1e0,
+  emissive: 0x5a3a18,
+  emissiveIntensity: 0.16,
+  roughness: 0.52,
+  metalness: 0.05,
+}
+const VIEW_MUSCLE = {
+  color: 0xa34448,
+  emissive: 0x000000,
+  emissiveIntensity: 0,
+  roughness: 0.72,
+  metalness: 0.02,
+}
+const VIEW_MUSCLE_SELECTED = {
+  color: 0xc45a5e,
+  emissive: 0x4a1014,
+  emissiveIntensity: 0.18,
+  roughness: 0.62,
+  metalness: 0.03,
+}
+const VIEW_CARTILAGE = {
+  color: 0xd8cbb6,
+  emissive: 0x000000,
+  emissiveIntensity: 0,
+  roughness: 0.55,
+  metalness: 0.02,
+  opacity: 0.92,
+}
+const VIEW_DIM_OPACITY_BONE = 0.13
+const VIEW_DIM_OPACITY_MUSCLE = 0.1
+
 /** BodyParts3D pack is Z-up (cranial +Z). This Euler maps cranial → +Y, anterior → +Z. */
 export const UPRIGHT_EULER = { x: -Math.PI / 2, y: 0, z: 0 }
 
@@ -94,11 +136,27 @@ export class ThoraxScene {
   lastUprightEuler = { ...UPRIGHT_EULER }
   lastBboxSize = new THREE.Vector3()
 
+  private hemiLight: THREE.HemisphereLight
+  private keyLight: THREE.DirectionalLight
+  private fillLight: THREE.DirectionalLight
+  private rimLight: THREE.DirectionalLight
+  private bounceLight: THREE.DirectionalLight
+  private quizFog: THREE.Fog
+  private labelRenderer: CSS2DRenderer
+  private markerGroup = new THREE.Group()
+  private viewMode = false
+  private viewSelected = new Set<string>()
+  private raycaster = new THREE.Raycaster()
+  private pointerNdc = new THREE.Vector2()
+  private _scratchA = new THREE.Vector3()
+  private _scratchB = new THREE.Vector3()
+
   constructor(opts: ThoraxSceneOptions) {
     this.mainCanvas = opts.mainCanvas
     this.scene = new THREE.Scene()
     this.scene.background = new THREE.Color(0x0b1220)
-    this.scene.fog = new THREE.Fog(0x0b1220, 10, 36)
+    this.quizFog = new THREE.Fog(0x0b1220, 10, 36)
+    this.scene.fog = this.quizFog
 
     this.camera = new THREE.PerspectiveCamera(38, 1, 0.05, 200)
     this.camera.up.set(0, 1, 0)
@@ -130,26 +188,36 @@ export class ThoraxScene {
     })
     this.controls.addEventListener('end', () => {
       window.setTimeout(() => {
-        if (!this.disposed) this.spinning = true
+        if (!this.disposed && !this.viewMode) this.spinning = true
       }, 1800)
     })
 
-    const hemi = new THREE.HemisphereLight(0xcfe4ff, 0x1a2030, 1.1)
-    this.scene.add(hemi)
-    const key = new THREE.DirectionalLight(0xffffff, 1.25)
-    key.position.set(3, 8, 5)
-    this.scene.add(key)
-    const fill = new THREE.DirectionalLight(0x88aacc, 0.5)
-    fill.position.set(-5, 2, -3)
-    this.scene.add(fill)
-    const rim = new THREE.DirectionalLight(0xaaccff, 0.35)
-    rim.position.set(0, 2, -8)
-    this.scene.add(rim)
+    this.hemiLight = new THREE.HemisphereLight(0xcfe4ff, 0x1a2030, 1.1)
+    this.scene.add(this.hemiLight)
+    this.keyLight = new THREE.DirectionalLight(0xffffff, 1.25)
+    this.keyLight.position.set(3, 8, 5)
+    this.scene.add(this.keyLight)
+    this.fillLight = new THREE.DirectionalLight(0x88aacc, 0.5)
+    this.fillLight.position.set(-5, 2, -3)
+    this.scene.add(this.fillLight)
+    this.rimLight = new THREE.DirectionalLight(0xaaccff, 0.35)
+    this.rimLight.position.set(0, 2, -8)
+    this.scene.add(this.rimLight)
+    this.bounceLight = new THREE.DirectionalLight(0xf0e0c8, 0)
+    this.bounceLight.position.set(0, -6, 2)
+    this.scene.add(this.bounceLight)
 
     this.spin.name = 'spinY'
     this.body.name = 'bodyUpright'
     this.spin.add(this.body)
     this.scene.add(this.spin)
+    this.markerGroup.name = 'viewMarkers'
+    this.scene.add(this.markerGroup)
+
+    this.labelRenderer = new CSS2DRenderer()
+    this.labelRenderer.domElement.className = 'label-layer'
+    this.labelRenderer.domElement.style.pointerEvents = 'none'
+    this.mainCanvas.parentElement?.appendChild(this.labelRenderer.domElement)
 
     if (opts.sideCanvases) {
       for (const canvas of opts.sideCanvases) {
@@ -280,16 +348,17 @@ export class ThoraxScene {
         if (!item) continue
         this.ingestModel(item, 'muscle')
         this.body.add(item)
-        // Keep muscles hidden until subject is muscles
+        // Keep muscles hidden until subject is muscles (or View mode)
         item.traverse((o) => {
-          if (o instanceof THREE.Mesh) o.visible = this.subject === 'muscles'
+          if (o instanceof THREE.Mesh) o.visible = this.viewMode || this.subject === 'muscles'
         })
       }
     }
     // Re-center once so muscle extents don't shift upright frame mid-session
     // (muscles sit on same BP3D frame; bbox already dominated by skeleton height)
     this.musclesLoaded = true
-    this.applySubjectVisibility()
+    if (this.viewMode) this.applyViewPresentation()
+    else this.applySubjectVisibility()
     console.info('[skeleton] muscles ready', [...this.kindByName.values()].filter((k) => k === 'muscle').length)
   }
 
@@ -527,6 +596,7 @@ export class ThoraxScene {
     this.camera.aspect = w / Math.max(h, 1)
     this.camera.updateProjectionMatrix()
     this.renderer.setSize(w, h, false)
+    this.labelRenderer.setSize(w, h)
 
     for (const side of this.sideViews) {
       const pw = side.canvas.parentElement?.clientWidth || 120
@@ -547,6 +617,7 @@ export class ThoraxScene {
     }
     this.controls.update()
     this.renderer.render(this.scene, this.camera)
+    this.labelRenderer.render(this.scene, this.camera)
     for (const side of this.sideViews) {
       side.renderer.render(this.scene, side.camera)
     }
@@ -574,11 +645,422 @@ export class ThoraxScene {
     return [...this.meshByName.keys()].sort()
   }
 
+
+  isViewMode(): boolean {
+    return this.viewMode
+  }
+
+  async enterView(): Promise<void> {
+    this.viewMode = true
+    this.spinning = false
+    this.spin.rotation.y = 0
+    this.viewSelected.clear()
+    this.clearViewMarkers()
+    this.applyViewLighting(true)
+    await this.ensureMusclesLoaded()
+    if (!this.viewMode || this.disposed) return
+    this.applyViewPresentation()
+    this.frameFullBody()
+  }
+
+  exitView(): void {
+    if (!this.viewMode) return
+    this.viewMode = false
+    this.viewSelected.clear()
+    this.clearViewMarkers()
+    this.applyViewLighting(false)
+    this.spinning = true
+    this.applySubjectVisibility()
+  }
+
+  clearViewSelection(): void {
+    this.setViewSelection(null)
+  }
+
+  /**
+   * Highlight the given meshes in View mode. Pass null (or []) to clear.
+   * For a muscle, also pass authored attachment sites so origin/insertion
+   * pins can be placed at nearest points on the relevant meshes.
+   */
+  setViewSelection(meshNames: string[] | null, attachments?: ViewAttachmentSite[]): void {
+    this.viewSelected = new Set(meshNames ?? [])
+    this.clearViewMarkers()
+    if (!this.viewMode) return
+    this.applyViewPresentation()
+    if (this.viewSelected.size > 0 && attachments && attachments.length > 0) {
+      this.placeAttachmentMarkers(attachments)
+    }
+  }
+
+  /**
+   * Raycast from a pointer event on the main canvas.
+   * Skips markers, cartilage, and the diaphragm. After a View selection,
+   * a click through a ghosted muscle prefers a bone that sits close behind
+   * it (the structure now visible), so isolated bones stay pickable.
+   */
+  pickAt(clientX: number, clientY: number): { meshName: string; kind: 'bone' | 'muscle' } | null {
+    const rect = this.mainCanvas.getBoundingClientRect()
+    if (rect.width <= 0 || rect.height <= 0) return null
+    this.pointerNdc.set(
+      ((clientX - rect.left) / rect.width) * 2 - 1,
+      -((clientY - rect.top) / rect.height) * 2 + 1,
+    )
+    this.raycaster.setFromCamera(this.pointerNdc, this.camera)
+    const targets: THREE.Object3D[] = []
+    for (const mesh of this.meshByName.values()) {
+      if (mesh.visible) targets.push(mesh)
+    }
+    const hits = this.raycaster.intersectObjects(targets, false)
+    type Cand = { meshName: string; kind: 'bone' | 'muscle'; opacity: number; distance: number }
+    const candidates: Cand[] = []
+    for (const hit of hits) {
+      const obj = hit.object
+      if (!(obj instanceof THREE.Mesh)) continue
+      if ((obj.userData as { isViewMarker?: boolean }).isViewMarker) continue
+      const name = obj.name
+      if (!name) continue
+      if (name === 'diaphragm' || name.startsWith('cartilage_')) continue
+      const kind = this.kindByName.get(name)
+      if (kind !== 'bone' && kind !== 'muscle') continue
+      const mat = this.materials.get(name)
+      candidates.push({
+        meshName: name,
+        kind,
+        opacity: mat?.opacity ?? 1,
+        distance: hit.distance,
+      })
+    }
+    if (candidates.length === 0) return null
+    const first = candidates[0]!
+    // The solid selected structure under the cursor always wins.
+    if (first.opacity >= 0.45) return { meshName: first.meshName, kind: first.kind }
+    // Peek through a dim overlay after isolation (body is scaled ~meters).
+    if (this.viewMode && this.viewSelected.size > 0 && first.kind === 'muscle') {
+      const nearbyBone = candidates.find(
+        (c) => c.kind === 'bone' && c.distance - first.distance <= 0.08,
+      )
+      if (nearbyBone) return { meshName: nearbyBone.meshName, kind: 'bone' }
+    }
+    return { meshName: first.meshName, kind: first.kind }
+  }
+
+  private applyViewLighting(on: boolean): void {
+    if (on) {
+      this.scene.background = new THREE.Color(0x10141c)
+      this.scene.fog = null
+      this.hemiLight.color.setHex(0xf2ece4)
+      this.hemiLight.groundColor.setHex(0x2a241c)
+      this.hemiLight.intensity = 0.95
+      this.keyLight.color.setHex(0xfff6ea)
+      this.keyLight.intensity = 1.45
+      this.keyLight.position.set(4.2, 7.2, 5.5)
+      this.fillLight.color.setHex(0xb8c4d4)
+      this.fillLight.intensity = 0.62
+      this.fillLight.position.set(-5.5, 3, -2)
+      this.rimLight.color.setHex(0xd8e4f4)
+      this.rimLight.intensity = 0.48
+      this.rimLight.position.set(-1, 3.5, -8)
+      this.bounceLight.intensity = 0.28
+      this.renderer.toneMappingExposure = 1.05
+    } else {
+      this.scene.background = new THREE.Color(0x0b1220)
+      this.scene.fog = this.quizFog
+      this.hemiLight.color.setHex(0xcfe4ff)
+      this.hemiLight.groundColor.setHex(0x1a2030)
+      this.hemiLight.intensity = 1.1
+      this.keyLight.color.setHex(0xffffff)
+      this.keyLight.intensity = 1.25
+      this.keyLight.position.set(3, 8, 5)
+      this.fillLight.color.setHex(0x88aacc)
+      this.fillLight.intensity = 0.5
+      this.fillLight.position.set(-5, 2, -3)
+      this.rimLight.color.setHex(0xaaccff)
+      this.rimLight.intensity = 0.35
+      this.rimLight.position.set(0, 2, -8)
+      this.bounceLight.intensity = 0
+      this.renderer.toneMappingExposure = 1.15
+    }
+  }
+
+  private applyViewPresentation(): void {
+    const hasSel = this.viewSelected.size > 0
+    for (const [name, mat] of this.materials) {
+      const kind = this.kindByName.get(name) ?? 'bone'
+      const mesh = this.meshByName.get(name)
+      if (!mesh) continue
+      const isCartilage = name.startsWith('cartilage_')
+      const isDiaphragm = name === 'diaphragm'
+      const selected = hasSel && this.viewSelected.has(name)
+
+      if (isDiaphragm) {
+        mesh.visible = true
+        mat.color.setHex(0x8a6a6a)
+        mat.emissive.setHex(0x000000)
+        mat.emissiveIntensity = 0
+        mat.transparent = true
+        mat.opacity = hasSel ? 0.04 : 0.14
+        mat.depthWrite = false
+        mat.roughness = 0.8
+        mat.metalness = 0
+        mesh.renderOrder = 0
+        mat.needsUpdate = true
+        continue
+      }
+
+      mesh.visible = true
+      const dim = hasSel && !selected
+
+      if (kind === 'muscle') {
+        const pal = selected ? VIEW_MUSCLE_SELECTED : VIEW_MUSCLE
+        mat.color.setHex(pal.color)
+        mat.emissive.setHex(pal.emissive)
+        mat.emissiveIntensity = pal.emissiveIntensity
+        mat.roughness = pal.roughness
+        mat.metalness = pal.metalness
+        mat.transparent = dim
+        mat.opacity = dim ? VIEW_DIM_OPACITY_MUSCLE : 1
+        mat.depthWrite = !dim
+        mesh.renderOrder = selected ? 10 : 2
+      } else if (isCartilage) {
+        mat.color.setHex(VIEW_CARTILAGE.color)
+        mat.emissive.setHex(VIEW_CARTILAGE.emissive)
+        mat.emissiveIntensity = VIEW_CARTILAGE.emissiveIntensity
+        mat.roughness = VIEW_CARTILAGE.roughness
+        mat.metalness = VIEW_CARTILAGE.metalness
+        mat.transparent = true
+        mat.opacity = dim ? 0.06 : VIEW_CARTILAGE.opacity
+        mat.depthWrite = !dim
+        mesh.renderOrder = 1
+      } else {
+        const pal = selected ? VIEW_BONE_SELECTED : VIEW_BONE
+        mat.color.setHex(pal.color)
+        mat.emissive.setHex(pal.emissive)
+        mat.emissiveIntensity = pal.emissiveIntensity
+        mat.roughness = pal.roughness
+        mat.metalness = pal.metalness
+        mat.transparent = dim
+        mat.opacity = dim ? VIEW_DIM_OPACITY_BONE : 1
+        mat.depthWrite = !dim
+        mesh.renderOrder = selected ? 10 : 1
+      }
+      mat.needsUpdate = true
+    }
+  }
+
+  private clearViewMarkers(): void {
+    const remove: CSS2DObject[] = []
+    this.markerGroup.traverse((o) => {
+      if (o instanceof CSS2DObject) remove.push(o)
+    })
+    for (const o of remove) {
+      o.parent?.remove(o)
+      o.element.remove()
+    }
+    while (this.markerGroup.children.length > 0) {
+      const child = this.markerGroup.children[0]!
+      this.markerGroup.remove(child)
+      if (child instanceof THREE.Mesh) {
+        child.geometry.dispose()
+        const mat = child.material
+        if (Array.isArray(mat)) mat.forEach((m) => m.dispose())
+        else mat.dispose()
+      }
+    }
+  }
+
+  private placeAttachmentMarkers(sites: ViewAttachmentSite[]): void {
+    this.body.updateMatrixWorld(true)
+    for (const site of sites) {
+      const placed = this.nearestAttachmentPoint(site.muscleMeshes, site.boneMeshes, site.prefer)
+      if (!placed) {
+        console.warn('[view] no attachment point for', site.label, site.muscleMeshes, site.boneMeshes)
+        continue
+      }
+      this.addMarker(placed.point, placed.outward, site.kind, site.label)
+    }
+  }
+
+  /**
+   * Sample vertices on the named muscle and bone meshes and return the
+   * closest pair. The pin sits on the bone surface, nudged slightly toward
+   * the muscle so it is not buried. This is a nearest-point approximation
+   * on these BodyParts3D meshes, not a clinical landmark coordinate.
+   */
+  private nearestAttachmentPoint(
+    muscleNames: string[],
+    boneNames: string[],
+    prefer?: ViewPrefer,
+  ): { point: THREE.Vector3; outward: THREE.Vector3 } | null {
+    const musclePts = this.sampleMeshes(muscleNames, 2200)
+    const bonePts = this.sampleMeshes(boneNames, 2200)
+    if (musclePts.length === 0 && bonePts.length === 0) return null
+
+    // Prefer the closest muscle–bone pair. If only one set exists, fall
+    // back to that set's centroid (should almost never happen if names are right).
+    if (musclePts.length > 0 && bonePts.length > 0) {
+      let bestD = Infinity
+      const muscleOf: THREE.Vector3[] = new Array(bonePts.length)
+      const distOf = new Float64Array(bonePts.length)
+      distOf.fill(Infinity)
+      for (const m of musclePts) {
+        for (let i = 0; i < bonePts.length; i++) {
+          const d = m.distanceToSquared(bonePts[i]!)
+          if (d < distOf[i]!) {
+            distOf[i] = d
+            muscleOf[i] = m
+          }
+          if (d < bestD) bestD = d
+        }
+      }
+      // Among bone vertices nearly as close as the nearest pair, honour an
+      // authored anatomical direction (e.g. cranial end of the patella).
+      // Threshold is in world units (body height ≈ 4.2 ≈ 1.7 m).
+      const margin = Math.max(bestD, 0.018 * 0.018) // ≥ ~18 mm in model scale, or the nearest gap
+      const thresh = bestD + margin
+      let bestB = bonePts[0]!
+      let bestM = muscleOf[0] ?? musclePts[0]!
+      let bestScore = -Infinity
+      for (let i = 0; i < bonePts.length; i++) {
+        if (distOf[i]! > thresh) continue
+        const b = bonePts[i]!
+        const score = prefer ? this.preferScore(b, prefer) : -distOf[i]!
+        if (score > bestScore) {
+          bestScore = score
+          bestB = b
+          bestM = muscleOf[i] ?? bestM
+        }
+      }
+      const outward = this._scratchA.copy(bestM).sub(bestB)
+      if (outward.lengthSq() < 1e-8) outward.set(0, 1, 0)
+      else outward.normalize()
+      const point = bestB.clone().addScaledVector(outward, 0.028)
+      return { point, outward: outward.clone() }
+    }
+
+    const pts = musclePts.length > 0 ? musclePts : bonePts
+    const acc = this._scratchA.set(0, 0, 0)
+    for (const q of pts) acc.add(q)
+    acc.divideScalar(pts.length)
+    // Use the vertex farthest from the centroid in a direction away from
+    // the body centre as a last-resort surface point — not a landmark.
+    let best = pts[0]!
+    let bestD = -1
+    for (const q of pts) {
+      const d = q.distanceToSquared(acc)
+      if (d > bestD) {
+        bestD = d
+        best = q
+      }
+    }
+    const outward = this._scratchB.copy(best).sub(acc)
+    if (outward.lengthSq() < 1e-8) outward.set(0, 1, 0)
+    else outward.normalize()
+    return { point: best.clone().addScaledVector(outward, 0.028), outward: outward.clone() }
+  }
+
+  /** World axes after UPRIGHT_EULER: cranial +Y, anterior +Z, +X toward the model's left. */
+  private preferScore(p: THREE.Vector3, prefer: ViewPrefer): number {
+    switch (prefer) {
+      case 'cranial':
+        return p.y
+      case 'caudal':
+        return -p.y
+      case 'anterior':
+        return p.z
+      case 'posterior':
+        return -p.z
+      case 'lateral':
+        return Math.abs(p.x)
+      case 'medial':
+        return -Math.abs(p.x)
+    }
+  }
+
+  private sampleMeshes(names: string[], maxPoints: number): THREE.Vector3[] {
+    const meshes: THREE.Mesh[] = []
+    for (const n of names) {
+      const m = this.meshByName.get(n)
+      if (m) meshes.push(m)
+    }
+    if (meshes.length === 0) return []
+    const per = Math.max(80, Math.floor(maxPoints / meshes.length))
+    const out: THREE.Vector3[] = []
+    for (const mesh of meshes) {
+      const pos = mesh.geometry.getAttribute('position')
+      if (!pos) continue
+      mesh.updateWorldMatrix(true, false)
+      const count = pos.count
+      const stride = Math.max(1, Math.ceil(count / per))
+      for (let i = 0; i < count; i += stride) {
+        const v = new THREE.Vector3().fromBufferAttribute(pos, i)
+        mesh.localToWorld(v)
+        out.push(v)
+      }
+    }
+    return out
+  }
+
+  private addMarker(
+    worldPoint: THREE.Vector3,
+    outward: THREE.Vector3,
+    kind: 'origin' | 'insertion',
+    label: string,
+  ): void {
+    const isOrigin = kind === 'origin'
+    const color = isOrigin ? 0xf0c56e : 0x6ed0c6
+    const group = new THREE.Group()
+    group.position.copy(worldPoint)
+
+    const core = new THREE.Mesh(
+      new THREE.SphereGeometry(0.028, 20, 16),
+      new THREE.MeshStandardMaterial({
+        color,
+        emissive: color,
+        emissiveIntensity: 0.35,
+        roughness: 0.35,
+        metalness: 0.15,
+        depthTest: true,
+        transparent: false,
+      }),
+    )
+    core.renderOrder = 20
+    ;(core.userData as { isViewMarker?: boolean }).isViewMarker = true
+    group.add(core)
+
+    const stem = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.007, 0.007, 0.07, 10),
+      new THREE.MeshStandardMaterial({
+        color,
+        emissive: color,
+        emissiveIntensity: 0.2,
+        roughness: 0.4,
+        metalness: 0.1,
+      }),
+    )
+    stem.position.copy(outward).multiplyScalar(0.04)
+    stem.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), outward.clone().normalize())
+    stem.renderOrder = 20
+    ;(stem.userData as { isViewMarker?: boolean }).isViewMarker = true
+    group.add(stem)
+
+    const el = document.createElement('div')
+    el.className = `view-pin view-pin--${kind}`
+    el.textContent = label
+    el.style.pointerEvents = 'none'
+    const tag = new CSS2DObject(el)
+    tag.position.copy(outward).multiplyScalar(0.06)
+    group.add(tag)
+
+    this.markerGroup.add(group)
+  }
+
   dispose(): void {
     this.disposed = true
     window.removeEventListener('resize', this.resize)
+    this.clearViewMarkers()
     this.controls.dispose()
     this.renderer.dispose()
+    this.labelRenderer.domElement.remove()
     for (const side of this.sideViews) side.renderer.dispose()
   }
 }
