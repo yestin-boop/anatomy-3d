@@ -31,3 +31,22 @@ and is **not** composited at runtime (kept on disk for reference only).
 Missing ribs 2–6 and 8–11 (L/R) were converted from BodyParts3D `isa_BP3D_4.0_obj_99`
 element OBJs (FJ3225–FJ3348) via `obj2gltf`, same coordinate frame as existing
 `rib_l1` / `rib_l7` / `rib_l12`. Manifest lists all 24 rib GLBs so the cage reads as full.
+
+## Cervical C3–C6 and deferred-muscle fill (2026-11-12)
+
+Converted from BodyParts3D `isa_BP3D_4.0_obj_99` element OBJs via `obj2gltf`,
+same Z-up coordinate frame as the existing extras (no recenter, no pre-rotation).
+
+| GLB | Element ID |
+| --- | --- |
+| `extra/vertebra_c3.glb` | FJ3161 (FMA12521, C3) |
+| `extra/vertebra_c4.glb` | FJ3164 (FMA12522, C4) |
+| `extra/vertebra_c5.glb` | FJ3167 (FMA12523, C5) |
+| `extra/vertebra_c6.glb` | FJ3170 (FMA12524, C6) |
+| `extra/muscles/vastus_int_r.glb` / `vastus_int_l.glb` | FJ1441 / FJ1441M |
+| `extra/muscles/iliacus_r.glb` / `iliacus_l.glb` | FJ1422 / FJ1422M |
+| `extra/muscles/psoas_maj_r.glb` / `psoas_maj_l.glb` | FJ1431 / FJ1431M |
+| `extra/muscles/serratus_ant_r.glb` / `serratus_ant_l.glb` | FJ1459 / FJ1459M |
+
+Latissimus dorsi and rectus abdominis are not in this OBJ pack. The hip remains
+a single os coxae mesh per side (FJ3152 right, FJ3288 left).
