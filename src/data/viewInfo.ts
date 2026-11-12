@@ -158,6 +158,23 @@ export const MUSCLE_VIEW: Record<string, MuscleViewInfo> = {
     ],
   },
 
+  serratus_anterior: {
+    id: 'serratus_anterior',
+    description:
+      'A broad, sheet-like muscle on the lateral chest wall, running from the upper ribs around the thorax to the medial border of the scapula. Its saw-toothed slips interdigitate with the external oblique. It is sometimes called the boxer’s muscle because it protracts the scapula in a reaching or punching motion.',
+    origin:
+      'External surfaces of the upper eight or nine ribs, and the intervening fascia, by a series of fleshy digitations. The first digitation often arises from ribs 1 and 2; lower slips interdigitate with the external oblique.',
+    insertion:
+      'The whole length of the medial (vertebral) border of the scapula, on its costal surface. The lower fibers, which are the strongest, reach the inferior angle and are important for upward rotation of the glenoid.',
+    action:
+      'Protracts the scapula (draws it forward around the chest wall) and holds it firmly against the thorax. The lower fibers upwardly rotate the glenoid, working with trapezius in overhead elevation of the arm. Weakness lets the medial border lift from the chest wall (a winged scapula).',
+    innervation: 'Long thoracic nerve (C5–C7), which runs on the superficial surface of the muscle and is vulnerable to injury.',
+    sitesForSide: (s) => [
+      { kind: 'origin', label: 'Origin · ribs', muscleMeshes: [`serratus_ant_${s}`], boneMeshes: ribs(s, 1, 9) },
+      { kind: 'insertion', label: 'Insertion · medial scapula', muscleMeshes: [`serratus_ant_${s}`], boneMeshes: side(s, ['scapula']), prefer: 'medial' },
+    ],
+  },
+
   biceps_brachii: {
     id: 'biceps_brachii',
     description:
@@ -214,10 +231,44 @@ export const MUSCLE_VIEW: Record<string, MuscleViewInfo> = {
     ],
   },
 
+  iliacus: {
+    id: 'iliacus',
+    description:
+      'A fan-shaped muscle that fills the iliac fossa and, with psoas major, forms iliopsoas — the chief flexor of the hip. The two muscles remain separate playable items here; “iliopsoas” is the combined unit, not a correct name for iliacus alone.',
+    origin:
+      'Iliac fossa (the inner surface of the iliac blade), the inner lip of the iliac crest, the iliolumbar and anterior sacroiliac ligaments, and often the lateral part of the sacral ala. In this model the hip is a single fused os coxae mesh, so the origin label marks the muscle’s nearest approach to that mesh, in the region of the iliac fossa.',
+    insertion:
+      'Lesser trochanter of the femur, via a tendon that is shared with, or immediately beside, psoas major. Some fibers also insert on the femoral shaft just below the trochanter and on the capsule of the hip.',
+    action:
+      'Flexes the thigh at the hip. Acting with psoas major it is the principal hip flexor (for example, in sit-ups or marching). It can also assist lateral rotation of the thigh and, with the thigh fixed, helps flex the trunk on the femur.',
+    innervation: 'Femoral nerve (L2–L3, often described as L2–L4).',
+    sitesForSide: (s) => [
+      { kind: 'origin', label: 'Origin', muscleMeshes: [`iliacus_${s}`], boneMeshes: side(s, ['hip']), prefer: 'medial' },
+      { kind: 'insertion', label: 'Insertion · lesser trochanter', muscleMeshes: [`iliacus_${s}`], boneMeshes: side(s, ['femur']), prefer: 'medial' },
+    ],
+  },
+
+  psoas_major: {
+    id: 'psoas_major',
+    description:
+      'A long, thick muscle running from the lumbar spine along the pelvic brim to the proximal femur. Together with iliacus it forms iliopsoas, the chief flexor of the hip. “Iliopsoas” names the combined unit, not psoas major alone. (Psoas minor is not a separate mesh in this pack.)',
+    origin:
+      'Vertebral bodies and intervening discs of T12–L5, and the transverse processes of the lumbar vertebrae, often with tendinous arches over the lumbar vessels.',
+    insertion:
+      'Lesser trochanter of the femur, by a tendon shared with or immediately beside iliacus. The muscle passes beneath the inguinal ligament and anterior to the hip joint.',
+    action:
+      'Flexes the thigh at the hip. Acting from below, it flexes and laterally flexes the lumbar spine and helps maintain the lumbar lordosis. It can also assist lateral rotation of the thigh.',
+    innervation: 'Anterior rami of L1–L3 (sometimes L1–L4).',
+    sitesForSide: (s) => [
+      { kind: 'origin', label: 'Origin', muscleMeshes: [`psoas_maj_${s}`], boneMeshes: vertebrae('t12', 'l1', 'l2', 'l3', 'l4', 'l5') },
+      { kind: 'insertion', label: 'Insertion · lesser trochanter', muscleMeshes: [`psoas_maj_${s}`], boneMeshes: side(s, ['femur']), prefer: 'medial' },
+    ],
+  },
+
   rectus_femoris: {
     id: 'rectus_femoris',
     description:
-      'The only quadriceps muscle that crosses both the hip and the knee. It lies in the midline of the anterior thigh, superficial to vastus intermedius, and contributes to the quadriceps tendon. In this pack, vastus intermedius is not a separate mesh.',
+      'The only quadriceps muscle that crosses both the hip and the knee. It lies in the midline of the anterior thigh, superficial to vastus intermedius, and contributes to the quadriceps tendon.',
     origin:
       'Straight (direct) head: anterior inferior iliac spine. Reflected (indirect) head: a groove just above the acetabulum (superior acetabular rim) and the fibrous capsule of the hip. Both heads arise from the hip bone, so a single origin label marks the nearest approach of the muscle to that mesh.',
     insertion:
@@ -262,6 +313,23 @@ export const MUSCLE_VIEW: Record<string, MuscleViewInfo> = {
     sitesForSide: (s) => [
       { kind: 'origin', label: 'Origin', muscleMeshes: [`vastus_med_${s}`], boneMeshes: side(s, ['femur']), prefer: 'medial' },
       { kind: 'insertion', label: 'Insertion · patella', muscleMeshes: [`vastus_med_${s}`], boneMeshes: side(s, ['patella']), prefer: 'cranial' },
+    ],
+  },
+
+  vastus_intermedius: {
+    id: 'vastus_intermedius',
+    description:
+      'The deepest of the four quadriceps muscles, lying on the anterior and lateral femoral shaft and hidden under rectus femoris. It contributes to the quadriceps tendon and, like the other vasti, acts only at the knee.',
+    origin:
+      'Anterior and lateral surfaces of the upper two-thirds of the femoral shaft, and the adjacent lateral intermuscular septum of the thigh. (A small articularis genus slip, often described with this muscle, is not a separate mesh here.)',
+    insertion:
+      'Base of the patella via the quadriceps tendon, then the tibial tuberosity via the patellar ligament. The label marks the patella, the bony attachment this mesh reaches.',
+    action:
+      'Extends the leg at the knee. Unlike rectus femoris it does not cross the hip, so it is a pure knee extensor.',
+    innervation: 'Femoral nerve (L2–L4).',
+    sitesForSide: (s) => [
+      { kind: 'origin', label: 'Origin', muscleMeshes: [`vastus_int_${s}`], boneMeshes: side(s, ['femur']), prefer: 'anterior' },
+      { kind: 'insertion', label: 'Insertion · patella', muscleMeshes: [`vastus_int_${s}`], boneMeshes: side(s, ['patella']), prefer: 'cranial' },
     ],
   },
 
@@ -562,6 +630,42 @@ export const BONE_VIEW: Record<string, BoneViewInfo> = {
     features:
       'A stout bifid spinous process and transverse foramina for the vertebral artery. Fracture of the dens, or rupture of the transverse ligament, can threaten the spinal cord and is clinically important.',
   },
+  c3: {
+    id: 'c3',
+    description:
+      'C3 is a typical cervical vertebra: a small body, a large triangular vertebral foramen, short pedicles, and a short, bifid spinous process. Like C4–C6, it has uncinate processes on the superolateral margins of the body and a transverse foramen in each transverse process.',
+    articulations:
+      'C2 above and C4 below, at the intervertebral disc and the paired zygapophysial joints. The uncinate processes also meet the beveled inferolateral margins of C2 at the uncovertebral (Luschka) joints.',
+    features:
+      'Transverse foramina transmit the vertebral artery, vein, and a sympathetic plexus. The bifid spine gives attachment to the ligamentum nuchae and deep cervical muscles. Articular facets are obliquely set, allowing flexion, extension, and rotation.',
+  },
+  c4: {
+    id: 'c4',
+    description:
+      'C4 is a typical mid-cervical vertebra, with a small body, a triangular vertebral foramen, a short bifid spinous process, uncinate processes, and a transverse foramen in each transverse process.',
+    articulations:
+      'C3 above and C5 below, at the intervertebral disc and the zygapophysial joints, and at the uncovertebral (Luschka) joints formed by the uncinate processes.',
+    features:
+      'The same typical cervical pattern as its neighbours: transverse foramina for the vertebral vessels, a bifid spine, and uncovertebral joints that help guide flexion and extension and limit lateral flexion.',
+  },
+  c5: {
+    id: 'c5',
+    description:
+      'C5 is a typical cervical vertebra, sitting in the mid-cervical stack with a small body, triangular vertebral foramen, bifid spinous process, uncinate processes, and transverse foramina.',
+    articulations:
+      'C4 above and C6 below, at the intervertebral disc and the zygapophysial joints, and at the uncovertebral (Luschka) joints.',
+    features:
+      'Typical cervical features continue here: transverse foramina for the vertebral artery, a bifid spine, and uncovertebral lips on the body. The cervical spinal enlargement (for the brachial plexus) lies at about this level of the cord, though that is a feature of the cord rather than of the bone.',
+  },
+  c6: {
+    id: 'c6',
+    description:
+      'C6 is the last typical cervical vertebra before the transitional C7. It still has a small body, a triangular vertebral foramen, a usually bifid spinous process, uncinate processes, and a transverse foramen on each side.',
+    articulations:
+      'C5 above and C7 below, at the intervertebral disc and the zygapophysial joints, and at the uncovertebral (Luschka) joints.',
+    features:
+      'The vertebral artery typically enters the transverse foramen at C6, having ascended outside the foramina of C7. The anterior tubercle of the C6 transverse process (the carotid or Chassaignac tubercle) is often more prominent and is a landmark against which the common carotid artery can be compressed.',
+  },
   c7: {
     id: 'c7',
     description:
@@ -569,7 +673,7 @@ export const BONE_VIEW: Record<string, BoneViewInfo> = {
     articulations:
       'C6 above and T1 below. It does not normally carry a rib; the first rib articulates with T1.',
     features:
-      'Transverse foramina are often small and, unlike C1–C6, usually do not transmit the vertebral artery (the artery typically enters the foramen at C6). Anterior and posterior tubercles of the transverse process are less distinct than at higher cervical levels. C3–C6 are not in this model pack.',
+      'Transverse foramina are often small and, unlike C1–C6, usually do not transmit the vertebral artery (the artery typically enters the foramen at C6). Anterior and posterior tubercles of the transverse process are less distinct than at higher cervical levels.',
   },
   ...Object.fromEntries(Array.from({ length: 12 }, (_, i) => [`t${i + 1}`, thoracicBone(i + 1)])),
   ...Object.fromEntries(Array.from({ length: 5 }, (_, i) => [`l${i + 1}`, lumbarBone(i + 1)])),

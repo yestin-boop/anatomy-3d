@@ -86,7 +86,7 @@ export const EXTRA_MODEL_URLS: string[] = [
   'femur_l', 'femur_r', 'tibia_l', 'tibia_r', 'fibula_l', 'fibula_r',
   'patella_l', 'patella_r', 'hip_l', 'hip_r', 'sacrum',
   'vertebra_l2', 'vertebra_l3', 'vertebra_l4', 'vertebra_l5',
-  'vertebra_c1', 'vertebra_c2',
+  'vertebra_c1', 'vertebra_c2', 'vertebra_c3', 'vertebra_c4', 'vertebra_c5', 'vertebra_c6',
 ].map((n) => `${EXTRA}/${n}.glb`)
 
 /** Full playable quiz set (thorax + skull + limbs + pelvis + lumbar fill) */
@@ -109,6 +109,42 @@ export const AXIAL_BONES: AxialBone[] = [
     displayName: 'C2',
     aliases: ['c2', 'c 2', 'axis', 'cervical 2', '2nd cervical', 'second cervical'],
     hint: 'axis · second cervical vertebra',
+  },
+  {
+    id: 'c3',
+    part: 'vertebrae',
+    region: 'spine',
+    meshNames: ['vertebra_c3'],
+    displayName: 'C3',
+    aliases: ['c3', 'c 3', 'cervical 3', '3rd cervical', 'third cervical', 'cervical vertebra 3'],
+    hint: 'third cervical vertebra',
+  },
+  {
+    id: 'c4',
+    part: 'vertebrae',
+    region: 'spine',
+    meshNames: ['vertebra_c4'],
+    displayName: 'C4',
+    aliases: ['c4', 'c 4', 'cervical 4', '4th cervical', 'fourth cervical', 'cervical vertebra 4'],
+    hint: 'fourth cervical vertebra',
+  },
+  {
+    id: 'c5',
+    part: 'vertebrae',
+    region: 'spine',
+    meshNames: ['vertebra_c5'],
+    displayName: 'C5',
+    aliases: ['c5', 'c 5', 'cervical 5', '5th cervical', 'fifth cervical', 'cervical vertebra 5'],
+    hint: 'fifth cervical vertebra',
+  },
+  {
+    id: 'c6',
+    part: 'vertebrae',
+    region: 'spine',
+    meshNames: ['vertebra_c6'],
+    displayName: 'C6',
+    aliases: ['c6', 'c 6', 'cervical 6', '6th cervical', 'sixth cervical', 'cervical vertebra 6'],
+    hint: 'sixth cervical vertebra',
   },
   {
     id: 'c7',

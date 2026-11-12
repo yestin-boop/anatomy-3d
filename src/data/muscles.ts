@@ -78,6 +78,14 @@ export const MUSCLES: Muscle[] = [
     hint: 'external oblique · hands-in-pockets fiber direction',
   },
   {
+    id: 'serratus_anterior',
+    region: 'chest_abdomen',
+    meshNames: ['serratus_ant_l', 'serratus_ant_r'],
+    displayName: 'serratus anterior',
+    aliases: ['serratus anterior', 'serratus anterior muscle', 'serratus'],
+    hint: 'serratus anterior · boxer\'s muscle, medial scapular border',
+  },
+  {
     id: 'biceps_brachii',
     region: 'shoulder_arm',
     meshNames: [
@@ -108,6 +116,22 @@ export const MUSCLES: Muscle[] = [
     hint: 'gluteus maximus · primary hip extensor',
   },
   {
+    id: 'iliacus',
+    region: 'hip_thigh',
+    meshNames: ['iliacus_l', 'iliacus_r'],
+    displayName: 'iliacus',
+    aliases: ['iliacus', 'iliacus muscle'],
+    hint: 'iliacus · iliac fossa to lesser trochanter',
+  },
+  {
+    id: 'psoas_major',
+    region: 'hip_thigh',
+    meshNames: ['psoas_maj_l', 'psoas_maj_r'],
+    displayName: 'psoas major',
+    aliases: ['psoas major', 'psoas', 'psoas major muscle'],
+    hint: 'psoas major · lumbar spine to lesser trochanter',
+  },
+  {
     id: 'rectus_femoris',
     region: 'hip_thigh',
     meshNames: ['rectus_fem_l', 'rectus_fem_r'],
@@ -130,6 +154,14 @@ export const MUSCLES: Muscle[] = [
     displayName: 'vastus medialis',
     aliases: ['vastus medialis', 'vastus medialis muscle', 'vmo'],
     hint: 'vastus medialis · teardrop on the medial knee',
+  },
+  {
+    id: 'vastus_intermedius',
+    region: 'hip_thigh',
+    meshNames: ['vastus_int_l', 'vastus_int_r'],
+    displayName: 'vastus intermedius',
+    aliases: ['vastus intermedius', 'vastus intermedius muscle'],
+    hint: 'vastus intermedius · deep quadriceps, under rectus femoris',
   },
   {
     id: 'biceps_femoris',
@@ -212,12 +244,8 @@ export function filterMuscles(regions: Iterable<MuscleRegion>): Muscle[] {
   return MUSCLES.filter((m) => set.has(m.region))
 }
 
-/** Deferred (not in this BP3D OBJ pack): latissimus dorsi, rectus abdominis, vastus intermedius as separate, iliacus/psoas. */
+/** Deferred (not in this BP3D OBJ pack): latissimus dorsi, rectus abdominis. Hip remains a single fused os coxae mesh. */
 export const MUSCLES_DEFERRED = [
   'latissimus dorsi',
   'rectus abdominis',
-  'vastus intermedius',
-  'iliacus',
-  'psoas major',
-  'serratus anterior',
 ] as const

@@ -37,7 +37,7 @@ Correct → richer Web Audio chime → next. After phase 4, tap to reshuffle/res
 
 ## Quiz bones (44)
 
-Cervical C1–C2 + C7; thoracic T1–T12; lumbar L1–L5; sacrum; sternum (manubrium / body / xiphoid); ribs 1, 7, 12; skull (frontal, parietal, temporal, occipital, mandible, maxilla, zygomatic); clavicle, scapula, humerus, radius, ulna; hip bone; femur, patella, tibia, fibula.
+Cervical C1–C7; thoracic T1–T12; lumbar L1–L5; sacrum; sternum (manubrium / body / xiphoid); ribs 1, 7, 12; skull (frontal, parietal, temporal, occipital, mandible, maxilla, zygomatic); clavicle, scapula, humerus, radius, ulna; hip bone; femur, patella, tibia, fibula.
 
 
 ## Assets

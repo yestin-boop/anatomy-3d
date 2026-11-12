@@ -166,5 +166,29 @@
   ],
   "tib_ant_r": [
     "FJ1439"
+  ],
+  "vastus_int_l": [
+    "FJ1441M"
+  ],
+  "vastus_int_r": [
+    "FJ1441"
+  ],
+  "iliacus_l": [
+    "FJ1422M"
+  ],
+  "iliacus_r": [
+    "FJ1422"
+  ],
+  "psoas_maj_l": [
+    "FJ1431M"
+  ],
+  "psoas_maj_r": [
+    "FJ1431"
+  ],
+  "serratus_ant_l": [
+    "FJ1459M"
+  ],
+  "serratus_ant_r": [
+    "FJ1459"
   ]
 }
