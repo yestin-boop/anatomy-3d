@@ -97,12 +97,32 @@ const VIEW_CARTILAGE = {
 const VIEW_DIM_OPACITY_BONE = 0.13
 const VIEW_DIM_OPACITY_MUSCLE = 0.1
 
+/** Ignore contralateral hits and stop once the ray has gone this far past the first hit. */
+const PICK_MAX_DEPTH = 0.5
+/** Floor for View framing of small parts (cervical vertebrae). Quiz minDistance stays 0.8. */
+const VIEW_MIN_DISTANCE = 0.28
+const DEFAULT_MIN_DISTANCE = 0.8
+
 /** BodyParts3D pack is Z-up (cranial +Z). This Euler maps cranial → +Y, anterior → +Z. */
 export const UPRIGHT_EULER = { x: -Math.PI / 2, y: 0, z: 0 }
 
 export type ThoraxSceneOptions = {
   mainCanvas: HTMLCanvasElement
   sideCanvases?: HTMLCanvasElement[]
+}
+
+export type ViewPickHit = {
+  meshName: string
+  kind: 'bone' | 'muscle'
+  distance: number
+}
+
+/** Left / right from the mesh filename; vertebrae and unpaired bones are midline. */
+function meshPickSide(name: string): 'l' | 'r' | null {
+  if (name.startsWith('vertebra_')) return null
+  if (/_l\d+$/.test(name) || name.endsWith('_l')) return 'l'
+  if (/_r\d+$/.test(name) || name.endsWith('_r')) return 'r'
+  return null
 }
 
 export class ThoraxScene {
@@ -150,6 +170,14 @@ export class ThoraxScene {
   private pointerNdc = new THREE.Vector2()
   private _scratchA = new THREE.Vector3()
   private _scratchB = new THREE.Vector3()
+  private viewFrame: {
+    startTarget: THREE.Vector3
+    endTarget: THREE.Vector3
+    startPos: THREE.Vector3
+    endPos: THREE.Vector3
+    elapsed: number
+    duration: number
+  } | null = null
 
   constructor(opts: ThoraxSceneOptions) {
     this.mainCanvas = opts.mainCanvas
@@ -178,13 +206,14 @@ export class ThoraxScene {
     this.controls.enableDamping = true
     this.controls.dampingFactor = 0.08
     this.controls.enablePan = false
-    this.controls.minDistance = 0.8
+    this.controls.minDistance = DEFAULT_MIN_DISTANCE
     this.controls.maxDistance = 24
     // Keep orbit pole = world up
     this.controls.minPolarAngle = 0.15
     this.controls.maxPolarAngle = Math.PI - 0.15
     this.controls.addEventListener('start', () => {
       this.spinning = false
+      this.cancelViewFrame()
     })
     this.controls.addEventListener('end', () => {
       window.setTimeout(() => {
@@ -444,6 +473,7 @@ export class ThoraxScene {
   }
 
   private frameFullBody(): void {
+    this.cancelViewFrame()
     this.focusTarget.set(0, 0, 0)
     this.focusDist = this.fitRadius / Math.tan((this.camera.fov * Math.PI) / 360) * 1.55
     this.camera.up.set(0, 1, 0)
@@ -615,6 +645,7 @@ export class ThoraxScene {
       // World Y only — body upright Euler stays on `body`
       this.spin.rotation.y += dt * 0.22
     }
+    this.tickViewFrame(dt)
     this.controls.update()
     this.renderer.render(this.scene, this.camera)
     this.labelRenderer.render(this.scene, this.camera)
@@ -654,6 +685,7 @@ export class ThoraxScene {
     this.viewMode = true
     this.spinning = false
     this.spin.rotation.y = 0
+    this.controls.minDistance = VIEW_MIN_DISTANCE
     this.viewSelected.clear()
     this.clearViewMarkers()
     this.applyViewLighting(true)
@@ -666,6 +698,8 @@ export class ThoraxScene {
   exitView(): void {
     if (!this.viewMode) return
     this.viewMode = false
+    this.cancelViewFrame()
+    this.controls.minDistance = DEFAULT_MIN_DISTANCE
     this.viewSelected.clear()
     this.clearViewMarkers()
     this.applyViewLighting(false)
@@ -693,14 +727,25 @@ export class ThoraxScene {
   }
 
   /**
-   * Raycast from a pointer event on the main canvas.
-   * Skips markers, cartilage, and the diaphragm. After a View selection,
-   * a click through a ghosted muscle prefers a bone that sits close behind
-   * it (the structure now visible), so isolated bones stay pickable.
+   * Frontmost pickable structure under the pointer. Prefer {@link pickAllAt}
+   * in View so the caller can cycle through a depth stack.
    */
-  pickAt(clientX: number, clientY: number): { meshName: string; kind: 'bone' | 'muscle' } | null {
+  pickAt(clientX: number, clientY: number): ViewPickHit | null {
+    return this.pickAllAt(clientX, clientY)[0] ?? null
+  }
+
+  /**
+   * Unique pickable structures along the ray, front to back.
+   * Skips markers, cartilage, and the diaphragm. Includes dim / ghosted
+   * meshes after isolation so a covered muscle can be cycled to — the old
+   * peek-through bone preference is intentionally gone.
+   * Contralateral meshes are skipped so a chest or flank tap does not grab
+   * the far wall, but ipsilateral and midline hits continue through an
+   * empty cavity (psoas behind the abdominal wall, spine behind the chest).
+   */
+  pickAllAt(clientX: number, clientY: number): ViewPickHit[] {
     const rect = this.mainCanvas.getBoundingClientRect()
-    if (rect.width <= 0 || rect.height <= 0) return null
+    if (rect.width <= 0 || rect.height <= 0) return []
     this.pointerNdc.set(
       ((clientX - rect.left) / rect.width) * 2 - 1,
       -((clientY - rect.top) / rect.height) * 2 + 1,
@@ -711,37 +756,98 @@ export class ThoraxScene {
       if (mesh.visible) targets.push(mesh)
     }
     const hits = this.raycaster.intersectObjects(targets, false)
-    type Cand = { meshName: string; kind: 'bone' | 'muscle'; opacity: number; distance: number }
-    const candidates: Cand[] = []
+    const unique: ViewPickHit[] = []
+    const seen = new Set<string>()
     for (const hit of hits) {
       const obj = hit.object
       if (!(obj instanceof THREE.Mesh)) continue
       if ((obj.userData as { isViewMarker?: boolean }).isViewMarker) continue
       const name = obj.name
-      if (!name) continue
+      if (!name || seen.has(name)) continue
       if (name === 'diaphragm' || name.startsWith('cartilage_')) continue
       const kind = this.kindByName.get(name)
       if (kind !== 'bone' && kind !== 'muscle') continue
-      const mat = this.materials.get(name)
-      candidates.push({
-        meshName: name,
-        kind,
-        opacity: mat?.opacity ?? 1,
-        distance: hit.distance,
-      })
+      seen.add(name)
+      unique.push({ meshName: name, kind, distance: hit.distance })
     }
-    if (candidates.length === 0) return null
-    const first = candidates[0]!
-    // The solid selected structure under the cursor always wins.
-    if (first.opacity >= 0.45) return { meshName: first.meshName, kind: first.kind }
-    // Peek through a dim overlay after isolation (body is scaled ~meters).
-    if (this.viewMode && this.viewSelected.size > 0 && first.kind === 'muscle') {
-      const nearbyBone = candidates.find(
-        (c) => c.kind === 'bone' && c.distance - first.distance <= 0.08,
-      )
-      if (nearbyBone) return { meshName: nearbyBone.meshName, kind: 'bone' }
+    if (unique.length === 0) return []
+    const first = unique[0]!
+    const side = meshPickSide(first.meshName)
+    const stack: ViewPickHit[] = [first]
+    for (let i = 1; i < unique.length; i++) {
+      const next = unique[i]!
+      if (next.distance - first.distance > PICK_MAX_DEPTH) break
+      const nextSide = meshPickSide(next.meshName)
+      if (side && nextSide && nextSide !== side) continue
+      stack.push(next)
     }
-    return { meshName: first.meshName, kind: first.kind }
+    return stack
+  }
+
+  /**
+   * Ease the orbit target to the given meshes and set distance from their
+   * bbox. View-only. Preserves the current look direction so a cycle does
+   * not whip the camera around. Small parts (neck vertebrae) frame tight;
+   * larger muscles get a looser pad. Quiz {@link frameMeshes} is unchanged.
+   */
+  frameViewSelection(meshNames: string[]): void {
+    if (!this.viewMode || meshNames.length === 0) return
+    this.body.updateMatrixWorld(true)
+    const box = new THREE.Box3()
+    let any = false
+    for (const name of meshNames) {
+      const mesh = this.meshByName.get(name)
+      if (!mesh) continue
+      box.expandByObject(mesh)
+      any = true
+    }
+    if (!any) return
+
+    const center = box.getCenter(new THREE.Vector3())
+    const size = box.getSize(new THREE.Vector3())
+    const radius = Math.max(size.x, size.y, size.z, 0.08) * 0.5
+    const fovTan = Math.tan((this.camera.fov * Math.PI) / 360)
+    const pad = THREE.MathUtils.lerp(
+      2.05,
+      2.7,
+      THREE.MathUtils.smoothstep(radius, 0.05, 0.35),
+    )
+    const dist = Math.max(radius / fovTan * pad, VIEW_MIN_DISTANCE + 0.06)
+
+    const startTarget = this.controls.target.clone()
+    const startPos = this.camera.position.clone()
+    const offset = startPos.clone().sub(startTarget)
+    if (offset.lengthSq() < 1e-8) offset.set(0.25, 0.15, 1)
+    offset.setLength(dist)
+    const endPos = center.clone().add(offset)
+
+    this.focusTarget.copy(center)
+    this.focusDist = dist
+    this.camera.up.set(0, 1, 0)
+    this.viewFrame = {
+      startTarget,
+      endTarget: center,
+      startPos,
+      endPos,
+      elapsed: 0,
+      duration: 0.5,
+    }
+  }
+
+  private cancelViewFrame(): void {
+    this.viewFrame = null
+  }
+
+  private tickViewFrame(dt: number): void {
+    const frame = this.viewFrame
+    if (!frame) return
+    frame.elapsed += dt
+    const u = Math.min(1, frame.elapsed / frame.duration)
+    const e = u * u * (3 - 2 * u)
+    this.controls.target.lerpVectors(frame.startTarget, frame.endTarget, e)
+    this.camera.position.lerpVectors(frame.startPos, frame.endPos, e)
+    this.camera.up.set(0, 1, 0)
+    if (u >= 1) this.viewFrame = null
   }
 
   private applyViewLighting(on: boolean): void {
@@ -1024,6 +1130,7 @@ export class ThoraxScene {
 
   dispose(): void {
     this.disposed = true
+    this.cancelViewFrame()
     window.removeEventListener('resize', this.resize)
     this.clearViewMarkers()
     this.controls.dispose()

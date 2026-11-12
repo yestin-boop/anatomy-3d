@@ -178,12 +178,16 @@ app.innerHTML = `
 
   <!-- View-mode study panel -->
   <aside class="view-panel" id="view-panel" hidden>
+    <div class="view-pick-stack" id="view-pick-stack" hidden>
+      <div class="view-pick-stack-label" id="view-pick-stack-label">Also here</div>
+      <div class="view-pick-chips" id="view-pick-chips" role="list"></div>
+    </div>
     <button type="button" class="view-panel-handle" id="view-panel-toggle" aria-expanded="false">
       <span class="view-panel-handle-bar"></span>
       <span id="view-panel-handle-label">Tap a structure</span>
     </button>
     <div class="view-panel-body" id="view-panel-body">
-      <p class="view-empty" id="view-empty">Tap a bone or muscle to see its name, attachments, and a short description. Drag to rotate, scroll to zoom. Tap empty space to clear.</p>
+      <p class="view-empty" id="view-empty">Tap a bone or muscle to see its name, attachments, and a short description. Tap again near the same spot to cycle through what is underneath, or pick from the also-here list. Drag to rotate, scroll to zoom. Tap empty space to clear.</p>
       <div class="view-card" id="view-card" hidden>
         <div class="view-kicker">
           <span id="view-kind"></span>
@@ -275,6 +279,8 @@ const viewName = document.querySelector<HTMLElement>('#view-name')!
 const viewDesc = document.querySelector<HTMLParagraphElement>('#view-desc')!
 const viewFacts = document.querySelector<HTMLDListElement>('#view-facts')!
 const viewNote = document.querySelector<HTMLParagraphElement>('#view-note')!
+const viewPickStack = document.querySelector<HTMLElement>('#view-pick-stack')!
+const viewPickChips = document.querySelector<HTMLElement>('#view-pick-chips')!
 const footerTips = document.querySelector<HTMLElement>('#footer-tips')!
 
 const scene = new ThoraxScene({
@@ -546,6 +552,7 @@ function showMenu(): void {
   playHud.hidden = true
   viewPanel.hidden = true
   viewPanel.classList.remove('is-expanded')
+  clearPickStack()
   chromeTop.hidden = true
   chromeTop.classList.remove('is-view')
   chromeTop.setAttribute('hidden', '')
@@ -678,26 +685,114 @@ function applyViewSelection(sel: ViewSelection | null): void {
   scene.setViewSelection(sel.meshNames, attachmentsFor(sel))
 }
 
-function onViewPick(clientX: number, clientY: number): void {
-  const hit = scene.pickAt(clientX, clientY)
-  if (!hit) {
-    applyViewSelection(null)
+function selectionKey(sel: { id: string; side: ViewSide | null }): string {
+  return `${sel.id}:${sel.side ?? ''}`
+}
+
+/** Frame the clicked side only, so a bilateral muscle does not pull the camera out to both thighs. */
+function meshesToFrame(sel: ViewSelection): string[] {
+  if (!sel.side) return sel.meshNames
+  const same = sel.meshNames.filter((n) => meshSide(n) === sel.side || meshSide(n) === null)
+  return same.length > 0 ? same : [sel.clickedMesh]
+}
+
+function hitToSelection(meshName: string): ViewSelection | null {
+  const entry = pickIndex.get(meshName)
+  if (!entry) return null
+  return { ...entry, side: meshSide(meshName), clickedMesh: meshName }
+}
+
+/** Collapse ray hits to unique catalog id + side, front to back. */
+function stackFromHits(hits: { meshName: string }[]): ViewSelection[] {
+  const stack: ViewSelection[] = []
+  const seen = new Set<string>()
+  for (const hit of hits) {
+    const sel = hitToSelection(hit.meshName)
+    if (!sel) continue
+    const key = selectionKey(sel)
+    if (seen.has(key)) continue
+    seen.add(key)
+    stack.push(sel)
+  }
+  return stack
+}
+
+const CYCLE_PX = 24
+let pickStack: ViewSelection[] = []
+let pickStackIndex = -1
+let lastPickX = 0
+let lastPickY = 0
+let hasLastPick = false
+
+function clearPickStack(): void {
+  pickStack = []
+  pickStackIndex = -1
+  hasLastPick = false
+  viewPickChips.replaceChildren()
+  viewPickStack.hidden = true
+}
+
+function chipLabel(sel: ViewSelection): string {
+  if (!sel.side) return sel.displayName
+  return `${sel.displayName} · ${sel.side === 'l' ? 'L' : 'R'}`
+}
+
+function renderPickStack(stack: ViewSelection[], index: number): void {
+  if (stack.length <= 1) {
+    viewPickChips.replaceChildren()
+    viewPickStack.hidden = true
     return
   }
-  const entry = pickIndex.get(hit.meshName)
-  if (!entry) {
-    applyViewSelection(null)
-    return
+  viewPickStack.hidden = false
+  const html = stack
+    .map((sel, i) => {
+      const on = i === index
+      return `<button type="button" class="view-pick-chip${on ? ' view-pick-chip--on' : ''}" data-stack-index="${i}" aria-pressed="${on}" role="listitem">${escapeHtml(chipLabel(sel))}</button>`
+    })
+    .join('')
+  viewPickChips.innerHTML = html
+}
+
+function commitViewSelection(stack: ViewSelection[], index: number, clientX?: number, clientY?: number): void {
+  const sel = stack[index]
+  if (!sel) return
+  pickStack = stack
+  pickStackIndex = index
+  if (clientX != null && clientY != null) {
+    lastPickX = clientX
+    lastPickY = clientY
+    hasLastPick = true
   }
-  const side = meshSide(hit.meshName)
-  // If the user taps the opposite side of the same muscle, refresh pins
-  // to that side even when the entry id is unchanged.
-  applyViewSelection({ ...entry, side, clickedMesh: hit.meshName })
+  applyViewSelection(sel)
+  scene.frameViewSelection(meshesToFrame(sel))
+  renderPickStack(stack, index)
   if (!viewPanel.classList.contains('is-expanded')) {
     // Auto-open the sheet on a new selection so the copy is readable.
     viewPanel.classList.add('is-expanded')
     viewPanelToggle.setAttribute('aria-expanded', 'true')
   }
+}
+
+function onViewPick(clientX: number, clientY: number): void {
+  // After the camera eases to a selection, the same screen point is a
+  // different ray. Cycle the saved stack instead of re-casting.
+  if (hasLastPick && pickStack.length > 1 && pickStackIndex >= 0) {
+    const dx = clientX - lastPickX
+    const dy = clientY - lastPickY
+    if (dx * dx + dy * dy <= CYCLE_PX * CYCLE_PX) {
+      const next = (pickStackIndex + 1) % pickStack.length
+      commitViewSelection(pickStack, next, clientX, clientY)
+      return
+    }
+  }
+  const hits = scene.pickAllAt(clientX, clientY)
+  const stack = stackFromHits(hits)
+  if (stack.length === 0) {
+    applyViewSelection(null)
+    clearPickStack()
+    return
+  }
+  commitViewSelection(stack, 0, clientX, clientY)
 }
 
 async function startView(): Promise<void> {
@@ -717,10 +812,11 @@ async function startView(): Promise<void> {
   chromeTop.classList.add('is-view')
   pillSubject.textContent = 'Study'
   pillMode.textContent = 'View'
-  footerTips.textContent = 'TAP TO SELECT · DRAG ROTATE · SCROLL ZOOM · ESC MENU'
+  footerTips.textContent = 'TAP TO SELECT · TAP AGAIN TO CYCLE · DRAG ROTATE · SCROLL ZOOM · ESC MENU'
   viewPanel.hidden = false
   viewPanel.classList.remove('is-expanded')
   viewPanelToggle.setAttribute('aria-expanded', 'false')
+  clearPickStack()
   applyViewSelection(null)
   try {
     await scene.enterView()
@@ -1126,6 +1222,16 @@ viewPanelToggle.addEventListener('pointerdown', (e) => {
   const open = !viewPanel.classList.contains('is-expanded')
   viewPanel.classList.toggle('is-expanded', open)
   viewPanelToggle.setAttribute('aria-expanded', open ? 'true' : 'false')
+})
+
+viewPickChips.addEventListener('pointerdown', (e) => {
+  const btn = (e.target as HTMLElement).closest<HTMLButtonElement>('button[data-stack-index]')
+  if (!btn) return
+  e.preventDefault()
+  e.stopPropagation()
+  const index = Number(btn.dataset.stackIndex)
+  if (!Number.isInteger(index) || !pickStack[index]) return
+  commitViewSelection(pickStack, index)
 })
 
 document.querySelector('#btn-menu-top')!.addEventListener('pointerdown', (e) => {

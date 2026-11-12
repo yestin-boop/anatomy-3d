@@ -518,6 +518,12 @@ html, body {
   #app:has(#view-panel:not([hidden])) .footer-attr {
     bottom: 48px;
   }
+  #app:has(#view-pick-stack:not([hidden])) .footer-bar {
+    bottom: 126px;
+  }
+  #app:has(#view-pick-stack:not([hidden])) .footer-attr {
+    display: none;
+  }
   .side-views { display: none; }
   .menu-overlay {
     justify-content: center;
@@ -661,6 +667,61 @@ html, body {
   color: rgba(160, 180, 210, 0.48);
 }
 
+.view-pick-stack[hidden] { display: none !important; }
+.view-pick-stack {
+  pointer-events: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  padding: 12px 18px 10px;
+  border-radius: 16px 16px 0 0;
+  background: var(--glass);
+  border: 1px solid var(--glass-border);
+  border-bottom: 0;
+  backdrop-filter: blur(22px) saturate(1.2);
+  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.45);
+}
+.view-panel:has(.view-pick-stack:not([hidden])) .view-panel-body {
+  border-radius: 0 0 16px 16px;
+  border-top: 0;
+}
+.view-pick-stack-label {
+  font-size: 0.64rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--hud-dim);
+  font-weight: 600;
+}
+.view-pick-chips {
+  display: flex;
+  flex-wrap: nowrap;
+  gap: 6px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: thin;
+  -webkit-overflow-scrolling: touch;
+  padding-bottom: 1px;
+}
+.view-pick-chip {
+  appearance: none;
+  flex: 0 0 auto;
+  border: 1px solid rgba(200, 220, 255, 0.22);
+  background: rgba(14, 22, 38, 0.55);
+  color: rgba(220, 230, 245, 0.78);
+  border-radius: 999px;
+  padding: 5px 11px;
+  font: 600 0.72rem/1.2 var(--font);
+  letter-spacing: 0.01em;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.view-pick-chip--on {
+  color: #0b1220;
+  background: rgba(232, 240, 255, 0.92);
+  border-color: #fff;
+}
+.view-pick-chip:active { transform: scale(0.97); }
+
 @media (max-width: 900px) {
   .view-panel {
     top: auto;
@@ -670,6 +731,15 @@ html, body {
     width: 100%;
     max-height: none;
     pointer-events: auto;
+  }
+  .view-pick-stack {
+    padding: 8px 16px 8px;
+    border-radius: 16px 16px 0 0;
+    box-shadow: none;
+  }
+  .view-panel:has(.view-pick-stack:not([hidden])) .view-panel-handle {
+    border-radius: 0;
+    border-top: 0;
   }
   .view-panel-handle {
     display: flex;
