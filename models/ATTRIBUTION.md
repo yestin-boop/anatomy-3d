@@ -48,8 +48,7 @@ same Z-up coordinate frame as the existing extras (no recenter, no pre-rotation)
 | `extra/muscles/psoas_maj_r.glb` / `psoas_maj_l.glb` | FJ1431 / FJ1431M |
 | `extra/muscles/serratus_ant_r.glb` / `serratus_ant_l.glb` | FJ1459 / FJ1459M |
 
-Latissimus dorsi and rectus abdominis are not in this OBJ pack. The hip remains
-a single os coxae mesh per side (FJ3152 right, FJ3288 left).
+The hip remains a single os coxae mesh per side (FJ3152 right, FJ3288 left).
 
 ## Additional pack muscles (2026-11-13)
 
@@ -166,10 +165,11 @@ except neck muscles that use a separate FJ number on each side (no `M` suffix).
 | `flex_acc_l/r` | FJ1412M / FJ1412 | flexor accessorius (quadratus plantae) |
 | `odm_foot_l/r` | FJ1399M / FJ1399 | opponens digiti minimi of foot |
 
-Still not in this OBJ pack: latissimus dorsi, rectus abdominis, internal oblique,
-transversus abdominis, quadratus lumborum, masseter, temporalis, psoas minor,
-multifidus, rotatores, extensor digitorum brevis, palmaris brevis. The hip remains
-a single os coxae mesh per side (FJ3152 right, FJ3288 left). There is no hyoid mesh.
+Those BodyParts3D gaps are partly filled from Z-Anatomy (see below). Still not
+in either pack used here: masseter, temporalis, psoas minor, rotatores (present
+in Écorché but not imported), extensor digitorum brevis, palmaris brevis. The hip
+remains a single os coxae mesh per side (FJ3152 right, FJ3288 left). There is no
+hyoid mesh.
 
 Skipped on purpose (size or scope, not forgotten): external / internal / innermost
 intercostals (each side is a 7–9 MB OBJ); levatores costarum; interspinalis and
@@ -255,3 +255,77 @@ FJ2440 except for the file-id comment, so only FJ2440 was converted.
 
 Still not in this pack (do not invent): pubic symphysis, costal cartilages 8–10 /
 costal margin, menisci, labra, and limb articular cartilage.
+
+## Z-Anatomy trunk fills (2026-11-13)
+
+Latissimus dorsi, rectus abdominis, internal abdominal oblique, transversus
+abdominis, quadratus lumborum, and multifidus are **not** in the BodyParts3D
+`isa_BP3D_4.0_obj_99` pack. They were added from Z-Anatomy (CC BY-SA 4.0),
+itself derived from BodyParts3D. Share-alike applies to these added meshes;
+they are not BodyParts3D-only.
+
+### AnatomyScope `zanatomy-fill-r010` (lats, rectus, internal oblique, transversus)
+
+Source: https://anatomyscope.com/models/zanatomy-fill-r010.glb
+Licence file: https://anatomyscope.com/models/LICENSE.txt
+Z-Anatomy: https://github.com/LluisV/Z-Anatomy
+
+AnatomyScope aligned these four muscles to BodyParts3D coordinates, pushed
+surfaces out where deeper BodyParts3D muscles poked through, decimated,
+quantized, and meshopt-compressed the file. We decoded that GLB, baked each
+node’s translation/scale, and converted from metres, Y-up, +Z anterior into
+this app’s BodyParts3D millimetre Z-up frame:
+
+    (x, y, z)_mm = (x_m, −z_m, y_m) × 1000
+
+Runtime still applies `rotation.x = −π/2` only. No second camera frame.
+
+| GLB (left / right) | Structure |
+| --- | --- |
+| `extra/muscles/lat_l` / `lat_r` | latissimus dorsi |
+| `extra/muscles/rectus_abd_l` / `rectus_abd_r` | rectus abdominis |
+| `extra/muscles/int_oblique_l` / `int_oblique_r` | internal abdominal oblique |
+| `extra/muscles/trans_abd_l` / `trans_abd_r` | transversus abdominis |
+
+Left and right latissimus / rectus each shipped as two primitives in the
+source file; those were merged into one mesh per side.
+
+### Écorché (quadratus lumborum, multifidus)
+
+Source: https://github.com/Charleeh/ecorche (`model/ecorche.glb`)
+Licence: CC BY-SA 4.0. Credit: BodyParts3D © DBCLS, CC BY 4.0; Z-Anatomy by
+Gauthier Kervyn, CC BY-SA 4.0; this derivative CC BY-SA 4.0.
+
+Écorché uses the same metres / Y-up / +Z anterior convention, with a root
+scale of 1e-4. The same axis conversion as above was applied, then a rigid
+offset measured on shared BodyParts3D landmarks (left and right hip, sternal
+body, L1, T12, left 1st and 7th costal cartilages; spread < 0.3 mm) to land
+on this pack’s original coordinates:
+
+    subtract (0, 79.3393, 78.1219) mm after the axis conversion
+
+Without that offset, Écorché meshes sit about 79 mm too posterior and 78 mm
+too cranial relative to our un-recentered BodyParts3D extras. After the
+offset, Écorché’s own latissimus and rectus overlap the AnatomyScope fills
+closely; those two were **not** taken from Écorché (AnatomyScope’s copies
+were already fitted to this body). Quadratus lumborum and multifidus
+(cervicis, thoracis, lumborum) were taken from Écorché and visually checked
+against psoas, iliacus, iliocostalis, and the lumbar/cervical vertebrae.
+
+| GLB (left / right) | Structure |
+| --- | --- |
+| `extra/muscles/ql_l` / `ql_r` | quadratus lumborum |
+| `extra/muscles/multifidus_cerv_l/r`, `multifidus_thor_l/r`, `multifidus_lumb_l/r` | multifidus |
+
+### Checked but not added
+
+- **Pubic symphysis, costal cartilages 8–10 / costal margin, menisci, labra:**
+  not present as named meshes in Écorché (its 42 cartilages are costal 1–7,
+  nasal, the external ear, and the intervertebral discs — the same set we
+  already have from BodyParts3D). Not invented.
+- **Rotatores:** present in Écorché, skipped (a long combined set, not
+  visually reviewed as a clean single muscle).
+- **Thoracolumbar fascia, masseter, temporalis, and facial muscles:** present
+  in Écorché; out of scope for this trunk-muscle fill (fascia is not a
+  muscle; face/jaw were not part of the missing-trunk brief).
+- **nqwrc/3d-anatomy** and other CC BY-NC packs were not used.
