@@ -534,6 +534,62 @@ html, body {
 }
 
 
+/* —— View-only subject + layer filters —— */
+.view-filters[hidden] { display: none !important; }
+.view-filters {
+  position: absolute;
+  top: max(12px, env(safe-area-inset-top));
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 5;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: center;
+  gap: 8px;
+  pointer-events: auto;
+  max-width: calc(100% - 168px);
+  padding: 0 8px;
+}
+.view-filter-group {
+  display: flex;
+  background: var(--glass);
+  border: 1px solid var(--glass-border);
+  border-radius: 999px;
+  padding: 3px;
+  gap: 2px;
+  backdrop-filter: blur(16px);
+}
+.view-filter-btn {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  color: var(--hud-dim);
+  border-radius: 999px;
+  padding: 8px 12px;
+  min-height: 36px;
+  font: 600 0.68rem/1 var(--font);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  cursor: pointer;
+  min-width: 52px;
+}
+.view-filter-btn--on {
+  background: rgba(232, 240, 255, 0.92);
+  color: #0b1220;
+}
+.view-filter-btn:active { transform: scale(0.97); }
+.view-filter-group.is-disabled {
+  opacity: 0.38;
+  pointer-events: none;
+}
+@media (max-width: 700px) {
+  .view-filters {
+    top: max(52px, calc(env(safe-area-inset-top) + 42px));
+    max-width: calc(100% - 20px);
+  }
+}
+
 /* —— View mode labels + study panel —— */
 .label-layer,
 .label-layer * {

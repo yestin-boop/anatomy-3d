@@ -21,8 +21,9 @@ import {
   muscleAnswersMatch,
   type Muscle,
   type MuscleRegion,
+  type MuscleLayerFilter,
 } from './data/muscles'
-import { ThoraxScene } from './scene/ThoraxScene'
+import { ThoraxScene, type ViewSubjectFilter } from './scene/ThoraxScene'
 import { playCorrectChime, playKeyTap, playWrongTick, unlockAudio } from './audio/chime'
 import { getBoneView, getMuscleView, type ViewAttachmentSite, type ViewSide } from './data/viewInfo'
 
@@ -49,8 +50,9 @@ const MUSCLE_REGION_LABEL: Record<MuscleRegion, string> = {
   neck_back: 'NECK & BACK',
   chest_abdomen: 'CHEST & ABDOMEN',
   shoulder_arm: 'SHOULDER & ARM',
+  forearm_hand: 'FOREARM & HAND',
   hip_thigh: 'HIP & THIGH',
-  lower_leg: 'LOWER LEG',
+  lower_leg: 'LEG & FOOT',
 }
 
 type Subject = 'bones' | 'muscles'
@@ -88,6 +90,19 @@ app.innerHTML = `
     <div class="chrome-right">
       <button type="button" class="pill pill--btn" id="btn-menu-top" title="Menu">≡ menu</button>
       <span class="pill" id="pill-round">round 1/3</span>
+    </div>
+  </div>
+
+  <div class="view-filters" id="view-filters" hidden>
+    <div class="view-filter-group" role="radiogroup" aria-label="Show bones or muscles">
+      <button type="button" class="view-filter-btn view-filter-btn--on" data-view-subject="both">Both</button>
+      <button type="button" class="view-filter-btn" data-view-subject="bones">Bones</button>
+      <button type="button" class="view-filter-btn" data-view-subject="muscles">Muscles</button>
+    </div>
+    <div class="view-filter-group" id="view-layer-group" role="radiogroup" aria-label="Muscle layers">
+      <button type="button" class="view-filter-btn view-filter-btn--on" data-view-layer="all">All</button>
+      <button type="button" class="view-filter-btn" data-view-layer="mid">Mid</button>
+      <button type="button" class="view-filter-btn" data-view-layer="deep">Deep</button>
     </div>
   </div>
 
@@ -187,7 +202,7 @@ app.innerHTML = `
       <span id="view-panel-handle-label">Tap a structure</span>
     </button>
     <div class="view-panel-body" id="view-panel-body">
-      <p class="view-empty" id="view-empty">Tap a bone or muscle to see its name, attachments, and a short description. Tap again near the same spot to cycle through what is underneath, or pick from the also-here list. Drag to rotate, scroll to zoom. Tap empty space to clear.</p>
+      <p class="view-empty" id="view-empty">Tap a bone or muscle to see its name, attachments, and a short description. Tap again near the same spot to cycle through what is underneath, or pick from the also-here list. Drag to rotate, two-finger or right-drag to pan, scroll to zoom. Use Both / Bones / Muscles and All / Mid / Deep to peel layers. Tap empty space to clear.</p>
       <div class="view-card" id="view-card" hidden>
         <div class="view-kicker">
           <span id="view-kind"></span>
@@ -282,6 +297,8 @@ const viewNote = document.querySelector<HTMLParagraphElement>('#view-note')!
 const viewPickStack = document.querySelector<HTMLElement>('#view-pick-stack')!
 const viewPickChips = document.querySelector<HTMLElement>('#view-pick-chips')!
 const footerTips = document.querySelector<HTMLElement>('#footer-tips')!
+const viewFilters = document.querySelector<HTMLDivElement>('#view-filters')!
+const viewLayerGroup = document.querySelector<HTMLDivElement>('#view-layer-group')!
 
 const scene = new ThoraxScene({
   mainCanvas,
@@ -556,6 +573,7 @@ function showMenu(): void {
   chromeTop.hidden = true
   chromeTop.classList.remove('is-view')
   chromeTop.setAttribute('hidden', '')
+  viewFilters.hidden = true
   sideViews.hidden = true
   hiddenInput.value = ''
   statusEl.style.display = 'none'
@@ -719,6 +737,30 @@ function stackFromHits(hits: { meshName: string }[]): ViewSelection[] {
 
 const CYCLE_PX = 24
 let pickStack: ViewSelection[] = []
+let viewSubjectFilter: ViewSubjectFilter = 'both'
+let muscleLayerFilter: MuscleLayerFilter = 'all'
+
+function syncViewFilterButtons(): void {
+  document.querySelectorAll<HTMLButtonElement>('[data-view-subject]').forEach((btn) => {
+    btn.classList.toggle('view-filter-btn--on', btn.dataset.viewSubject === viewSubjectFilter)
+  })
+  document.querySelectorAll<HTMLButtonElement>('[data-view-layer]').forEach((btn) => {
+    btn.classList.toggle('view-filter-btn--on', btn.dataset.viewLayer === muscleLayerFilter)
+  })
+  const musclesOn = viewSubjectFilter !== 'bones'
+  viewLayerGroup.classList.toggle('is-disabled', !musclesOn)
+  viewLayerGroup.setAttribute('aria-disabled', musclesOn ? 'false' : 'true')
+}
+
+function applyViewDisplay(): void {
+  scene.setViewDisplay({ subjectFilter: viewSubjectFilter, muscleLayer: muscleLayerFilter })
+  syncViewFilterButtons()
+  if (state.viewing && !scene.viewSelectionVisible()) {
+    applyViewSelection(null)
+    clearPickStack()
+  }
+}
+
 let pickStackIndex = -1
 let lastPickX = 0
 let lastPickY = 0
@@ -812,7 +854,9 @@ async function startView(): Promise<void> {
   chromeTop.classList.add('is-view')
   pillSubject.textContent = 'Study'
   pillMode.textContent = 'View'
-  footerTips.textContent = 'TAP TO SELECT · TAP AGAIN TO CYCLE · DRAG ROTATE · SCROLL ZOOM · ESC MENU'
+  footerTips.textContent = 'TAP TO SELECT · TAP AGAIN TO CYCLE · DRAG ROTATE · TWO-FINGER / RIGHT-DRAG PAN · SCROLL ZOOM · ESC MENU'
+  viewFilters.hidden = false
+  syncViewFilterButtons()
   viewPanel.hidden = false
   viewPanel.classList.remove('is-expanded')
   viewPanelToggle.setAttribute('aria-expanded', 'false')
@@ -820,6 +864,7 @@ async function startView(): Promise<void> {
   applyViewSelection(null)
   try {
     await scene.enterView()
+    scene.setViewDisplay({ subjectFilter: viewSubjectFilter, muscleLayer: muscleLayerFilter })
   } catch (err) {
     console.error(err)
     statusEl.classList.add('error')
@@ -1215,6 +1260,29 @@ startBtn.addEventListener('pointerdown', (e) => {
 btnView.addEventListener('pointerdown', (e) => {
   e.preventDefault()
   void startView()
+})
+
+document.querySelectorAll<HTMLButtonElement>('[data-view-subject]').forEach((btn) => {
+  btn.addEventListener('pointerdown', (e) => {
+    e.preventDefault()
+    e.stopPropagation()
+    const next = btn.dataset.viewSubject as ViewSubjectFilter | undefined
+    if (!next || next === viewSubjectFilter) return
+    viewSubjectFilter = next
+    applyViewDisplay()
+  })
+})
+
+document.querySelectorAll<HTMLButtonElement>('[data-view-layer]').forEach((btn) => {
+  btn.addEventListener('pointerdown', (e) => {
+    e.preventDefault()
+    e.stopPropagation()
+    if (viewSubjectFilter === 'bones') return
+    const next = btn.dataset.viewLayer as MuscleLayerFilter | undefined
+    if (!next || next === muscleLayerFilter) return
+    muscleLayerFilter = next
+    applyViewDisplay()
+  })
 })
 
 viewPanelToggle.addEventListener('pointerdown', (e) => {

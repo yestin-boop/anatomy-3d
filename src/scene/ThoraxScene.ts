@@ -4,6 +4,9 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js'
 import { CSS2DObject, CSS2DRenderer } from 'three/addons/renderers/CSS2DRenderer.js'
 import { assetUrl } from '../assetUrl'
 import type { ViewAttachmentSite, ViewPrefer } from '../data/viewInfo'
+import { muscleVisibleAtLayer, type MuscleLayerFilter } from '../data/muscles'
+
+export type ViewSubjectFilter = 'both' | 'bones' | 'muscles'
 
 const GHOST = {
   color: 0xc8ddf5,
@@ -166,6 +169,8 @@ export class ThoraxScene {
   private markerGroup = new THREE.Group()
   private viewMode = false
   private viewSelected = new Set<string>()
+  private viewSubjectFilter: ViewSubjectFilter = 'both'
+  private muscleLayerFilter: MuscleLayerFilter = 'all'
   private raycaster = new THREE.Raycaster()
   private pointerNdc = new THREE.Vector2()
   private _scratchA = new THREE.Vector3()
@@ -206,6 +211,7 @@ export class ThoraxScene {
     this.controls.enableDamping = true
     this.controls.dampingFactor = 0.08
     this.controls.enablePan = false
+    this.controls.screenSpacePanning = true
     this.controls.minDistance = DEFAULT_MIN_DISTANCE
     this.controls.maxDistance = 24
     // Keep orbit pole = world up
@@ -688,6 +694,8 @@ export class ThoraxScene {
     this.controls.minDistance = VIEW_MIN_DISTANCE
     this.viewSelected.clear()
     this.clearViewMarkers()
+    this.controls.enablePan = true
+    this.controls.screenSpacePanning = true
     this.applyViewLighting(true)
     await this.ensureMusclesLoaded()
     if (!this.viewMode || this.disposed) return
@@ -699,6 +707,7 @@ export class ThoraxScene {
     if (!this.viewMode) return
     this.viewMode = false
     this.cancelViewFrame()
+    this.controls.enablePan = false
     this.controls.minDistance = DEFAULT_MIN_DISTANCE
     this.viewSelected.clear()
     this.clearViewMarkers()
@@ -888,6 +897,39 @@ export class ThoraxScene {
     }
   }
 
+  setViewDisplay(opts: {
+    subjectFilter?: ViewSubjectFilter
+    muscleLayer?: MuscleLayerFilter
+  }): void {
+    if (opts.subjectFilter) this.viewSubjectFilter = opts.subjectFilter
+    if (opts.muscleLayer) this.muscleLayerFilter = opts.muscleLayer
+    if (this.viewMode) this.applyViewPresentation()
+  }
+
+  getViewSubjectFilter(): ViewSubjectFilter {
+    return this.viewSubjectFilter
+  }
+
+  getMuscleLayerFilter(): MuscleLayerFilter {
+    return this.muscleLayerFilter
+  }
+
+  /** True if at least one currently selected mesh is still visible. */
+  viewSelectionVisible(): boolean {
+    if (this.viewSelected.size === 0) return true
+    for (const name of this.viewSelected) {
+      const mesh = this.meshByName.get(name)
+      if (mesh?.visible) return true
+    }
+    return false
+  }
+
+  private meshShownInView(name: string, kind: 'bone' | 'muscle'): boolean {
+    if (kind === 'bone') return this.viewSubjectFilter !== 'muscles'
+    if (this.viewSubjectFilter === 'bones') return false
+    return muscleVisibleAtLayer(name, this.muscleLayerFilter)
+  }
+
   private applyViewPresentation(): void {
     const hasSel = this.viewSelected.size > 0
     for (const [name, mat] of this.materials) {
@@ -899,7 +941,8 @@ export class ThoraxScene {
       const selected = hasSel && this.viewSelected.has(name)
 
       if (isDiaphragm) {
-        mesh.visible = true
+        const shown = this.viewSubjectFilter !== 'muscles'
+        mesh.visible = shown
         mat.color.setHex(0x8a6a6a)
         mat.emissive.setHex(0x000000)
         mat.emissiveIntensity = 0
@@ -913,7 +956,12 @@ export class ThoraxScene {
         continue
       }
 
-      mesh.visible = true
+      const shown = this.meshShownInView(name, kind)
+      mesh.visible = shown
+      if (!shown) {
+        mat.needsUpdate = true
+        continue
+      }
       const dim = hasSel && !selected
 
       if (kind === 'muscle') {
