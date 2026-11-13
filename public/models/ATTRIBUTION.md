@@ -175,3 +175,83 @@ Skipped on purpose (size or scope, not forgotten): external / internal / innermo
 intercostals (each side is a 7–9 MB OBJ); levatores costarum; interspinalis and
 intertransversarii; foot lumbricals and plantar interossei; pelvic floor / perineal
 muscles; facial expression, extra-ocular, pharyngeal, laryngeal, and tongue muscles.
+
+## Cartilage fill (2026-11-13)
+
+Converted from BodyParts3D `isa_BP3D_4.0_obj_99` element OBJs via `obj2gltf`,
+same Z-up coordinate frame as the existing extras (no recenter, no pre-rotation).
+Runtime still applies `rotation.x = -π/2`. Files live in `extra/cartilage/`.
+
+### Costal cartilages 1–7
+
+| GLB (left / right) | Element IDs (L / R) | Structure |
+| --- | --- | --- |
+| `costal_l1` / `costal_r1` | FJ3239 / FJ3333 | first costal cartilage |
+| `costal_l2` / `costal_r2` | FJ3242 / FJ3335 | second costal cartilage |
+| `costal_l3` / `costal_r3` | FJ3245 / FJ3337 | third costal cartilage |
+| `costal_l4` / `costal_r4` | FJ3248 / FJ3339 | fourth costal cartilage |
+| `costal_l5` / `costal_r5` | FJ3251 / FJ3341 | fifth costal cartilage |
+| `costal_l6` / `costal_r6` | FJ3254 / FJ3343 | sixth costal cartilage |
+| `costal_l7` / `costal_r7` | FJ3255 / FJ3345 | seventh costal cartilage |
+
+No 8th–10th costal cartilages or costal-margin mesh is in this pack.
+
+### Intervertebral discs
+
+Official names follow the vertebra above (e.g. “intervertebral disk of axis” = C2–C3).
+
+| GLB | Element ID | Label |
+| --- | --- | --- |
+| `disc_c2_c3` | FJ3202 | C2–C3 (disk of axis) |
+| `disc_c3_c4` | FJ3213 | C3–C4 |
+| `disc_c4_c5` | FJ3218 | C4–C5 |
+| `disc_c5_c6` | FJ3219 | C5–C6 |
+| `disc_c6_c7` | FJ3220 | C6–C7 |
+| `disc_c7_t1` | FJ3221 | C7–T1 |
+| `disc_t1_t2` | FJ3222 | T1–T2 |
+| `disc_t2_t3` | FJ3223 | T2–T3 |
+| `disc_t3_t4` | FJ3224 | T3–T4 |
+| `disc_t4_t5` | FJ3203 | T4–T5 |
+| `disc_t5_t6` | FJ3204 | T5–T6 |
+| `disc_t6_t7` | FJ3205 | T6–T7 |
+| `disc_t7_t8` | FJ3206 | T7–T8 |
+| `disc_t8_t9` | FJ3207 | T8–T9 |
+| `disc_t9_t10` | FJ3208 | T9–T10 |
+| `disc_t10_t11` | FJ3209 | T10–T11 |
+| `disc_t11_t12` | FJ3210 | T11–T12 |
+| `disc_t12_l1` | FJ3211 | T12–L1 |
+| `disc_l1_l2` | FJ3212 | L1–L2 |
+| `disc_l2_l3` | FJ3214 | L2–L3 |
+| `disc_l3_l4` | FJ3215 | L3–L4 |
+| `disc_l4_l5` | FJ3216 | L4–L5 |
+| `disc_l5_s1` | FJ3217 | L5–S1 |
+
+FJ3211 is listed only as “intervertebral disk” / “articular disk of symphysis”
+(no vertebral level). It is labeled **T12–L1** because its centroid sits between
+the T11 disc (FJ3210, z ≈ 1099) and the L1 disc (FJ3212, z ≈ 1040); FJ3211 is
+at z ≈ 1070 in the official coordinates.
+
+FMA67396 (“articular disk of symphysis”) is a parent class covering these discs.
+There is no pubic symphysis mesh in this pack, and none was invented.
+
+### Nasal and laryngeal cartilages
+
+Included in the same convert pass (all present and small enough).
+
+| GLB | Element ID | Structure |
+| --- | --- | --- |
+| `nasal_alar_r` / `nasal_alar_l` | FJ2554 / FJ2555 | major alar cartilage |
+| `nasal_lateral_r` / `nasal_lateral_l` | FJ2558 / FJ2556 | lateral nasal cartilage |
+| `nasal_septal` | FJ2557 | septal nasal cartilage |
+| `thyroid_cartilage` | FJ2808 | thyroid cartilage |
+| `cricoid` | FJ2440 | cricoid cartilage |
+| `arytenoid_l` / `arytenoid_r` | FJ2775 / FJ2792 | arytenoid cartilage |
+| `corniculate_l` / `corniculate_r` | FJ2776 / FJ2793 | corniculate cartilage |
+| `cuneiform_l` / `cuneiform_r` | FJ2773 / FJ2795 | cuneiform cartilage |
+| `epiglottis` | FJ2770 | epiglottis |
+
+FJ2769 is also listed as cricoid cartilage but is a byte-for-byte duplicate of
+FJ2440 except for the file-id comment, so only FJ2440 was converted.
+
+Still not in this pack (do not invent): pubic symphysis, costal cartilages 8–10 /
+costal margin, menisci, labra, and limb articular cartilage.

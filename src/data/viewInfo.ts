@@ -50,6 +50,13 @@ export type BoneViewInfo = {
   features?: string
 }
 
+export type CartilageViewInfo = {
+  id: string
+  description: string
+  articulations?: string
+  features?: string
+}
+
 const side = (s: ViewSide, names: string[]): string[] =>
   names.map((n) => `${n}_${s}`)
 
@@ -2925,6 +2932,238 @@ export const BONE_VIEW: Record<string, BoneViewInfo> = {
     features:
       'The first proximal phalanx and the sesamoids under the first metatarsal head are important in push-off. Hammer toe, claw toe, and hallux valgus alter the alignment of these joints. The distal phalanx of the hallux receives the tendon of flexor hallucis longus on its plantar base, a powerful contribution to the final push-off of gait.',
   },
+}
+
+
+export const CARTILAGE_VIEW: Record<string, CartilageViewInfo> = {
+  costal1: {
+    id: 'costal1',
+    description:
+      'The first costal cartilage is short and relatively stiff. It joins the first rib to the manubrium just below the sternoclavicular joint and helps form the margin of the thoracic inlet. Unlike the lower true-rib cartilages, it often ossifies early and moves little.',
+    articulations:
+      'Lateral end with the first rib; medial end with the manubrium of the sternum, immediately inferior to the clavicular notch.',
+    features:
+      'This pack includes the first through seventh costal cartilages on each side. Cartilages 8–10 and the costal margin are not in the BodyParts3D pack used here.',
+  },
+  costal2: {
+    id: 'costal2',
+    description:
+      'The second costal cartilage links the second rib to the sternal angle (the manubriosternal joint). That junction is a standard surface landmark for counting ribs and sits at about the level of the T4/T5 disc and the aortic arch.',
+    articulations:
+      'Lateral end with the second rib; medial end with the sternal angle, meeting both the manubrium and the upper body of the sternum.',
+    features:
+      'It is a true (vertebrosternal) cartilage: it reaches the sternum directly. The sternal end is used clinically when counting ribs from the angle of Louis.',
+  },
+  costal3: {
+    id: 'costal3',
+    description:
+      'The third costal cartilage is a typical true-rib cartilage: a flexible bar of hyaline cartilage that continues the third rib to the side of the sternal body, allowing the chest wall to spring during breathing.',
+    articulations:
+      'Lateral end with the third rib; medial end with the side of the sternal body.',
+    features:
+      'With the other true-rib cartilages it contributes to the elasticity of the anterior chest wall. Costal cartilages can calcify with age, reducing that spring.',
+  },
+  costal4: {
+    id: 'costal4',
+    description:
+      'The fourth costal cartilage continues the fourth rib to the side of the sternal body. It is a typical true (vertebrosternal) hyaline cartilage.',
+    articulations:
+      'Lateral end with the fourth rib; medial end with the side of the sternal body.',
+    features:
+      'Together with ribs 3–6 it forms much of the anterior chest wall over the mid-sternum. This pack does not include cartilages 8–10 or a costal margin mesh.',
+  },
+  costal5: {
+    id: 'costal5',
+    description:
+      'The fifth costal cartilage is a typical true-rib cartilage joining the fifth rib to the sternal body. The nipple often lies near the fifth intercostal space in the midclavicular line, so this cartilage is a useful neighbour when counting spaces.',
+    articulations:
+      'Lateral end with the fifth rib; medial end with the side of the sternal body.',
+    features:
+      'Hyaline cartilage here keeps the anterior chest wall compliant. Lower in the series, the cartilages begin to slope more steeply upward toward the sternum.',
+  },
+  costal6: {
+    id: 'costal6',
+    description:
+      'The sixth costal cartilage continues the sixth rib to the sternal body. It is the penultimate true-rib cartilage, still reaching the sternum directly.',
+    articulations:
+      'Lateral end with the sixth rib; medial end with the side of the sternal body, just above the seventh cartilage.',
+    features:
+      'True (vertebrosternal) cartilage. The seventh cartilage below it is the last to meet the sternum itself.',
+  },
+  costal7: {
+    id: 'costal7',
+    description:
+      'The seventh costal cartilage is the last true (vertebrosternal) cartilage: it reaches the lower sternal body / xiphisternal region directly. In life, the eighth to tenth cartilages join this one to form the costal margin — those lower cartilages are not in this pack.',
+    articulations:
+      'Lateral end with the seventh rib; medial end with the inferior sternal body, near the xiphisternal joint. In a complete cage, cartilages 8–10 would join its inferior border.',
+    features:
+      'The lowest direct sternal attachment of a rib. The missing 8th–10th cartilages and costal margin are a known gap in this BodyParts3D extract, not an anatomical absence.',
+  },
+}
+
+function ivd(id: string, above: string, below: string, region: string, extra?: string): CartilageViewInfo {
+  return {
+    id,
+    description:
+      `The ${above}–${below} intervertebral disc is a fibrocartilaginous joint (symphysis) between the bodies of ${above} and ${below}. A tough anulus fibrosus surrounds a gel-like nucleus pulposus, distributing load and allowing a small amount of movement in the ${region} column.`,
+    articulations: `Vertebral body of ${above} above and ${below} below, attached by the vertebral end plates. Anterior and posterior longitudinal ligaments run along the disc’s front and back.`,
+    features:
+      extra ??
+      'Discs are thicker in the cervical and lumbar regions (where motion is greater) than in the mid-thorax. The nucleus sits slightly posterior; a posterolateral herniation can encroach on a spinal nerve.',
+  }
+}
+
+Object.assign(CARTILAGE_VIEW, {
+  disc_c2_c3: ivd(
+    'disc_c2_c3',
+    'C2',
+    'C3',
+    'cervical',
+    'This is the disc of the axis (C2–C3), the highest intervertebral disc — there is no disc between the atlas and the axis. The vertebral artery is already in the transverse foramina at this level.',
+  ),
+  disc_c3_c4: ivd('disc_c3_c4', 'C3', 'C4', 'cervical'),
+  disc_c4_c5: ivd('disc_c4_c5', 'C4', 'C5', 'cervical'),
+  disc_c5_c6: ivd(
+    'disc_c5_c6',
+    'C5',
+    'C6',
+    'cervical',
+    'A common cervical level for disc degeneration and posterolateral herniation, which can affect the C6 nerve root. Cervical discs are relatively thick for the size of the vertebral bodies.',
+  ),
+  disc_c6_c7: ivd('disc_c6_c7', 'C6', 'C7', 'cervical'),
+  disc_c7_t1: ivd(
+    'disc_c7_t1',
+    'C7',
+    'T1',
+    'cervicothoracic',
+    'The cervicothoracic disc, at the transition from the mobile neck to the more rigid thorax.',
+  ),
+  disc_t1_t2: ivd('disc_t1_t2', 'T1', 'T2', 'upper thoracic'),
+  disc_t2_t3: ivd('disc_t2_t3', 'T2', 'T3', 'upper thoracic'),
+  disc_t3_t4: ivd('disc_t3_t4', 'T3', 'T4', 'upper thoracic'),
+  disc_t4_t5: ivd(
+    'disc_t4_t5',
+    'T4',
+    'T5',
+    'mid-thoracic',
+    'Roughly the level of the sternal angle and the aortic arch. Mid-thoracic discs are thinner and, with the rib cage, allow only limited motion.',
+  ),
+  disc_t5_t6: ivd('disc_t5_t6', 'T5', 'T6', 'mid-thoracic'),
+  disc_t6_t7: ivd('disc_t6_t7', 'T6', 'T7', 'mid-thoracic'),
+  disc_t7_t8: ivd('disc_t7_t8', 'T7', 'T8', 'mid-thoracic'),
+  disc_t8_t9: ivd('disc_t8_t9', 'T8', 'T9', 'mid-thoracic'),
+  disc_t9_t10: ivd('disc_t9_t10', 'T9', 'T10', 'lower thoracic'),
+  disc_t10_t11: ivd('disc_t10_t11', 'T10', 'T11', 'lower thoracic'),
+  disc_t11_t12: ivd('disc_t11_t12', 'T11', 'T12', 'lower thoracic'),
+  disc_t12_l1: ivd(
+    'disc_t12_l1',
+    'T12',
+    'L1',
+    'thoracolumbar',
+    'The thoracolumbar disc sits at a common site of trauma, where the relatively stiff thorax meets the more mobile lumbar spine. In the official BodyParts3D list this mesh (FJ3211) is labelled only as an intervertebral disk; it is identified as T12–L1 by its position between the T11 and L1 discs.',
+  ),
+  disc_l1_l2: ivd('disc_l1_l2', 'L1', 'L2', 'lumbar'),
+  disc_l2_l3: ivd('disc_l2_l3', 'L2', 'L3', 'lumbar'),
+  disc_l3_l4: ivd('disc_l3_l4', 'L3', 'L4', 'lumbar'),
+  disc_l4_l5: ivd(
+    'disc_l4_l5',
+    'L4',
+    'L5',
+    'lumbar',
+    'A frequent site of disc degeneration and herniation. Lumbar discs are the thickest in the spine and carry much of the trunk’s weight.',
+  ),
+  disc_l5_s1: ivd(
+    'disc_l5_s1',
+    'L5',
+    'S1',
+    'lumbosacral',
+    'The lumbosacral disc, often the lowest and a common site of herniation affecting the S1 root. It sits on the sloping sacral base.',
+  ),
+  nasal_alar: {
+    id: 'nasal_alar',
+    description:
+      'The major alar (greater alar, lower lateral) cartilages form the mobile shape of the nasal tip and the lateral wall of each nostril. Each is a thin, curved plate with medial and lateral crura.',
+    articulations:
+      'The medial crura meet in the midline under the septal cartilage and help form the columella. The lateral crura support the alae and sit below the lateral nasal cartilages.',
+    features:
+      'These cartilages give the tip its spring. There is no separate minor alar (sesamoid) mesh in this pack.',
+  },
+  nasal_lateral: {
+    id: 'nasal_lateral',
+    description:
+      'The lateral nasal (upper lateral) cartilages form the middle vault of the nose, one on each side of the septal cartilage, and give the mid-dorsum its width and support.',
+    articulations:
+      'Superiorly they meet the nasal bones; medially they join the septal cartilage; inferiorly they overlap the major alar cartilages.',
+    features:
+      'Together with the septum they make a cartilaginous “tent” under the nasal bones. Collapse here can narrow the internal nasal valve.',
+  },
+  nasal_septal: {
+    id: 'nasal_septal',
+    description:
+      'The septal (quadrate) cartilage is the mobile, anterior part of the nasal septum. It separates the two nasal cavities in front of the bony septum (vomer and perpendicular plate of the ethmoid — those bones are not separate meshes in this pack).',
+    articulations:
+      'It meets the nasal bones and lateral nasal cartilages above, the vomer and ethmoid behind, the maxillae below, and the medial crura of the alar cartilages at the columella.',
+    features:
+      'Deviation of this cartilage is a common cause of a crooked septum. It is hyaline cartilage, continuous with the upper lateral cartilages in a single cartilaginous unit in early life.',
+  },
+  thyroid_cartilage: {
+    id: 'thyroid_cartilage',
+    description:
+      'The thyroid cartilage is the largest laryngeal cartilage, a shield-shaped hyaline plate whose two laminae meet in the midline as the laryngeal prominence (the “Adam’s apple”). It protects the vocal folds, which attach on its inner surface at the anterior commissure.',
+    articulations:
+      'Inferior horns articulate with the cricoid cartilage (cricothyroid joints). The thyrohyoid membrane links its superior border to the hyoid (no hyoid mesh in this pack). The epiglottis and vocal ligaments attach internally.',
+    features:
+      'The superior horns and oblique line give attachment to muscles and the thyrohyoid membrane. The angle between the laminae is usually sharper in males, making the prominence more visible.',
+  },
+  cricoid: {
+    id: 'cricoid',
+    description:
+      'The cricoid cartilage is a complete hyaline ring — the only complete ring in the airway. It has a narrow anterior arch and a tall posterior lamina, like a signet ring facing backward, and sits immediately below the thyroid cartilage.',
+    articulations:
+      'Above, the cricothyroid joints with the inferior horns of the thyroid cartilage, and the cricoarytenoid joints on the upper border of the lamina. Below, it continues into the first tracheal cartilage (trachea not in this pack) via the cricotracheal ligament.',
+    features:
+      'It is the foundation of the larynx: the arytenoids sit and slide on its lamina, and the cricothyroid muscle tilts the ring to tense the vocal folds. A surgical cricothyroidotomy passes through the cricothyroid membrane just above the arch. The BodyParts3D pack lists two cricoid files (FJ2440 and FJ2769) that are identical; only one mesh is included.',
+  },
+  arytenoid: {
+    id: 'arytenoid',
+    description:
+      'The arytenoid cartilages are a pair of pyramidal hyaline (partly elastic) cartilages sitting on the cricoid lamina. Each has a vocal process pointing forward (for the vocal ligament) and a muscular process pointing laterally (for the intrinsic laryngeal muscles that open, close, and tense the glottis).',
+    articulations:
+      'Base of each arytenoid with the upper border of the cricoid lamina at the synovial cricoarytenoid joint. The vocal ligament runs from the vocal process to the thyroid cartilage. A corniculate cartilage caps the apex.',
+    features:
+      'Sliding and rotation at these joints abduct or adduct the vocal folds. They are small but essential for phonation and airway protection.',
+  },
+  corniculate: {
+    id: 'corniculate',
+    description:
+      'The corniculate cartilages (of Santorini) are two tiny elastic nodules that cap the apices of the arytenoid cartilages and sit in the aryepiglottic folds.',
+    articulations:
+      'Each sits on the apex of the corresponding arytenoid. They do not form a true synovial joint with any other cartilage.',
+    features:
+      'They help stiffen the aryepiglottic folds. In this model they are small, paired nodules just above the arytenoids.',
+  },
+  cuneiform: {
+    id: 'cuneiform',
+    description:
+      'The cuneiform cartilages (of Wrisberg) are two small, elongated elastic nodules lying in the aryepiglottic folds, just anterior and lateral to the corniculate cartilages. They do not articulate with other cartilages.',
+    articulations:
+      'Embedded in the aryepiglottic fold; no synovial joint. They sit anterolateral to the corniculates.',
+    features:
+      'They stiffen the aryepiglottic folds and may be visible as small swellings in a laryngeal view. They are easy to confuse by name with the cuneiform bones of the foot — those are bones, listed separately.',
+  },
+  epiglottis: {
+    id: 'epiglottis',
+    description:
+      'The epiglottis is a leaf-shaped plate of elastic cartilage that stands behind the tongue and behind the hyoid, at the entrance to the larynx. During swallowing it folds back over the laryngeal inlet so that the bolus is directed toward the piriform fossae and oesophagus.',
+    articulations:
+      'Its narrow stalk (petiole) attaches to the inner surface of the thyroid cartilage, just below the thyroid notch, via the thyroepiglottic ligament. The hyoepiglottic ligament links it to the hyoid (no hyoid mesh in this pack).',
+    features:
+      'Elastic cartilage lets it spring back after swallowing. The valleculae lie between its anterior surface and the tongue; the laryngeal inlet lies behind it.',
+  },
+})
+
+export function getCartilageView(id: string): CartilageViewInfo | undefined {
+  return CARTILAGE_VIEW[id]
 }
 
 export function getMuscleView(id: string): MuscleViewInfo | undefined {

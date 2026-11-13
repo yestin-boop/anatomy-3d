@@ -90,11 +90,19 @@ const VIEW_MUSCLE_SELECTED = {
   metalness: 0.03,
 }
 const VIEW_CARTILAGE = {
-  color: 0xd8cbb6,
-  emissive: 0x000000,
-  emissiveIntensity: 0,
-  roughness: 0.55,
-  metalness: 0.02,
+  color: 0xb7d0dc,
+  emissive: 0x1a3040,
+  emissiveIntensity: 0.05,
+  roughness: 0.48,
+  metalness: 0.03,
+  opacity: 0.78,
+}
+const VIEW_CARTILAGE_SELECTED = {
+  color: 0xcde6f0,
+  emissive: 0x2a5068,
+  emissiveIntensity: 0.18,
+  roughness: 0.42,
+  metalness: 0.04,
   opacity: 0.92,
 }
 const VIEW_DIM_OPACITY_BONE = 0.13
@@ -114,9 +122,11 @@ export type ThoraxSceneOptions = {
   sideCanvases?: HTMLCanvasElement[]
 }
 
+export type MeshKind = 'bone' | 'muscle' | 'cartilage'
+
 export type ViewPickHit = {
   meshName: string
-  kind: 'bone' | 'muscle'
+  kind: MeshKind
   distance: number
 }
 
@@ -140,8 +150,8 @@ export class ThoraxScene {
   private body = new THREE.Group()
   private meshByName = new Map<string, THREE.Mesh>()
   private materials = new Map<string, THREE.MeshStandardMaterial>()
-  /** 'bone' | 'muscle' per mesh name */
-  private kindByName = new Map<string, 'bone' | 'muscle'>()
+  /** 'bone' | 'muscle' | 'cartilage' per mesh name */
+  private kindByName = new Map<string, MeshKind>()
   private targetIds = new Set<string>()
   private subject: 'bones' | 'muscles' = 'bones'
   private spinning = true
@@ -171,6 +181,7 @@ export class ThoraxScene {
   private viewSelected = new Set<string>()
   private viewSubjectFilter: ViewSubjectFilter = 'both'
   private muscleLayerFilter: MuscleLayerFilter = 'all'
+  private cartilageVisible = true
   private raycaster = new THREE.Raycaster()
   private pointerNdc = new THREE.Vector2()
   private _scratchA = new THREE.Vector3()
@@ -284,6 +295,7 @@ export class ThoraxScene {
   private musclesLoaded = false
   private musclesLoading: Promise<void> | null = null
   private muscleUrls: string[] = []
+  private cartilageUrls: string[] = []
 
   async load(_ignoredThoraxUrl?: string): Promise<void> {
     const loader = new GLTFLoader()
@@ -301,6 +313,10 @@ export class ThoraxScene {
       .then((r) => r.json())
       .then((urls: string[]) => urls.map((u) => assetUrl(u)))
       .catch(() => [] as string[])
+    this.cartilageUrls = await fetch(assetUrl('models/extra/cartilage/manifest.json'))
+      .then((r) => r.json())
+      .then((urls: string[]) => urls.map((u) => assetUrl(u)))
+      .catch(() => [] as string[])
 
     if (boneUrls.length === 0) {
       throw new Error('No skeleton meshes in /models/extra/manifest.json')
@@ -315,6 +331,18 @@ export class ThoraxScene {
         if (!item) continue
         this.ingestModel(item, 'bone')
         this.body.add(item)
+      }
+    }
+
+    if (this.cartilageUrls.length > 0) {
+      for (let i = 0; i < this.cartilageUrls.length; i += batchSize) {
+        const batch = this.cartilageUrls.slice(i, i + batchSize)
+        const scenes = await Promise.all(batch.map((u) => this.loadOne(loader, u, 'cartilage')))
+        for (const item of scenes) {
+          if (!item) continue
+          this.ingestModel(item, 'cartilage')
+          this.body.add(item)
+        }
       }
     }
 
@@ -343,7 +371,7 @@ export class ThoraxScene {
   private async loadOne(
     loader: GLTFLoader,
     url: string,
-    kind: 'bone' | 'muscle',
+    kind: MeshKind,
   ): Promise<THREE.Group | null> {
     try {
       const gltf = await loader.loadAsync(url)
@@ -397,23 +425,26 @@ export class ThoraxScene {
     console.info('[skeleton] muscles ready', [...this.kindByName.values()].filter((k) => k === 'muscle').length)
   }
 
-  private ingestModel(model: THREE.Object3D, kind: 'bone' | 'muscle' = 'bone'): void {
+  private ingestModel(model: THREE.Object3D, kind: MeshKind = 'bone'): void {
     model.traverse((obj) => {
       if (!(obj instanceof THREE.Mesh)) return
       const name = obj.name || obj.parent?.name || ''
       if (!name) return
       obj.geometry.computeVertexNormals()
 
-      const isCartilage = name.startsWith('cartilage_')
       const isDiaphragm = name === 'diaphragm'
-      const meshKind: 'bone' | 'muscle' =
-        kind === 'muscle' || (obj.userData as { kind?: string }).kind === 'muscle'
-          ? 'muscle'
-          : 'bone'
+      const meshKind: MeshKind =
+        kind === 'muscle' || kind === 'cartilage'
+          ? kind
+          : (obj.userData as { kind?: MeshKind }).kind === 'muscle'
+            ? 'muscle'
+            : (obj.userData as { kind?: MeshKind }).kind === 'cartilage'
+              ? 'cartilage'
+              : 'bone'
       const base =
         meshKind === 'muscle'
           ? MUSCLE_GHOST
-          : isCartilage || isDiaphragm
+          : meshKind === 'cartilage' || isDiaphragm
             ? CARTILAGE
             : GHOST
       const mat = new THREE.MeshStandardMaterial({
@@ -511,20 +542,25 @@ export class ThoraxScene {
       const mesh = this.meshByName.get(name)
       if (!mesh) continue
       if (this.subject === 'bones') {
-        // Hide muscles entirely in bone mode
-        mesh.visible = kind === 'bone'
-        if (kind === 'bone') {
-          const isCartilage = name.startsWith('cartilage_')
-          const base = isCartilage ? CARTILAGE : GHOST
-          mat.color.setHex(base.color)
-          mat.emissive.setHex(base.emissive)
-          mat.emissiveIntensity = base.emissiveIntensity
-          mat.opacity = base.opacity
+        // Hide muscles entirely in bone mode; keep cartilage as faint rib/disc context
+        mesh.visible = kind === 'bone' || kind === 'cartilage'
+        if (kind === 'cartilage') {
+          mat.color.setHex(CARTILAGE.color)
+          mat.emissive.setHex(CARTILAGE.emissive)
+          mat.emissiveIntensity = CARTILAGE.emissiveIntensity
+          mat.opacity = CARTILAGE.opacity
+          mat.depthWrite = false
+          mesh.renderOrder = 1
+        } else if (kind === 'bone') {
+          mat.color.setHex(GHOST.color)
+          mat.emissive.setHex(GHOST.emissive)
+          mat.emissiveIntensity = GHOST.emissiveIntensity
+          mat.opacity = GHOST.opacity
           mat.depthWrite = false
           mesh.renderOrder = 1
         }
       } else {
-        // Muscles on; bones as faint underlay
+        // Muscles on; bones as faint underlay; cartilage stays a pale underlay
         mesh.visible = true
         if (kind === 'muscle') {
           mat.color.setHex(MUSCLE_GHOST.color)
@@ -745,8 +781,8 @@ export class ThoraxScene {
 
   /**
    * Unique pickable structures along the ray, front to back.
-   * Skips markers, cartilage, and the diaphragm. Includes dim / ghosted
-   * meshes after isolation so a covered muscle can be cycled to — the old
+   * Skips markers and the diaphragm. Cartilage is pickable. Includes dim /
+   * ghosted meshes after isolation so a covered muscle can be cycled to — the old
    * peek-through bone preference is intentionally gone.
    * Contralateral meshes are skipped so a chest or flank tap does not grab
    * the far wall, but ipsilateral and midline hits continue through an
@@ -773,9 +809,9 @@ export class ThoraxScene {
       if ((obj.userData as { isViewMarker?: boolean }).isViewMarker) continue
       const name = obj.name
       if (!name || seen.has(name)) continue
-      if (name === 'diaphragm' || name.startsWith('cartilage_')) continue
+      if (name === 'diaphragm') continue
       const kind = this.kindByName.get(name)
-      if (kind !== 'bone' && kind !== 'muscle') continue
+      if (kind !== 'bone' && kind !== 'muscle' && kind !== 'cartilage') continue
       seen.add(name)
       unique.push({ meshName: name, kind, distance: hit.distance })
     }
@@ -900,10 +936,16 @@ export class ThoraxScene {
   setViewDisplay(opts: {
     subjectFilter?: ViewSubjectFilter
     muscleLayer?: MuscleLayerFilter
+    cartilageVisible?: boolean
   }): void {
     if (opts.subjectFilter) this.viewSubjectFilter = opts.subjectFilter
     if (opts.muscleLayer) this.muscleLayerFilter = opts.muscleLayer
+    if (opts.cartilageVisible !== undefined) this.cartilageVisible = opts.cartilageVisible
     if (this.viewMode) this.applyViewPresentation()
+  }
+
+  isCartilageVisible(): boolean {
+    return this.cartilageVisible
   }
 
   getViewSubjectFilter(): ViewSubjectFilter {
@@ -924,7 +966,8 @@ export class ThoraxScene {
     return false
   }
 
-  private meshShownInView(name: string, kind: 'bone' | 'muscle'): boolean {
+  private meshShownInView(name: string, kind: MeshKind): boolean {
+    if (kind === 'cartilage') return this.cartilageVisible
     if (kind === 'bone') return this.viewSubjectFilter !== 'muscles'
     if (this.viewSubjectFilter === 'bones') return false
     return muscleVisibleAtLayer(name, this.muscleLayerFilter)
@@ -936,7 +979,7 @@ export class ThoraxScene {
       const kind = this.kindByName.get(name) ?? 'bone'
       const mesh = this.meshByName.get(name)
       if (!mesh) continue
-      const isCartilage = name.startsWith('cartilage_')
+      const isCartilage = kind === 'cartilage'
       const isDiaphragm = name === 'diaphragm'
       const selected = hasSel && this.viewSelected.has(name)
 
@@ -976,15 +1019,16 @@ export class ThoraxScene {
         mat.depthWrite = !dim
         mesh.renderOrder = selected ? 10 : 2
       } else if (isCartilage) {
-        mat.color.setHex(VIEW_CARTILAGE.color)
-        mat.emissive.setHex(VIEW_CARTILAGE.emissive)
-        mat.emissiveIntensity = VIEW_CARTILAGE.emissiveIntensity
-        mat.roughness = VIEW_CARTILAGE.roughness
-        mat.metalness = VIEW_CARTILAGE.metalness
+        const pal = selected ? VIEW_CARTILAGE_SELECTED : VIEW_CARTILAGE
+        mat.color.setHex(pal.color)
+        mat.emissive.setHex(pal.emissive)
+        mat.emissiveIntensity = pal.emissiveIntensity
+        mat.roughness = pal.roughness
+        mat.metalness = pal.metalness
         mat.transparent = true
-        mat.opacity = dim ? 0.06 : VIEW_CARTILAGE.opacity
-        mat.depthWrite = !dim
-        mesh.renderOrder = 1
+        mat.opacity = dim ? 0.06 : pal.opacity
+        mat.depthWrite = selected || !dim
+        mesh.renderOrder = selected ? 10 : 1
       } else {
         const pal = selected ? VIEW_BONE_SELECTED : VIEW_BONE
         mat.color.setHex(pal.color)

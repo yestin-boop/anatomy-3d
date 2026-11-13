@@ -20,13 +20,15 @@ import {
   MUSCLE_REGIONS,
   filterMuscles,
   muscleAnswersMatch,
+  muscleVisibleAtLayer,
   type Muscle,
   type MuscleRegion,
   type MuscleLayerFilter,
 } from './data/muscles'
+import { CARTILAGE, type CartilageRegion } from './data/cartilage'
 import { ThoraxScene, type ViewSubjectFilter } from './scene/ThoraxScene'
 import { playCorrectChime, playKeyTap, playWrongTick, unlockAudio } from './audio/chime'
-import { getBoneView, getMuscleView, type ViewAttachmentSite, type ViewSide } from './data/viewInfo'
+import { getBoneView, getCartilageView, getMuscleView, type ViewAttachmentSite, type ViewSide } from './data/viewInfo'
 
 /** Bonetype three-level model (+ Combined runs all back-to-back). */
 type Level = 'see' | 'hint' | 'memory'
@@ -54,6 +56,13 @@ const MUSCLE_REGION_LABEL: Record<MuscleRegion, string> = {
   forearm_hand: 'FOREARM & HAND',
   hip_thigh: 'HIP & THIGH',
   lower_leg: 'LEG & FOOT',
+}
+
+const CARTILAGE_REGION_LABEL: Record<CartilageRegion, string> = {
+  thorax: 'RIBS',
+  spine: 'SPINE',
+  nose: 'NOSE',
+  larynx: 'LARYNX',
 }
 
 type Subject = 'bones' | 'muscles'
@@ -105,6 +114,9 @@ app.innerHTML = `
       <button type="button" class="view-filter-btn" data-view-layer="mid">Mid</button>
       <button type="button" class="view-filter-btn" data-view-layer="deep">Deep</button>
     </div>
+    <div class="view-filter-group" role="group" aria-label="Cartilage">
+      <button type="button" class="view-filter-btn view-filter-btn--on" id="btn-view-cartilage" aria-pressed="true">Cartilage</button>
+    </div>
   </div>
 
   <div class="status" id="status">Loading skeleton…</div>
@@ -123,7 +135,7 @@ app.innerHTML = `
           <span class="mode-key">V</span>
           <div>
             <span class="mode-title">View</span>
-            <span class="mode-sub">solid model · tap a bone or muscle for origin, insertion, and a short description</span>
+            <span class="mode-sub">solid model · search or tap a bone, muscle, or cartilage for a short description</span>
           </div>
         </button>
       </section>
@@ -203,7 +215,21 @@ app.innerHTML = `
       <span id="view-panel-handle-label">Tap a structure</span>
     </button>
     <div class="view-panel-body" id="view-panel-body">
-      <p class="view-empty" id="view-empty">Tap a bone or muscle to see its name, attachments, and a short description. Tap again near the same spot to cycle through what is underneath, or pick from the also-here list. Drag to rotate, two-finger or right-drag to pan, scroll to zoom. Use Both / Bones / Muscles and All / Mid / Deep to peel layers. Tap empty space to clear.</p>
+      <div class="view-finder">
+        <label class="view-search-label" for="view-search">Find a structure</label>
+        <input
+          id="view-search"
+          class="view-search"
+          type="search"
+          placeholder="Search bones, muscles, cartilage"
+          autocomplete="off"
+          autocapitalize="off"
+          spellcheck="false"
+          enterkeyhint="search"
+        />
+        <div class="view-list" id="view-list" role="listbox" aria-label="Bones, muscles, and cartilage"></div>
+      </div>
+      <p class="view-empty" id="view-empty">Search the list or tap a bone, muscle, or cartilage to see its name, attachments, and a short description. Tap again near the same spot to cycle through what is underneath, or pick from the also-here list. Drag to rotate, two-finger or right-drag to pan, scroll to zoom. Use Both / Bones / Muscles, All / Mid / Deep, and the Cartilage chip to peel layers. Tap empty space to clear.</p>
       <div class="view-card" id="view-card" hidden>
         <div class="view-kicker">
           <span id="view-kind"></span>
@@ -287,6 +313,9 @@ const viewPanel = document.querySelector<HTMLElement>('#view-panel')!
 const viewPanelToggle = document.querySelector<HTMLButtonElement>('#view-panel-toggle')!
 const viewPanelHandleLabel = document.querySelector<HTMLElement>('#view-panel-handle-label')!
 const viewEmpty = document.querySelector<HTMLParagraphElement>('#view-empty')!
+const viewSearch = document.querySelector<HTMLInputElement>('#view-search')!
+const viewList = document.querySelector<HTMLDivElement>('#view-list')!
+const btnViewCartilage = document.querySelector<HTMLButtonElement>('#btn-view-cartilage')!
 const viewCard = document.querySelector<HTMLDivElement>('#view-card')!
 const viewKind = document.querySelector<HTMLElement>('#view-kind')!
 const viewRegion = document.querySelector<HTMLElement>('#view-region')!
@@ -586,8 +615,10 @@ function showMenu(): void {
 }
 
 
+type StructureKind = 'bone' | 'muscle' | 'cartilage'
+
 type PickEntry = {
-  kind: 'bone' | 'muscle'
+  kind: StructureKind
   id: string
   displayName: string
   regionLabel: string
@@ -624,10 +655,162 @@ function buildPickIndex(): Map<string, PickEntry> {
       meshNames: m.meshNames,
     })
   }
+  for (const c of CARTILAGE) {
+    add({
+      kind: 'cartilage',
+      id: c.id,
+      displayName: c.displayName,
+      regionLabel: CARTILAGE_REGION_LABEL[c.region],
+      meshNames: c.meshNames,
+    })
+  }
   return map
 }
 
 const pickIndex = buildPickIndex()
+
+type ListEntry = PickEntry & { aliases: string[]; hay: string }
+
+function normalizeSearch(raw: string): string {
+  return raw.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim()
+}
+
+function buildListEntries(): ListEntry[] {
+  const out: ListEntry[] = []
+  const add = (entry: PickEntry, aliases: string[]) => {
+    out.push({
+      ...entry,
+      aliases,
+      hay: normalizeSearch([entry.displayName, entry.id, entry.regionLabel, ...aliases].join(' ')),
+    })
+  }
+  for (const b of AXIAL_BONES) {
+    add(
+      {
+        kind: 'bone',
+        id: b.id,
+        displayName: b.displayName,
+        regionLabel: REGION_LABEL[b.region],
+        meshNames: b.meshNames,
+      },
+      b.aliases,
+    )
+  }
+  for (const m of MUSCLES) {
+    add(
+      {
+        kind: 'muscle',
+        id: m.id,
+        displayName: m.displayName,
+        regionLabel: MUSCLE_REGION_LABEL[m.region],
+        meshNames: m.meshNames,
+      },
+      m.aliases,
+    )
+  }
+  for (const c of CARTILAGE) {
+    add(
+      {
+        kind: 'cartilage',
+        id: c.id,
+        displayName: c.displayName,
+        regionLabel: CARTILAGE_REGION_LABEL[c.region],
+        meshNames: c.meshNames,
+      },
+      c.aliases,
+    )
+  }
+  return out
+}
+
+const listEntries = buildListEntries()
+const listEntryByKey = new Map(listEntries.map((e) => [`${e.kind}:${e.id}`, e]))
+
+const LIST_GROUPS: { kind: StructureKind; label: string }[] = [
+  { kind: 'bone', label: 'Bones' },
+  { kind: 'muscle', label: 'Muscles' },
+  { kind: 'cartilage', label: 'Cartilage' },
+]
+
+let viewSearchQuery = ''
+let listSelectionKey = ''
+
+function entryMatches(entry: ListEntry, q: string): boolean {
+  if (!q) return true
+  return entry.hay.includes(q)
+}
+
+function renderViewList(): void {
+  const q = normalizeSearch(viewSearchQuery)
+  const groups = LIST_GROUPS.map((g) => ({
+    ...g,
+    items: listEntries.filter((e) => e.kind === g.kind && entryMatches(e, q)),
+  })).filter((g) => g.items.length > 0)
+
+  if (groups.length === 0) {
+    viewList.innerHTML = '<p class="view-list-empty">No matches</p>'
+    return
+  }
+
+  viewList.innerHTML = groups
+    .map((g) => {
+      const rows = g.items
+        .map((e) => {
+          const key = `${e.kind}:${e.id}`
+          const on = key === listSelectionKey
+          return `<button type="button" class="view-list-row${on ? ' view-list-row--on' : ''}" role="option" aria-selected="${on}" data-list-kind="${e.kind}" data-list-id="${escapeHtml(e.id)}">${escapeHtml(e.displayName)}</button>`
+        })
+        .join('')
+      return `<section class="view-list-group"><h3 class="view-list-heading">${g.label} <span>${g.items.length}</span></h3><div class="view-list-rows">${rows}</div></section>`
+    })
+    .join('')
+}
+
+function highlightViewList(sel: ViewSelection | null): void {
+  listSelectionKey = sel ? `${sel.kind}:${sel.id}` : ''
+  renderViewList()
+}
+
+function revealStructureFromList(entry: ListEntry): void {
+  let filtersChanged = false
+  if (entry.kind === 'muscle' && viewSubjectFilter === 'bones') {
+    viewSubjectFilter = 'both'
+    filtersChanged = true
+  }
+  if (entry.kind === 'bone' && viewSubjectFilter === 'muscles') {
+    viewSubjectFilter = 'both'
+    filtersChanged = true
+  }
+  if (entry.kind === 'cartilage' && !viewCartilageVisible) {
+    viewCartilageVisible = true
+    filtersChanged = true
+  }
+  if (entry.kind === 'muscle' && muscleLayerFilter !== 'all') {
+    const hidden = entry.meshNames.some((n) => !muscleVisibleAtLayer(n, muscleLayerFilter))
+    if (hidden) {
+      muscleLayerFilter = 'all'
+      filtersChanged = true
+    }
+  }
+  if (filtersChanged) {
+    scene.setViewDisplay({
+      subjectFilter: viewSubjectFilter,
+      muscleLayer: muscleLayerFilter,
+      cartilageVisible: viewCartilageVisible,
+    })
+    syncViewFilterButtons()
+  }
+  const sel: ViewSelection = {
+    kind: entry.kind,
+    id: entry.id,
+    displayName: entry.displayName,
+    regionLabel: entry.regionLabel,
+    meshNames: entry.meshNames,
+    side: null,
+    clickedMesh: entry.meshNames[0] ?? entry.id,
+  }
+  commitViewSelection([sel], 0)
+}
 
 function meshSide(name: string): ViewSide | null {
   if (name.startsWith('vertebra_')) return null
@@ -649,12 +832,13 @@ function renderViewPanel(sel: ViewSelection | null): void {
     viewNote.hidden = true
     viewPanelHandleLabel.textContent = 'Tap a structure'
     viewPanel.classList.remove('has-selection')
+    highlightViewList(null)
     return
   }
   viewEmpty.hidden = true
   viewCard.hidden = false
   viewPanel.classList.add('has-selection')
-  viewKind.textContent = sel.kind === 'muscle' ? 'Muscle' : 'Bone'
+  viewKind.textContent = sel.kind === 'muscle' ? 'Muscle' : sel.kind === 'cartilage' ? 'Cartilage' : 'Bone'
   viewRegion.textContent = sel.regionLabel
   if (sel.side) {
     viewSide.hidden = false
@@ -676,6 +860,14 @@ function renderViewPanel(sel: ViewSelection | null): void {
     if (info?.innervation) parts.push(factRow('Innervation', info.innervation))
     viewFacts.innerHTML = parts.join('')
     viewNote.hidden = !info
+  } else if (sel.kind === 'cartilage') {
+    const info = getCartilageView(sel.id)
+    viewDesc.textContent = info?.description ?? sel.displayName
+    const parts: string[] = []
+    if (info?.articulations) parts.push(factRow('Articulations', info.articulations))
+    if (info?.features) parts.push(factRow('Notable features', info.features))
+    viewFacts.innerHTML = parts.join('')
+    viewNote.hidden = true
   } else {
     const info = getBoneView(sel.id)
     viewDesc.textContent = info?.description ?? sel.displayName
@@ -685,6 +877,7 @@ function renderViewPanel(sel: ViewSelection | null): void {
     viewFacts.innerHTML = parts.join('')
     viewNote.hidden = true
   }
+  highlightViewList(sel)
 }
 
 function attachmentsFor(sel: ViewSelection): ViewAttachmentSite[] {
@@ -740,6 +933,7 @@ const CYCLE_PX = 24
 let pickStack: ViewSelection[] = []
 let viewSubjectFilter: ViewSubjectFilter = 'both'
 let muscleLayerFilter: MuscleLayerFilter = 'all'
+let viewCartilageVisible = true
 
 function syncViewFilterButtons(): void {
   document.querySelectorAll<HTMLButtonElement>('[data-view-subject]').forEach((btn) => {
@@ -751,10 +945,16 @@ function syncViewFilterButtons(): void {
   const musclesOn = viewSubjectFilter !== 'bones'
   viewLayerGroup.classList.toggle('is-disabled', !musclesOn)
   viewLayerGroup.setAttribute('aria-disabled', musclesOn ? 'false' : 'true')
+  btnViewCartilage.classList.toggle('view-filter-btn--on', viewCartilageVisible)
+  btnViewCartilage.setAttribute('aria-pressed', viewCartilageVisible ? 'true' : 'false')
 }
 
 function applyViewDisplay(): void {
-  scene.setViewDisplay({ subjectFilter: viewSubjectFilter, muscleLayer: muscleLayerFilter })
+  scene.setViewDisplay({
+    subjectFilter: viewSubjectFilter,
+    muscleLayer: muscleLayerFilter,
+    cartilageVisible: viewCartilageVisible,
+  })
   syncViewFilterButtons()
   if (state.viewing && !scene.viewSelectionVisible()) {
     applyViewSelection(null)
@@ -855,7 +1055,7 @@ async function startView(): Promise<void> {
   chromeTop.classList.add('is-view')
   pillSubject.textContent = 'Study'
   pillMode.textContent = 'View'
-  footerTips.textContent = 'TAP TO SELECT · TAP AGAIN TO CYCLE · DRAG ROTATE · TWO-FINGER / RIGHT-DRAG PAN · SCROLL ZOOM · ESC MENU'
+  footerTips.textContent = 'SEARCH OR TAP TO SELECT · TAP AGAIN TO CYCLE · DRAG ROTATE · TWO-FINGER / RIGHT-DRAG PAN · SCROLL ZOOM · ESC MENU'
   viewFilters.hidden = false
   syncViewFilterButtons()
   viewPanel.hidden = false
@@ -865,7 +1065,11 @@ async function startView(): Promise<void> {
   applyViewSelection(null)
   try {
     await scene.enterView()
-    scene.setViewDisplay({ subjectFilter: viewSubjectFilter, muscleLayer: muscleLayerFilter })
+    scene.setViewDisplay({
+    subjectFilter: viewSubjectFilter,
+    muscleLayer: muscleLayerFilter,
+    cartilageVisible: viewCartilageVisible,
+  })
   } catch (err) {
     console.error(err)
     statusEl.classList.add('error')
@@ -1299,6 +1503,47 @@ document.querySelectorAll<HTMLButtonElement>('[data-view-layer]').forEach((btn) 
   })
 })
 
+btnViewCartilage.addEventListener('pointerdown', (e) => {
+  e.preventDefault()
+  e.stopPropagation()
+  viewCartilageVisible = !viewCartilageVisible
+  applyViewDisplay()
+})
+
+viewSearch.addEventListener('input', () => {
+  viewSearchQuery = viewSearch.value
+  renderViewList()
+})
+viewSearch.addEventListener('keydown', (e) => {
+  e.stopPropagation()
+  if (e.key === 'Escape') {
+    if (viewSearch.value) {
+      viewSearch.value = ''
+      viewSearchQuery = ''
+      renderViewList()
+      e.preventDefault()
+    }
+  }
+})
+viewSearch.addEventListener('pointerdown', (e) => {
+  e.stopPropagation()
+})
+
+viewList.addEventListener('pointerdown', (e) => {
+  const btn = (e.target as HTMLElement).closest<HTMLButtonElement>('button[data-list-id]')
+  if (!btn) return
+  e.preventDefault()
+  e.stopPropagation()
+  const kind = btn.dataset.listKind as StructureKind | undefined
+  const id = btn.dataset.listId
+  if (!kind || !id) return
+  const entry = listEntryByKey.get(`${kind}:${id}`)
+  if (!entry) return
+  revealStructureFromList(entry)
+})
+
+renderViewList()
+
 viewPanelToggle.addEventListener('pointerdown', (e) => {
   e.preventDefault()
   const open = !viewPanel.classList.contains('is-expanded')
@@ -1552,7 +1797,18 @@ void (async () => {
     statusEl.style.display = 'none'
     const names = scene.listMeshNames()
     const ribs = names.filter((k) => k.startsWith('rib_'))
-    console.info('[skeleton] meshes', names.length, 'ribs', ribs.length)
+    const cartilage = names.filter((k) =>
+      k.startsWith('costal_') ||
+      k.startsWith('disc_') ||
+      k.startsWith('nasal_') ||
+      k.startsWith('arytenoid_') ||
+      k.startsWith('corniculate_') ||
+      k.startsWith('cuneiform_') ||
+      k === 'thyroid_cartilage' ||
+      k === 'cricoid' ||
+      k === 'epiglottis',
+    )
+    console.info('[skeleton] meshes', names.length, 'ribs', ribs.length, 'cartilage', cartilage.length, 'catalog', CARTILAGE.length)
     setPreset('all')
     subjectCount.textContent = `${AXIAL_BONES.length} · ${BONE_REGIONS.length} regions`
     muscleCountEl.textContent = `${MUSCLES.length} · ${MUSCLE_REGIONS.length} regions`
