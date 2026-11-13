@@ -275,6 +275,7 @@ app.innerHTML = `
   </div>
   <div class="footer-attr">
     BodyParts3D, © The Database Center for Life Science / CC BY 4.0
+    · Some trunk muscles from Z-Anatomy / Écorché, CC BY-SA 4.0
   </div>
 `
 

@@ -85,7 +85,24 @@ export const MUSCLE_VIEW: Record<string, MuscleViewInfo> = {
       { kind: 'origin', label: 'Origin · upper', muscleMeshes: side(s, ['trap_desc']), boneMeshes: ['occipital'], prefer: 'cranial' },
       { kind: 'origin', label: 'Origin · lower', muscleMeshes: side(s, ['trap_asc']), boneMeshes: vertebrae('t8', 't9', 't10', 't11', 't12'), prefer: 'caudal' },
       { kind: 'insertion', label: 'Insertion · clavicle', muscleMeshes: side(s, ['trap_desc']), boneMeshes: side(s, ['clavicle']), prefer: 'lateral' },
-      { kind: 'insertion', label: 'Insertion · scapula', muscleMeshes: side(s, ['trap_trans', 'trap_asc']), boneMeshes: side(s, ['scapula']), prefer: 'posterior' },
+    ],
+  },
+
+  latissimus_dorsi: {
+    id: 'latissimus_dorsi',
+    description:
+      'A broad, fan-shaped superficial muscle of the lower back that sweeps around the chest wall to the humerus and forms the posterior axillary fold. It covers the inferior angle of the scapula and lies under trapezius above, and over the erector spinae and serratus posterior inferior. The mesh is a Z-Anatomy fill aligned to this BodyParts3D body (CC BY-SA 4.0).',
+    origin:
+      'Spinous processes of T7–L5 and the intervening supraspinous / thoracolumbar fascia, the posterior third of the iliac crest, the lower three or four ribs, and often a slip from the inferior angle of the scapula.',
+    insertion:
+      'Floor of the intertubercular (bicipital) sulcus of the humerus, between the insertions of pectoralis major (lateral lip) and teres major (medial lip) — “a lady between two majors.” The tendon twists so that the lowest fibers insert highest.',
+    action:
+      'Extends, adducts, and medially rotates the arm (the climbing, swimming, or “chinning” muscle). With the arms fixed it can raise the trunk and assist forced expiration or coughing by compressing the lower thorax.',
+    innervation: 'Thoracodorsal nerve (C6–C8), from the posterior cord of the brachial plexus.',
+    sitesForSide: (s) => [
+      { kind: 'origin', label: 'Origin · iliac crest', muscleMeshes: [`lat_${s}`], boneMeshes: side(s, ['hip']), prefer: 'posterior' },
+      { kind: 'origin', label: 'Origin · lower ribs', muscleMeshes: [`lat_${s}`], boneMeshes: ribs(s, 9, 12), prefer: 'posterior' },
+      { kind: 'insertion', label: 'Insertion · humerus', muscleMeshes: [`lat_${s}`], boneMeshes: side(s, ['humerus']), prefer: 'medial' },
     ],
   },
 
@@ -161,7 +178,59 @@ export const MUSCLE_VIEW: Record<string, MuscleViewInfo> = {
       'Thoraco-abdominal nerves (anterior rami of T7–T11) and the subcostal nerve (T12). The lowest fibers may also receive a contribution from the iliohypogastric nerve (L1).',
     sitesForSide: (s) => [
       { kind: 'origin', label: 'Origin · ribs', muscleMeshes: [`ext_oblique_${s}`], boneMeshes: ribs(s, 5, 12) },
-      { kind: 'insertion', label: 'Insertion · iliac crest', muscleMeshes: [`ext_oblique_${s}`], boneMeshes: side(s, ['hip']), prefer: 'cranial' },
+    ],
+  },
+
+  rectus_abdominis: {
+    id: 'rectus_abdominis',
+    description:
+      'The paired strap of the anterior abdominal wall, from the pubic crest to the costal margin, divided into bellies by tendinous inscriptions that give the “six-pack” appearance. It lies inside the rectus sheath; in this model the external-oblique aponeurosis is not present as a separate sheet, so the muscle is visible on the front of the abdomen rather than hidden under that sheath. The mesh is a Z-Anatomy fill aligned to this BodyParts3D body (CC BY-SA 4.0).',
+    origin:
+      'Pubic crest and the front of the pubic symphysis. (This pack has no pubic-symphysis mesh; the origin label marks the pubic region of the hip bone.)',
+    insertion:
+      'Xiphoid process and the costal cartilages of ribs 5–7.',
+    action:
+      'Flexes the lumbar spine and the pelvis on the trunk (as in a sit-up or posterior pelvic tilt), and compresses the abdominal viscera. It also helps stabilize the pelvis during walking.',
+    innervation: 'Thoraco-abdominal nerves (anterior rami of T7–T12); the lowest part may also receive L1.',
+    sitesForSide: (s) => [
+      { kind: 'origin', label: 'Origin · pubis', muscleMeshes: [`rectus_abd_${s}`], boneMeshes: side(s, ['hip']), prefer: 'anterior' },
+      { kind: 'insertion', label: 'Insertion · costal / xiphoid', muscleMeshes: [`rectus_abd_${s}`], boneMeshes: ['sternum_xiphoid', 'sternum_body', ...ribs(s, 5, 7)], prefer: 'anterior' },
+    ],
+  },
+
+  internal_oblique: {
+    id: 'internal_oblique',
+    description:
+      'The middle layer of the three anterolateral abdominal muscles, deep to the external oblique and superficial to transversus abdominis. Its fibers run superomedially, roughly at a right angle to those of the external oblique. The mesh is a Z-Anatomy fill aligned to this BodyParts3D body (CC BY-SA 4.0).',
+    origin:
+      'Thoracolumbar fascia, the anterior two-thirds of the iliac crest, and the lateral two-thirds of the inguinal ligament.',
+    insertion:
+      'Inferior borders of ribs 10–12, the linea alba (via an aponeurosis that splits to form part of the rectus sheath), the pubic crest, and the pecten pubis as the conjoint tendon with transversus abdominis. (No linea-alba mesh in this pack; labels mark the iliac and lower-rib attachments.)',
+    action:
+      'Unilateral contraction rotates the trunk to the same side and laterally flexes it. Bilateral contraction flexes the trunk and compresses the abdomen. The lowest fibers also help close the inguinal canal.',
+    innervation:
+      'Thoraco-abdominal nerves (T7–T11), the subcostal nerve (T12), and the iliohypogastric and ilioinguinal nerves (L1).',
+    sitesForSide: (s) => [
+      { kind: 'origin', label: 'Origin · iliac crest', muscleMeshes: [`int_oblique_${s}`], boneMeshes: side(s, ['hip']), prefer: 'lateral' },
+      { kind: 'insertion', label: 'Insertion · lower ribs', muscleMeshes: [`int_oblique_${s}`], boneMeshes: ribs(s, 10, 12), prefer: 'anterior' },
+    ],
+  },
+
+  transversus_abdominis: {
+    id: 'transversus_abdominis',
+    description:
+      'The deepest of the three flat abdominal muscles, with horizontal fibers that act like a corset. It lies deep to the internal oblique and is an important stabilizer of the lumbar spine and abdominal wall. The mesh is a Z-Anatomy fill aligned to this BodyParts3D body (CC BY-SA 4.0).',
+    origin:
+      'Internal surfaces of the costal cartilages of ribs 7–12 (interdigitating with the diaphragm), the thoracolumbar fascia, the anterior two-thirds of the iliac crest, and the lateral third of the inguinal ligament.',
+    insertion:
+      'Linea alba via an aponeurosis that contributes to the rectus sheath, and the pubic crest / pecten pubis as the conjoint tendon. (No linea-alba mesh in this pack; labels mark the costal and iliac attachments.)',
+    action:
+      'Compresses the abdominal viscera (forced expiration, straining, supporting the lumbar spine). It does little to flex or rotate the trunk on its own, but braces the abdominal wall for those movements.',
+    innervation:
+      'Thoraco-abdominal nerves (T7–T11), the subcostal nerve (T12), and the iliohypogastric and ilioinguinal nerves (L1).',
+    sitesForSide: (s) => [
+      { kind: 'origin', label: 'Origin · costal cartilages', muscleMeshes: [`trans_abd_${s}`], boneMeshes: ribs(s, 7, 12), prefer: 'anterior' },
+      { kind: 'origin', label: 'Origin · iliac crest', muscleMeshes: [`trans_abd_${s}`], boneMeshes: side(s, ['hip']), prefer: 'lateral' },
     ],
   },
 
@@ -268,7 +337,23 @@ export const MUSCLE_VIEW: Record<string, MuscleViewInfo> = {
     innervation: 'Anterior rami of L1–L3 (sometimes L1–L4).',
     sitesForSide: (s) => [
       { kind: 'origin', label: 'Origin', muscleMeshes: [`psoas_maj_${s}`], boneMeshes: vertebrae('t12', 'l1', 'l2', 'l3', 'l4', 'l5') },
-      { kind: 'insertion', label: 'Insertion · lesser trochanter', muscleMeshes: [`psoas_maj_${s}`], boneMeshes: side(s, ['femur']), prefer: 'medial' },
+    ],
+  },
+
+  quadratus_lumborum: {
+    id: 'quadratus_lumborum',
+    description:
+      'A quadrilateral muscle of the posterior abdominal wall, filling the space between the iliac crest, the 12th rib, and the lumbar transverse processes. It lies behind psoas major and in front of the erector spinae. The mesh is from Z-Anatomy via Écorché, landed on this BodyParts3D body (CC BY-SA 4.0).',
+    origin:
+      'Posterior iliac crest and the iliolumbar ligament.',
+    insertion:
+      'Medial half of the lower border of the 12th rib, and the tips of the transverse processes of L1–L4 (sometimes L5).',
+    action:
+      'Laterally flexes the trunk to the same side, steadies the 12th rib during respiration, and can contribute to extension of the lumbar spine (bilateral). It is an important stabilizer of the lumbar region.',
+    innervation: 'Anterior rami of T12–L4 (a branch from the subcostal nerve and the lumbar plexus).',
+    sitesForSide: (s) => [
+      { kind: 'origin', label: 'Origin · iliac crest', muscleMeshes: [`ql_${s}`], boneMeshes: side(s, ['hip']), prefer: 'posterior' },
+      { kind: 'insertion', label: 'Insertion · 12th rib / lumbar transverses', muscleMeshes: [`ql_${s}`], boneMeshes: [ribs(s, 12, 12)[0], ...vertebrae('l1', 'l2', 'l3', 'l4')], prefer: 'caudal' },
     ],
   },
 
@@ -585,7 +670,7 @@ export const MUSCLE_VIEW: Record<string, MuscleViewInfo> = {
   teres_major: {
     id: 'teres_major',
     description:
-      'A thick, rounded muscle along the inferior border of the scapula. It is not a rotator-cuff muscle. With latissimus dorsi (which is not in this pack) it forms the posterior wall of the axilla and inserts on the medial lip of the intertubercular sulcus.',
+      'A thick, rounded muscle along the inferior border of the scapula. It is not a rotator-cuff muscle. With latissimus dorsi it forms the posterior wall of the axilla and inserts on the medial lip of the intertubercular sulcus.',
     origin:
       'The posterior surface of the inferior angle of the scapula, and the adjacent lower part of the lateral (axillary) border.',
     insertion:
@@ -636,7 +721,7 @@ export const MUSCLE_VIEW: Record<string, MuscleViewInfo> = {
   serratus_posterior_inferior: {
     id: 'serratus_posterior_inferior',
     description:
-      'A thin, sheet-like muscle of the lower back, deep to latissimus dorsi (which is not in this pack) and the thoracolumbar fascia, with a saw-toothed insertion on the lower ribs.',
+      'A thin, sheet-like muscle of the lower back, deep to latissimus dorsi and the thoracolumbar fascia, with a saw-toothed insertion on the lower ribs.',
     origin:
       'The spinous processes of T11–L2 (sometimes T10–L3) and the intervening supraspinous ligaments, via the thoracolumbar fascia.',
     insertion:
@@ -653,7 +738,7 @@ export const MUSCLE_VIEW: Record<string, MuscleViewInfo> = {
   transversus_thoracis: {
     id: 'transversus_thoracis',
     description:
-      'A thin muscle on the inner surface of the anterior chest wall, running from the lower sternum out to the costal cartilages. It is the thoracic counterpart of transversus abdominis (which is not in this pack) and lies deep to the internal thoracic vessels.',
+      'A thin muscle on the inner surface of the anterior chest wall, running from the lower sternum out to the costal cartilages. It is the thoracic counterpart of transversus abdominis and lies deep to the internal thoracic vessels.',
     origin:
       'The posterior surface of the lower third of the sternal body, the xiphoid process, and the adjoining costal cartilages of the lower true ribs (typically 4–7).',
     insertion:
@@ -1272,7 +1357,7 @@ export const MUSCLE_VIEW: Record<string, MuscleViewInfo> = {
   quadratus_femoris: {
     id: 'quadratus_femoris',
     description:
-      'A short, thick, rectangular muscle at the lower edge of the short lateral rotators, running from the ischial tuberosity to the femur just below the intertrochanteric crest. “Quadratus femoris” is this muscle, not quadratus lumborum (which is not in this pack).',
+      'A short, thick, rectangular muscle at the lower edge of the short lateral rotators, running from the ischial tuberosity to the femur just below the intertrochanteric crest. “Quadratus femoris” is this muscle, not quadratus lumborum (also in this model, on the posterior abdominal wall).',
     origin:
       'The upper part of the outer border of the ischial tuberosity, on the fused os coxae mesh.',
     insertion:
@@ -1929,7 +2014,24 @@ export const MUSCLE_VIEW: Record<string, MuscleViewInfo> = {
     sitesForSide: (s) => [
       { kind: 'origin', label: 'Origin · thoracic transverses', muscleMeshes: side(s, ['semispin_thor', 'semispin_cerv', 'semispin_cap']), boneMeshes: vertebrae('t1', 't2', 't3', 't4', 't5', 't6', 't7', 't8', 't9', 't10') },
       { kind: 'insertion', label: 'Insertion · cervical / upper thoracic spines', muscleMeshes: side(s, ['semispin_thor', 'semispin_cerv']), boneMeshes: vertebrae('c2', 'c3', 'c4', 'c5', 'c6', 't1', 't2', 't3', 't4') },
-      { kind: 'insertion', label: 'Insertion · occipital', muscleMeshes: [`semispin_cap_${s}`], boneMeshes: ['occipital'], prefer: 'posterior' },
+    ],
+  },
+
+  multifidus: {
+    id: 'multifidus',
+    description:
+      'A deep, segmental muscle of the transversospinales, filling the groove at the side of the spinous processes from the sacrum to the cervical spine. It is thickest in the lumbar region. This pack keeps separate cervicis, thoracis, and lumborum meshes and groups them as one muscle. The meshes are from Z-Anatomy via Écorché, landed on this BodyParts3D body (CC BY-SA 4.0).',
+    origin:
+      'Dorsal surface of the sacrum, the posterior superior iliac spine, the deep surface of the thoracolumbar fascia, the mamillary processes of the lumbar vertebrae, the transverse processes of the thoracic vertebrae, and the articular processes of C4–C7.',
+    insertion:
+      'Spinous processes of the vertebrae two to four segments above each origin, all the way up to C2. Lumbar fibers are the longest and strongest.',
+    action:
+      'Stabilizes the lumbar (and cervical) spine, and contributes to extension (bilateral) and contralateral rotation (unilateral). It is a key segmental stabilizer rather than a prime mover of large trunk motions.',
+    innervation: 'Posterior rami of the spinal nerves, segmentally, along the whole column.',
+    sitesForSide: (s) => [
+      { kind: 'origin', label: 'Origin · sacrum / ilium', muscleMeshes: [`multifidus_lumb_${s}`], boneMeshes: ['sacrum', ...side(s, ['hip'])], prefer: 'posterior' },
+      { kind: 'insertion', label: 'Insertion · lumbar / thoracic spines', muscleMeshes: side(s, ['multifidus_lumb', 'multifidus_thor']), boneMeshes: vertebrae('l5', 'l4', 'l3', 'l2', 'l1', 't12', 't11', 't10', 't8', 't6'), prefer: 'posterior' },
+      { kind: 'insertion', label: 'Insertion · cervical spines', muscleMeshes: [`multifidus_cerv_${s}`], boneMeshes: vertebrae('c2', 'c3', 'c4', 'c5', 'c6', 'c7'), prefer: 'posterior' },
     ],
   },
 

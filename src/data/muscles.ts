@@ -4,7 +4,8 @@ import {
   type AnswerMatchMode,
 } from './answerMatch'
 
-/** Playable muscle quiz set — BodyParts3D meshes (CC BY 4.0). */
+/** Playable muscle quiz set — BodyParts3D meshes (CC BY 4.0),
+ * plus Z-Anatomy trunk fills (CC BY-SA 4.0) for muscles this pack lacks. */
 
 export type MuscleRegion =
   | 'neck_back'
@@ -40,7 +41,9 @@ export type Muscle = {
 const T = (side: 'l' | 'r', keys: string[]) => keys.map((k) => `${k}_${side}`)
 const LR = (keys: string[]) => [...T('l', keys), ...T('r', keys)]
 
-/** Playable named skeletal muscles with real BodyParts3D meshes. */
+/** Playable named skeletal muscles. Most meshes are BodyParts3D; the trunk fills
+ * (latissimus, rectus abdominis, internal oblique, transversus, QL, multifidus)
+ * are Z-Anatomy, CC BY-SA 4.0, aligned to this BodyParts3D body. */
 export const MUSCLES: Muscle[] = [
   // ——— existing set (now with layers) ———
   {
@@ -50,6 +53,15 @@ export const MUSCLES: Muscle[] = [
     displayName: 'trapezius',
     aliases: ['trapezius', 'traps', 'trapezius muscle'],
     hint: 'trapezius · diamond-shaped upper back',
+    layer: 'superficial',
+  },
+  {
+    id: 'latissimus_dorsi',
+    region: 'neck_back',
+    meshNames: ['lat_l', 'lat_r'],
+    displayName: 'latissimus dorsi',
+    aliases: ['latissimus dorsi', 'lats', 'latissimus', 'lat', 'latissimus dorsi muscle'],
+    hint: 'latissimus dorsi · broad back muscle, humerus insertion',
     layer: 'superficial',
   },
   {
@@ -87,6 +99,33 @@ export const MUSCLES: Muscle[] = [
     aliases: ['external oblique', 'external abdominal oblique', 'obliquus externus'],
     hint: 'external oblique · hands-in-pockets fiber direction',
     layer: 'superficial',
+  },
+  {
+    id: 'rectus_abdominis',
+    region: 'chest_abdomen',
+    meshNames: ['rectus_abd_l', 'rectus_abd_r'],
+    displayName: 'rectus abdominis',
+    aliases: ['rectus abdominis', 'rectus abdominus', 'abs', 'abdominals', 'six pack', 'six-pack', 'rectus abdominis muscle'],
+    hint: 'rectus abdominis · paired midline abs with tendinous inscriptions',
+    layer: 'superficial',
+  },
+  {
+    id: 'internal_oblique',
+    region: 'chest_abdomen',
+    meshNames: ['int_oblique_l', 'int_oblique_r'],
+    displayName: 'internal oblique',
+    aliases: ['internal oblique', 'internal abdominal oblique', 'obliquus internus'],
+    hint: 'internal oblique · middle abdominal layer, fibers up and in',
+    layer: 'intermediate',
+  },
+  {
+    id: 'transversus_abdominis',
+    region: 'chest_abdomen',
+    meshNames: ['trans_abd_l', 'trans_abd_r'],
+    displayName: 'transversus abdominis',
+    aliases: ['transversus abdominis', 'transverse abdominis', 'transversus', 'transversus abdominus', 'corset muscle'],
+    hint: 'transversus abdominis · deepest abdominal wall, horizontal fibers',
+    layer: 'deep',
   },
   {
     id: 'serratus_anterior',
@@ -140,6 +179,15 @@ export const MUSCLES: Muscle[] = [
     displayName: 'psoas major',
     aliases: ['psoas major', 'psoas', 'psoas major muscle'],
     hint: 'psoas major · lumbar spine to lesser trochanter',
+    layer: 'deep',
+  },
+  {
+    id: 'quadratus_lumborum',
+    region: 'chest_abdomen',
+    meshNames: ['ql_l', 'ql_r'],
+    displayName: 'quadratus lumborum',
+    aliases: ['quadratus lumborum', 'ql', 'quadratus lumborum muscle'],
+    hint: 'quadratus lumborum · iliac crest to 12th rib and lumbar transverse processes',
     layer: 'deep',
   },
   {
@@ -1034,6 +1082,15 @@ export const MUSCLES: Muscle[] = [
     hint: 'semispinalis · capitis, cervicis, and thoracis, spanning several vertebrae',
     layer: 'deep',
   },
+  {
+    id: 'multifidus',
+    region: 'neck_back',
+    meshNames: LR(['multifidus_cerv', 'multifidus_thor', 'multifidus_lumb']),
+    displayName: 'multifidus',
+    aliases: ['multifidus', 'multifidus muscle', 'multifidi'],
+    hint: 'multifidus · deep back, from sacrum to cervical laminae (lumborum, thoracis, cervicis)',
+    layer: 'deep',
+  },
 
   // ——— hand ———
   {
@@ -1265,16 +1322,10 @@ export function filterMuscles(regions: Iterable<MuscleRegion>): Muscle[] {
  * Hip remains a single fused os coxae mesh per side.
  */
 export const MUSCLES_DEFERRED = [
-  'latissimus dorsi — not in this OBJ pack',
-  'rectus abdominis — not in this OBJ pack',
-  'internal oblique — not in this OBJ pack',
-  'transversus abdominis — not in this OBJ pack',
-  'quadratus lumborum — not in this OBJ pack',
   'masseter — not in this OBJ pack',
   'temporalis — not in this OBJ pack',
   'psoas minor — not in this OBJ pack',
-  'multifidus — not in this OBJ pack',
-  'rotatores — not in this OBJ pack',
+  'rotatores — present in Écorché (Z-Anatomy) but skipped (a long combined set; not visually reviewed as a clean single muscle)',
   'extensor digitorum brevis — not in this OBJ pack',
   'palmaris brevis — not in this OBJ pack',
   'external / internal / innermost intercostals — skipped (each side is a 7–9 MB OBJ)',
