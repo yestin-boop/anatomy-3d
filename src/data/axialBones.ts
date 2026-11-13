@@ -1,4 +1,10 @@
 import { assetUrl } from '../assetUrl'
+import {
+  matchAliases,
+  normalizeAnswerText,
+  type AnswerMatchMode,
+} from './answerMatch'
+
 export type BoneRegion =
   | 'skull'
   | 'spine'
@@ -815,23 +821,15 @@ export const AXIAL_BONES: AxialBone[] = [
 ]
 
 export function normalizeAnswer(raw: string): string {
-  return raw
-    .toLowerCase()
-    .normalize('NFKD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .replace(/[^a-z0-9\s]/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim()
+  return normalizeAnswerText(raw)
 }
 
-export function answersMatch(typed: string, bone: AxialBone): boolean {
-  const n = normalizeAnswer(typed)
-  if (!n) return false
-  const compact = n.replace(/\s+/g, '')
-  return bone.aliases.some((a) => {
-    const na = normalizeAnswer(a)
-    return na === n || na.replace(/\s+/g, '') === compact
-  })
+export function answersMatch(
+  typed: string,
+  bone: AxialBone,
+  mode: AnswerMatchMode = 'live',
+): boolean {
+  return matchAliases(typed, bone.aliases, mode, bone.displayName, normalizeAnswer)
 }
 
 export function shuffle<T>(arr: T[]): T[] {

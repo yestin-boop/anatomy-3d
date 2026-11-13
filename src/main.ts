@@ -14,6 +14,7 @@ import {
   type BoneRegion,
   type FilterPreset,
 } from './data/axialBones'
+import { type AnswerMatchMode } from './data/answerMatch'
 import {
   MUSCLES,
   MUSCLE_REGIONS,
@@ -65,7 +66,7 @@ type QuizEntry = {
   meshNames: string[]
   regionLabel: string
   aliases: string[]
-  match: (typed: string) => boolean
+  match: (typed: string, mode?: AnswerMatchMode) => boolean
 }
 
 const SESSION_COUNTS = [8, 12, 20, 0] as const // 0 = All
@@ -365,7 +366,7 @@ function boneToEntry(b: AxialBone): QuizEntry {
     meshNames: b.meshNames,
     regionLabel: REGION_LABEL[b.region],
     aliases: b.aliases,
-    match: (typed) => answersMatch(typed, b),
+    match: (typed, mode = 'live') => answersMatch(typed, b, mode),
   }
 }
 
@@ -377,7 +378,7 @@ function muscleToEntry(m: Muscle): QuizEntry {
     meshNames: m.meshNames,
     regionLabel: MUSCLE_REGION_LABEL[m.region],
     aliases: m.aliases,
-    match: (typed) => muscleAnswersMatch(typed, m),
+    match: (typed, mode = 'live') => muscleAnswersMatch(typed, m, mode),
   }
 }
 
@@ -972,6 +973,19 @@ function onChar(ch: string): void {
   if (bone.match(state.typed)) void onCorrect()
 }
 
+function onConfirmAnswer(): void {
+  void unlockAudio()
+  if (!state.playing) return
+  if (state.finished) {
+    showMenu()
+    return
+  }
+  if (state.revealing) return
+  const bone = current()
+  if (!bone) return
+  if (bone.match(state.typed, 'confirm')) void onCorrect()
+}
+
 function onBackspace(): void {
   if (!state.playing || state.revealing || state.finished) return
   state.typed = state.typed.slice(0, -1)
@@ -1356,6 +1370,11 @@ window.addEventListener('keydown', (e) => {
     showMenu()
     return
   }
+  if (e.key === 'Enter') {
+    e.preventDefault()
+    onConfirmAnswer()
+    return
+  }
   if (e.key === 'Backspace') {
     e.preventDefault()
     onBackspace()
@@ -1396,7 +1415,10 @@ hiddenInput.addEventListener('input', () => {
 })
 
 hiddenInput.addEventListener('keydown', (e) => {
-  if (e.key === 'Enter') e.preventDefault()
+  if (e.key === 'Enter') {
+    e.preventDefault()
+    onConfirmAnswer()
+  }
 })
 
 promptBlock.addEventListener('pointerdown', (e) => {

@@ -1,3 +1,9 @@
+import {
+  matchAliases,
+  normalizeAnswerText,
+  type AnswerMatchMode,
+} from './answerMatch'
+
 /** Playable muscle quiz set — BodyParts3D meshes (CC BY 4.0). */
 
 export type MuscleRegion =
@@ -1238,23 +1244,15 @@ export function muscleVisibleAtLayer(meshName: string, filter: MuscleLayerFilter
 }
 
 export function normalizeMuscleAnswer(raw: string): string {
-  return raw
-    .toLowerCase()
-    .normalize('NFKD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .replace(/[^a-z0-9\s]/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim()
+  return normalizeAnswerText(raw)
 }
 
-export function muscleAnswersMatch(typed: string, m: Muscle): boolean {
-  const n = normalizeMuscleAnswer(typed)
-  if (!n) return false
-  const compact = n.replace(/\s+/g, '')
-  return m.aliases.some((a) => {
-    const na = normalizeMuscleAnswer(a)
-    return na === n || na.replace(/\s+/g, '') === compact
-  })
+export function muscleAnswersMatch(
+  typed: string,
+  m: Muscle,
+  mode: AnswerMatchMode = 'live',
+): boolean {
+  return matchAliases(typed, m.aliases, mode, m.displayName, normalizeMuscleAnswer)
 }
 
 export function filterMuscles(regions: Iterable<MuscleRegion>): Muscle[] {
