@@ -1511,8 +1511,15 @@ btnViewCartilage.addEventListener('pointerdown', (e) => {
   applyViewDisplay()
 })
 
+const viewFinder = document.querySelector<HTMLElement>('.view-finder')!
+
+function syncViewSearchState(): void {
+  viewFinder.classList.toggle('is-searching', viewSearchQuery.length > 0)
+}
+
 viewSearch.addEventListener('input', () => {
   viewSearchQuery = viewSearch.value
+  syncViewSearchState()
   renderViewList()
 })
 viewSearch.addEventListener('keydown', (e) => {
@@ -1521,6 +1528,7 @@ viewSearch.addEventListener('keydown', (e) => {
     if (viewSearch.value) {
       viewSearch.value = ''
       viewSearchQuery = ''
+      syncViewSearchState()
       renderViewList()
       e.preventDefault()
     }
