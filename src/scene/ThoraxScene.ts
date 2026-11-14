@@ -18,6 +18,25 @@ const GHOST = {
   roughness: 0.42,
 }
 
+/** Translucent context so the quiz target bone stays clear. */
+const BONE_CONTEXT_FADE = {
+  color: 0xe9dcc8,
+  emissive: 0x000000,
+  emissiveIntensity: 0,
+  opacity: 0.16,
+  metalness: 0.04,
+  roughness: 0.62,
+}
+
+const BONE_CONTEXT_FADE_XRAY = {
+  color: 0xc8ddf5,
+  emissive: 0x5b8ec4,
+  emissiveIntensity: 0.2,
+  opacity: 0.12,
+  metalness: 0.08,
+  roughness: 0.42,
+}
+
 const TARGET = {
   color: 0xffffff,
   emissive: 0xe8f0ff,
@@ -618,10 +637,17 @@ export class ThoraxScene {
         if (kind === 'cartilage') {
           const pal = solid ? VIEW_CARTILAGE : CARTILAGE
           this.applyPalette(mat, pal, { transparent: true, depthWrite: false })
+          if (hasTarget) mat.opacity = Math.min(mat.opacity, 0.08)
           mesh.renderOrder = 1
         } else if (hasTarget && this.targetIds.has(name)) {
           this.applyPalette(mat, TARGET, { transparent: false, depthWrite: true })
           mesh.renderOrder = 10
+        } else if (hasTarget) {
+          this.applyPalette(mat, solid ? BONE_CONTEXT_FADE : BONE_CONTEXT_FADE_XRAY, {
+            transparent: true,
+            depthWrite: false,
+          })
+          mesh.renderOrder = 1
         } else if (solid) {
           this.applyPalette(mat, VIEW_BONE, { transparent: false, depthWrite: true })
           mesh.renderOrder = 1
