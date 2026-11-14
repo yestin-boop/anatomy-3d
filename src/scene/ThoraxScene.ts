@@ -7,6 +7,7 @@ import type { ViewAttachmentSite, ViewPrefer } from '../data/viewInfo'
 import { muscleVisibleAtLayer, type MuscleLayerFilter } from '../data/muscles'
 
 export type ViewSubjectFilter = 'both' | 'bones' | 'muscles'
+export type MaterialLook = 'xray' | 'solid'
 
 const GHOST = {
   color: 0xc8ddf5,
@@ -44,14 +45,23 @@ const MUSCLE_GHOST = {
   roughness: 0.72,
 }
 
-/** Darker opaque context while a quiz muscle is highlighted. */
-const MUSCLE_GHOST_DIM = {
-  color: 0x6a3034,
+/** Translucent context so the quiz target muscle stays clear. */
+const MUSCLE_CONTEXT_FADE = {
+  color: 0x8a3a40,
   emissive: 0x000000,
   emissiveIntensity: 0,
-  opacity: 1,
+  opacity: 0.14,
   metalness: 0.02,
   roughness: 0.78,
+}
+
+const MUSCLE_XRAY = {
+  color: 0xd08088,
+  emissive: 0x5a2030,
+  emissiveIntensity: 0.12,
+  opacity: 0.4,
+  metalness: 0.04,
+  roughness: 0.58,
 }
 
 const MUSCLE_TARGET = {
@@ -73,11 +83,21 @@ const BONE_UNDER_MUSCLE = {
   roughness: 0.62,
 }
 
+const BONE_UNDER_MUSCLE_FADE = {
+  color: 0xe9dcc8,
+  emissive: 0x000000,
+  emissiveIntensity: 0,
+  opacity: 0.2,
+  metalness: 0.04,
+  roughness: 0.62,
+}
+
 /** Opaque study-model look for View mode (not the quiz X-ray / ghost palette). */
 const VIEW_BONE = {
   color: 0xe9dcc8,
   emissive: 0x000000,
   emissiveIntensity: 0,
+  opacity: 1,
   roughness: 0.62,
   metalness: 0.04,
 }
@@ -85,6 +105,7 @@ const VIEW_BONE_SELECTED = {
   color: 0xfff1e0,
   emissive: 0x5a3a18,
   emissiveIntensity: 0.16,
+  opacity: 1,
   roughness: 0.52,
   metalness: 0.05,
 }
@@ -92,6 +113,7 @@ const VIEW_MUSCLE = {
   color: 0xa34448,
   emissive: 0x000000,
   emissiveIntensity: 0,
+  opacity: 1,
   roughness: 0.72,
   metalness: 0.02,
 }
@@ -99,6 +121,7 @@ const VIEW_MUSCLE_SELECTED = {
   color: 0xc45a5e,
   emissive: 0x4a1014,
   emissiveIntensity: 0.18,
+  opacity: 1,
   roughness: 0.62,
   metalness: 0.03,
 }
@@ -123,9 +146,11 @@ const VIEW_DIM_OPACITY_MUSCLE = 0.1
 
 /** Ignore contralateral hits and stop once the ray has gone this far past the first hit. */
 const PICK_MAX_DEPTH = 0.5
-/** Floor for View framing of small parts (cervical vertebrae). Quiz minDistance stays 0.8. */
+/** Floor for tight framing of small parts (hand bones, cervical vertebrae). */
 const VIEW_MIN_DISTANCE = 0.28
 const DEFAULT_MIN_DISTANCE = 0.8
+/** Minimum region to show around a tiny quiz target (about a hand / wrist). */
+const QUIZ_FRAME_MIN_SPAN = 0.4
 
 /** BodyParts3D pack is Z-up (cranial +Z). This Euler maps cranial → +Y, anterior → +Z. */
 export const UPRIGHT_EULER = { x: -Math.PI / 2, y: 0, z: 0 }
@@ -168,6 +193,7 @@ export class ThoraxScene {
   private targetIds = new Set<string>()
   private subject: 'bones' | 'muscles' = 'bones'
   private spinning = true
+  private look: MaterialLook = 'solid'
   private disposed = false
   private sideViews: Array<{
     canvas: HTMLCanvasElement
@@ -247,7 +273,7 @@ export class ThoraxScene {
     })
     this.controls.addEventListener('end', () => {
       window.setTimeout(() => {
-        if (!this.disposed && !this.viewMode) this.spinning = true
+        if (!this.disposed && !this.viewMode && this.targetIds.size === 0) this.spinning = true
       }, 1800)
     })
 
@@ -580,6 +606,7 @@ export class ThoraxScene {
       return
     }
     const hasTarget = this.targetIds.size > 0
+    const solid = this.look === 'solid'
     for (const [name, mat] of this.materials) {
       const kind = this.kindByName.get(name) ?? 'bone'
       const mesh = this.meshByName.get(name)
@@ -589,25 +616,30 @@ export class ThoraxScene {
         mesh.visible = kind === 'bone' || kind === 'cartilage'
         if (!mesh.visible) continue
         if (kind === 'cartilage') {
-          this.applyPalette(mat, CARTILAGE, { transparent: true, depthWrite: false })
+          const pal = solid ? VIEW_CARTILAGE : CARTILAGE
+          this.applyPalette(mat, pal, { transparent: true, depthWrite: false })
           mesh.renderOrder = 1
         } else if (hasTarget && this.targetIds.has(name)) {
           this.applyPalette(mat, TARGET, { transparent: false, depthWrite: true })
           mesh.renderOrder = 10
+        } else if (solid) {
+          this.applyPalette(mat, VIEW_BONE, { transparent: false, depthWrite: true })
+          mesh.renderOrder = 1
         } else {
           this.applyPalette(mat, GHOST, { transparent: true, depthWrite: false })
           mesh.renderOrder = 1
         }
       } else {
-        // Muscle quiz / menu: solid muscles plus a natural bone underlay.
-        // Cartilage stays off here (it's a View filter). Hide the diaphragm.
+        // Muscle quiz / menu: cartilage stays off here (it's a View filter). Hide the diaphragm.
         if (kind === 'cartilage' || name === 'diaphragm') {
           mesh.visible = false
           continue
         }
         if (kind === 'bone') {
           mesh.visible = true
-          this.applyPalette(mat, BONE_UNDER_MUSCLE, { transparent: false, depthWrite: true })
+          const pal = hasTarget ? BONE_UNDER_MUSCLE_FADE : (solid ? BONE_UNDER_MUSCLE : GHOST)
+          const fade = hasTarget || !solid
+          this.applyPalette(mat, pal, { transparent: fade, depthWrite: !fade })
           mesh.renderOrder = 0
           continue
         }
@@ -616,10 +648,13 @@ export class ThoraxScene {
           this.applyPalette(mat, MUSCLE_TARGET, { transparent: false, depthWrite: true })
           mesh.renderOrder = 10
         } else if (hasTarget) {
-          this.applyPalette(mat, MUSCLE_GHOST_DIM, { transparent: false, depthWrite: true })
+          this.applyPalette(mat, MUSCLE_CONTEXT_FADE, { transparent: true, depthWrite: false })
+          mesh.renderOrder = 2
+        } else if (solid) {
+          this.applyPalette(mat, MUSCLE_GHOST, { transparent: false, depthWrite: true })
           mesh.renderOrder = 2
         } else {
-          this.applyPalette(mat, MUSCLE_GHOST, { transparent: false, depthWrite: true })
+          this.applyPalette(mat, MUSCLE_XRAY, { transparent: true, depthWrite: true })
           mesh.renderOrder = 2
         }
       }
@@ -628,6 +663,8 @@ export class ThoraxScene {
 
   setTarget(meshNames: string[]): void {
     this.targetIds = new Set(meshNames)
+    this.spinning = false
+    this.controls.minDistance = VIEW_MIN_DISTANCE
     this.applySubjectVisibility()
     this.frameMeshes(meshNames)
   }
@@ -638,10 +675,21 @@ export class ThoraxScene {
     if (!this.viewMode) this.applySubjectVisibility()
   }
 
+  /** Prefer one side so paired L/R targets don't frame the whole body. */
+  private namesForQuizFrame(meshNames: string[]): string[] {
+    const present = meshNames.filter((n) => this.meshByName.has(n))
+    const left = present.filter((n) => meshPickSide(n) === 'l')
+    const right = present.filter((n) => meshPickSide(n) === 'r')
+    const mid = present.filter((n) => meshPickSide(n) == null)
+    if (left.length && right.length) return [...left, ...mid]
+    return present
+  }
+
   private frameMeshes(meshNames: string[]): void {
+    this.body.updateMatrixWorld(true)
     const box = new THREE.Box3()
     let any = false
-    for (const name of meshNames) {
+    for (const name of this.namesForQuizFrame(meshNames)) {
       const mesh = this.meshByName.get(name)
       if (!mesh) continue
       box.expandByObject(mesh)
@@ -652,17 +700,24 @@ export class ThoraxScene {
       this.updateSideCameras()
       return
     }
-    const center = box.getCenter(new THREE.Vector3())
     const size = box.getSize(new THREE.Vector3())
-    const radius = Math.max(size.x, size.y, size.z, 0.12) * 0.5
-    const dist = Math.max(
-      radius / Math.tan((this.camera.fov * Math.PI) / 360) * 2.6,
-      1.4,
-    )
+    box.expandByVector(new THREE.Vector3(
+      Math.max(0, QUIZ_FRAME_MIN_SPAN - size.x) / 2,
+      Math.max(0, QUIZ_FRAME_MIN_SPAN - size.y) / 2,
+      Math.max(0, QUIZ_FRAME_MIN_SPAN - size.z) / 2,
+    ))
+    const center = box.getCenter(new THREE.Vector3())
+    const padded = box.getSize(new THREE.Vector3())
+    const radius = Math.max(padded.x, padded.y, padded.z) * 0.5
+    const fovTan = Math.tan((this.camera.fov * Math.PI) / 360)
+    const dist = Math.max(radius / fovTan * 1.55, VIEW_MIN_DISTANCE + 0.08)
     this.focusTarget.copy(center)
     this.focusDist = dist
     this.camera.up.set(0, 1, 0)
-    this.camera.position.set(center.x + dist * 0.25, center.y + radius * 0.2, center.z + dist)
+    // Stand slightly to the outside of a left/right part so the torso doesn't fill the frame.
+    const lateral = Math.abs(center.x) > 0.2 ? Math.sign(center.x) * 0.42 : 0.22
+    this.camera.position.set(center.x + dist * lateral, center.y + radius * 0.18, center.z + dist)
+    this.controls.minDistance = VIEW_MIN_DISTANCE
     this.controls.target.copy(center)
     this.controls.update()
     this.updateSideCamerasAround(center, dist)
@@ -737,6 +792,7 @@ export class ThoraxScene {
 
   /** Menu / idle: show full upright body and resume slow spin. */
   showMenuView(): void {
+    this.controls.minDistance = DEFAULT_MIN_DISTANCE
     this.frameFullBody()
     this.spinning = true
   }
@@ -759,7 +815,7 @@ export class ThoraxScene {
     this.clearViewMarkers()
     this.controls.enablePan = true
     this.controls.screenSpacePanning = true
-    this.applyViewLighting(true)
+    this.applyViewLighting(this.look === 'solid')
     await this.ensureMusclesLoaded()
     if (!this.viewMode || this.disposed) return
     this.applyViewPresentation()
@@ -774,7 +830,7 @@ export class ThoraxScene {
     this.controls.minDistance = DEFAULT_MIN_DISTANCE
     this.viewSelected.clear()
     this.clearViewMarkers()
-    this.applyViewLighting(false)
+    this.applyViewLighting(this.look === 'solid')
     this.spinning = true
     this.applySubjectVisibility()
   }
@@ -971,6 +1027,17 @@ export class ThoraxScene {
     if (this.viewMode) this.applyViewPresentation()
   }
 
+  setLook(look: MaterialLook): void {
+    this.look = look
+    this.applyViewLighting(look === 'solid')
+    if (this.viewMode) this.applyViewPresentation()
+    else this.applySubjectVisibility()
+  }
+
+  getLook(): MaterialLook {
+    return this.look
+  }
+
   isCartilageVisible(): boolean {
     return this.cartilageVisible
   }
@@ -1033,6 +1100,41 @@ export class ThoraxScene {
         continue
       }
       const dim = hasSel && !selected
+
+      if (this.look === 'xray') {
+        if (kind === 'muscle') {
+          this.applyPalette(mat, selected ? MUSCLE_TARGET : MUSCLE_XRAY, {
+            transparent: !selected,
+            depthWrite: selected,
+          })
+          if (dim) {
+            mat.opacity = VIEW_DIM_OPACITY_MUSCLE
+            mat.transparent = true
+            mat.depthWrite = false
+          }
+          mesh.renderOrder = selected ? 10 : 2
+        } else if (isCartilage) {
+          this.applyPalette(mat, selected ? VIEW_CARTILAGE_SELECTED : CARTILAGE, {
+            transparent: true,
+            depthWrite: selected,
+          })
+          if (dim) mat.opacity = 0.06
+          mesh.renderOrder = selected ? 10 : 1
+        } else {
+          this.applyPalette(mat, selected ? TARGET : GHOST, {
+            transparent: !selected,
+            depthWrite: selected,
+          })
+          if (dim) {
+            mat.opacity = VIEW_DIM_OPACITY_BONE
+            mat.transparent = true
+            mat.depthWrite = false
+          }
+          mesh.renderOrder = selected ? 10 : 1
+        }
+        mat.needsUpdate = true
+        continue
+      }
 
       if (kind === 'muscle') {
         const pal = selected ? VIEW_MUSCLE_SELECTED : VIEW_MUSCLE

@@ -26,7 +26,7 @@ import {
   type MuscleLayerFilter,
 } from './data/muscles'
 import { CARTILAGE, type CartilageRegion } from './data/cartilage'
-import { ThoraxScene, type ViewSubjectFilter } from './scene/ThoraxScene'
+import { ThoraxScene, type MaterialLook, type ViewSubjectFilter } from './scene/ThoraxScene'
 import { playCorrectChime, playKeyTap, playWrongTick, unlockAudio } from './audio/chime'
 import { getBoneView, getCartilageView, getMuscleView, type ViewAttachmentSite, type ViewSide } from './data/viewInfo'
 
@@ -117,6 +117,10 @@ app.innerHTML = `
     <div class="view-filter-group" role="group" aria-label="Cartilage">
       <button type="button" class="view-filter-btn view-filter-btn--on" id="btn-view-cartilage" aria-pressed="true">Cartilage</button>
     </div>
+    <div class="view-filter-group" id="look-group" role="radiogroup" aria-label="Model look">
+      <button type="button" class="view-filter-btn" data-look="xray">X-ray</button>
+      <button type="button" class="view-filter-btn view-filter-btn--on" data-look="solid">Solid</button>
+    </div>
   </div>
 
   <div class="status" id="status">Loading skeleton…</div>
@@ -153,6 +157,14 @@ app.innerHTML = `
             <span class="mode-title">Muscles</span>
             <span class="mode-sub" id="muscle-count">0 · 5 regions</span>
           </button>
+        </div>
+      </section>
+
+      <section class="menu-section">
+        <h2>Look</h2>
+        <div class="filter-bar" id="menu-look">
+          <button type="button" class="filter-chip" data-look="xray">X-ray</button>
+          <button type="button" class="filter-chip filter-chip--on" data-look="solid">Solid</button>
         </div>
       </section>
 
@@ -330,6 +342,39 @@ const viewPickChips = document.querySelector<HTMLElement>('#view-pick-chips')!
 const footerTips = document.querySelector<HTMLElement>('#footer-tips')!
 const viewFilters = document.querySelector<HTMLDivElement>('#view-filters')!
 const viewLayerGroup = document.querySelector<HTMLDivElement>('#view-layer-group')!
+
+const LOOK_KEY = 'anatomy-3d-material'
+
+function loadLook(): MaterialLook {
+  try {
+    const v = localStorage.getItem(LOOK_KEY)
+    if (v === 'xray' || v === 'solid') return v
+  } catch {
+    /* private mode */
+  }
+  return 'solid'
+}
+
+let currentLook: MaterialLook = loadLook()
+
+function syncLookButtons(): void {
+  document.querySelectorAll<HTMLButtonElement>('[data-look]').forEach((btn) => {
+    const on = btn.dataset.look === currentLook
+    if (btn.classList.contains('view-filter-btn')) btn.classList.toggle('view-filter-btn--on', on)
+    if (btn.classList.contains('filter-chip')) btn.classList.toggle('filter-chip--on', on)
+  })
+}
+
+function applyLook(look: MaterialLook): void {
+  currentLook = look
+  try {
+    localStorage.setItem(LOOK_KEY, look)
+  } catch {
+    /* private mode */
+  }
+  scene.setLook(look)
+  syncLookButtons()
+}
 
 const scene = new ThoraxScene({
   mainCanvas,
@@ -605,6 +650,7 @@ function showMenu(): void {
   chromeTop.classList.remove('is-view')
   chromeTop.setAttribute('hidden', '')
   viewFilters.hidden = true
+  viewFilters.classList.remove('is-quiz')
   sideViews.hidden = true
   hiddenInput.value = ''
   statusEl.style.display = 'none'
@@ -1059,7 +1105,9 @@ async function startView(): Promise<void> {
   pillMode.textContent = 'View'
   footerTips.textContent = 'SEARCH OR TAP TO SELECT · TAP AGAIN TO CYCLE · DRAG ROTATE · TWO-FINGER / RIGHT-DRAG PAN · SCROLL ZOOM · ESC MENU'
   viewFilters.hidden = false
+  viewFilters.classList.remove('is-quiz')
   syncViewFilterButtons()
+  syncLookButtons()
   viewPanel.hidden = false
   viewPanel.classList.remove('is-expanded')
   viewPanelToggle.setAttribute('aria-expanded', 'false')
@@ -1121,6 +1169,10 @@ async function startSession(): Promise<void> {
   menuOverlay.hidden = true
   playHud.hidden = false
   chromeTop.hidden = false
+  chromeTop.classList.remove('is-view')
+  viewFilters.hidden = false
+  viewFilters.classList.add('is-quiz')
+  syncLookButtons()
   sideViews.hidden = false
   statusEl.style.display = 'none'
 
@@ -1512,6 +1564,16 @@ btnViewCartilage.addEventListener('pointerdown', (e) => {
   applyViewDisplay()
 })
 
+document.querySelectorAll<HTMLButtonElement>('[data-look]').forEach((btn) => {
+  btn.addEventListener('pointerdown', (e) => {
+    e.preventDefault()
+    e.stopPropagation()
+    const next = btn.dataset.look as MaterialLook | undefined
+    if (!next || next === currentLook) return
+    applyLook(next)
+  })
+})
+
 const viewFinder = document.querySelector<HTMLElement>('.view-finder')!
 
 function syncViewSearchState(): void {
@@ -1785,6 +1847,23 @@ async function runQaMode(mode: string): Promise<void> {
     await wait(800)
     return
   }
+  if (mode === 'scaphoid') {
+    state.subject = 'bones'
+    setPreset('hand_wrist')
+    state.mode = 'see'
+    state.sessionCount = 8
+    await startSession()
+    const scaphoid = AXIAL_BONES.find((b) => b.id === 'scaphoid')
+    if (scaphoid) {
+      const entry = boneToEntry(scaphoid)
+      state.queue = [entry, ...state.queue.filter((b) => b.id !== 'scaphoid')]
+      state.index = 0
+      applyTarget()
+      updateHud()
+    }
+    await wait(800)
+    return
+  }
   if (mode === 'muscles' || mode === 'muscles-slice') {
     state.subject = 'muscles'
     scene.setSubject('muscles')
@@ -1792,9 +1871,10 @@ async function runQaMode(mode: string): Promise<void> {
     state.mode = 'see'
     state.sessionCount = 6
     await startSession()
-    const deltoid = state.queue.find((b) => b.id === 'deltoid') ?? state.queue[0]
+    const deltoid = MUSCLES.find((b) => b.id === 'deltoid')
     if (deltoid) {
-      state.queue = [deltoid, ...state.queue.filter((b) => b !== deltoid)]
+      const entry = muscleToEntry(deltoid)
+      state.queue = [entry, ...state.queue.filter((b) => b.id !== 'deltoid')]
       state.index = 0
       applyTarget()
       updateHud()
@@ -1830,6 +1910,8 @@ void (async () => {
     setPreset('all')
     subjectCount.textContent = `${AXIAL_BONES.length} · ${BONE_REGIONS.length} regions`
     muscleCountEl.textContent = `${MUSCLES.length} · ${MUSCLE_REGIONS.length} regions`
+    scene.setLook(currentLook)
+    syncLookButtons()
     showMenu()
     updatePoolCount()
     const qa = new URLSearchParams(location.search).get('qa')

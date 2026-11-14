@@ -534,7 +534,14 @@ html, body {
 }
 
 
-/* —— View-only subject + layer filters —— */
+/* —— View subject/layer filters; in quiz only the Look group is shown —— */
+.view-filters.is-quiz .view-filter-group:not(#look-group) {
+  display: none;
+}
+.view-filters.is-quiz {
+  top: max(52px, calc(env(safe-area-inset-top) + 42px));
+}
+
 .view-filters[hidden] { display: none !important; }
 .view-filters {
   position: absolute;
