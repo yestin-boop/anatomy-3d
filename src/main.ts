@@ -609,6 +609,7 @@ function showMenu(): void {
   hiddenInput.value = ''
   statusEl.style.display = 'none'
   footerTips.textContent = 'TAB REVEAL · ESC MENU · DRAG ROTATE · SCROLL ZOOM'
+  scene.clearTarget()
   scene.setSubject(state.subject)
   scene.showMenuView()
   renderMenuFilters()
@@ -1774,6 +1775,14 @@ async function runQaMode(mode: string): Promise<void> {
     await startSession()
     await wait(500)
     scene.freezeUprightProof()
+    return
+  }
+  if (mode === 'muscles-menu') {
+    state.subject = 'muscles'
+    await scene.setSubjectAsync('muscles')
+    showMenu()
+    scene.freezeUprightProof()
+    await wait(800)
     return
   }
   if (mode === 'muscles' || mode === 'muscles-slice') {

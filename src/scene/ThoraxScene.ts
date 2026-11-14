@@ -36,28 +36,41 @@ const CARTILAGE = {
 }
 
 const MUSCLE_GHOST = {
-  color: 0xe8899a,
-  emissive: 0xa83a52,
-  emissiveIntensity: 0.38,
-  opacity: 0.28,
-  metalness: 0.05,
-  roughness: 0.55,
+  color: 0xb04e54,
+  emissive: 0x000000,
+  emissiveIntensity: 0,
+  opacity: 1,
+  metalness: 0.02,
+  roughness: 0.72,
+}
+
+/** Darker opaque context while a quiz muscle is highlighted. */
+const MUSCLE_GHOST_DIM = {
+  color: 0x6a3034,
+  emissive: 0x000000,
+  emissiveIntensity: 0,
+  opacity: 1,
+  metalness: 0.02,
+  roughness: 0.78,
 }
 
 const MUSCLE_TARGET = {
-  color: 0xffd0d8,
-  emissive: 0xff8a9a,
-  emissiveIntensity: 0.72,
-  opacity: 0.95,
-  metalness: 0.08,
-  roughness: 0.4,
+  color: 0xf3b4b8,
+  emissive: 0x5a181c,
+  emissiveIntensity: 0.2,
+  opacity: 1,
+  metalness: 0.03,
+  roughness: 0.55,
 }
 
+/** Warm bone underlay in muscle quiz — not the cyan ghost used in bone quiz. */
 const BONE_UNDER_MUSCLE = {
-  color: 0xb8c8dc,
-  emissive: 0x3a5070,
-  emissiveIntensity: 0.12,
-  opacity: 0.12,
+  color: 0xe9dcc8,
+  emissive: 0x000000,
+  emissiveIntensity: 0,
+  opacity: 1,
+  metalness: 0.04,
+  roughness: 0.62,
 }
 
 /** Opaque study-model look for View mode (not the quiz X-ray / ghost palette). */
@@ -447,16 +460,17 @@ export class ThoraxScene {
           : meshKind === 'cartilage' || isDiaphragm
             ? CARTILAGE
             : GHOST
+      const muscleOpaque = meshKind === 'muscle'
       const mat = new THREE.MeshStandardMaterial({
         color: base.color,
         emissive: base.emissive,
         emissiveIntensity: base.emissiveIntensity,
-        transparent: true,
+        transparent: !muscleOpaque,
         opacity: base.opacity,
-        metalness: meshKind === 'muscle' ? 0.05 : 0.15,
-        roughness: meshKind === 'muscle' ? 0.55 : 0.35,
+        metalness: base.metalness,
+        roughness: base.roughness,
         side: THREE.DoubleSide,
-        depthWrite: false,
+        depthWrite: muscleOpaque,
       })
       obj.material = mat
       obj.renderOrder = meshKind === 'muscle' ? 2 : isDiaphragm ? 0 : 1
@@ -536,7 +550,36 @@ export class ThoraxScene {
     this.applySubjectVisibility()
   }
 
+  private applyPalette(
+    mat: THREE.MeshStandardMaterial,
+    pal: {
+      color: number
+      emissive: number
+      emissiveIntensity: number
+      opacity: number
+      metalness: number
+      roughness: number
+    },
+    opts: { transparent: boolean; depthWrite: boolean },
+  ): void {
+    mat.color.setHex(pal.color)
+    mat.emissive.setHex(pal.emissive)
+    mat.emissiveIntensity = pal.emissiveIntensity
+    mat.opacity = pal.opacity
+    mat.metalness = pal.metalness
+    mat.roughness = pal.roughness
+    mat.transparent = opts.transparent
+    mat.depthWrite = opts.depthWrite
+    mat.side = THREE.DoubleSide
+    mat.needsUpdate = true
+  }
+
   private applySubjectVisibility(): void {
+    if (this.viewMode) {
+      this.applyViewPresentation()
+      return
+    }
+    const hasTarget = this.targetIds.size > 0
     for (const [name, mat] of this.materials) {
       const kind = this.kindByName.get(name) ?? 'bone'
       const mesh = this.meshByName.get(name)
@@ -544,71 +587,55 @@ export class ThoraxScene {
       if (this.subject === 'bones') {
         // Hide muscles entirely in bone mode; keep cartilage as faint rib/disc context
         mesh.visible = kind === 'bone' || kind === 'cartilage'
+        if (!mesh.visible) continue
         if (kind === 'cartilage') {
-          mat.color.setHex(CARTILAGE.color)
-          mat.emissive.setHex(CARTILAGE.emissive)
-          mat.emissiveIntensity = CARTILAGE.emissiveIntensity
-          mat.opacity = CARTILAGE.opacity
-          mat.depthWrite = false
+          this.applyPalette(mat, CARTILAGE, { transparent: true, depthWrite: false })
           mesh.renderOrder = 1
-        } else if (kind === 'bone') {
-          mat.color.setHex(GHOST.color)
-          mat.emissive.setHex(GHOST.emissive)
-          mat.emissiveIntensity = GHOST.emissiveIntensity
-          mat.opacity = GHOST.opacity
-          mat.depthWrite = false
+        } else if (hasTarget && this.targetIds.has(name)) {
+          this.applyPalette(mat, TARGET, { transparent: false, depthWrite: true })
+          mesh.renderOrder = 10
+        } else {
+          this.applyPalette(mat, GHOST, { transparent: true, depthWrite: false })
           mesh.renderOrder = 1
         }
       } else {
-        // Muscles on; bones as faint underlay; cartilage stays a pale underlay
+        // Muscle quiz / menu: solid muscles plus a natural bone underlay.
+        // Cartilage stays off here (it's a View filter). Hide the diaphragm.
+        if (kind === 'cartilage' || name === 'diaphragm') {
+          mesh.visible = false
+          continue
+        }
+        if (kind === 'bone') {
+          mesh.visible = true
+          this.applyPalette(mat, BONE_UNDER_MUSCLE, { transparent: false, depthWrite: true })
+          mesh.renderOrder = 0
+          continue
+        }
         mesh.visible = true
-        if (kind === 'muscle') {
-          mat.color.setHex(MUSCLE_GHOST.color)
-          mat.emissive.setHex(MUSCLE_GHOST.emissive)
-          mat.emissiveIntensity = MUSCLE_GHOST.emissiveIntensity
-          mat.opacity = MUSCLE_GHOST.opacity
-          mat.depthWrite = false
+        if (hasTarget && this.targetIds.has(name)) {
+          this.applyPalette(mat, MUSCLE_TARGET, { transparent: false, depthWrite: true })
+          mesh.renderOrder = 10
+        } else if (hasTarget) {
+          this.applyPalette(mat, MUSCLE_GHOST_DIM, { transparent: false, depthWrite: true })
           mesh.renderOrder = 2
         } else {
-          mat.color.setHex(BONE_UNDER_MUSCLE.color)
-          mat.emissive.setHex(BONE_UNDER_MUSCLE.emissive)
-          mat.emissiveIntensity = BONE_UNDER_MUSCLE.emissiveIntensity
-          mat.opacity = BONE_UNDER_MUSCLE.opacity
-          mat.depthWrite = false
-          mesh.renderOrder = 0
+          this.applyPalette(mat, MUSCLE_GHOST, { transparent: false, depthWrite: true })
+          mesh.renderOrder = 2
         }
       }
-      mat.needsUpdate = true
     }
   }
 
   setTarget(meshNames: string[]): void {
     this.targetIds = new Set(meshNames)
     this.applySubjectVisibility()
-    for (const [name, mat] of this.materials) {
-      const kind = this.kindByName.get(name) ?? 'bone'
-      const mesh = this.meshByName.get(name)
-      if (!mesh || !mesh.visible) continue
-      const isTarget = this.targetIds.has(name)
-      if (isTarget) {
-        if (kind === 'muscle') {
-          mat.color.setHex(MUSCLE_TARGET.color)
-          mat.emissive.setHex(MUSCLE_TARGET.emissive)
-          mat.emissiveIntensity = MUSCLE_TARGET.emissiveIntensity
-          mat.opacity = MUSCLE_TARGET.opacity
-        } else {
-          mat.color.setHex(TARGET.color)
-          mat.emissive.setHex(TARGET.emissive)
-          mat.emissiveIntensity = TARGET.emissiveIntensity
-          mat.opacity = TARGET.opacity
-        }
-        mat.transparent = true
-        mat.depthWrite = true
-        mesh.renderOrder = 10
-      }
-      mat.needsUpdate = true
-    }
     this.frameMeshes(meshNames)
+  }
+
+  /** Drop the quiz highlight without changing the camera. */
+  clearTarget(): void {
+    this.targetIds = new Set()
+    if (!this.viewMode) this.applySubjectVisibility()
   }
 
   private frameMeshes(meshNames: string[]): void {
