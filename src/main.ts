@@ -18,6 +18,7 @@ import { type AnswerMatchMode } from './data/answerMatch'
 import {
   MUSCLES,
   MUSCLE_REGIONS,
+  filterCommonMuscles,
   filterMuscles,
   muscleAnswersMatch,
   muscleVisibleAtLayer,
@@ -266,6 +267,10 @@ app.innerHTML = `
       <div class="target-word" id="target-word"></div>
       <div class="gloss-line" id="gloss-line"></div>
       <p class="tap-hint" id="tap-hint">Tap to type</p>
+      <button type="button" class="skip-btn" id="skip-btn">
+        Skip
+        <span class="skip-cue">don't know</span>
+      </button>
     </div>
   </div>
 
@@ -282,7 +287,7 @@ app.innerHTML = `
   />
 
   <div class="footer-bar">
-    <span class="footer-tips" id="footer-tips">TAB REVEAL · ESC MENU · DRAG ROTATE · SCROLL ZOOM</span>
+    <span class="footer-tips" id="footer-tips">SKIP / TAB REVEAL · ESC MENU · DRAG ROTATE · SCROLL ZOOM</span>
     <span class="footer-meta" id="footer-meta">MODELS: PROCEDURAL · BODY PARTS 3D</span>
   </div>
   <div class="footer-attr">
@@ -303,6 +308,7 @@ const typeLabel = document.querySelector<HTMLDivElement>('#type-label')!
 const targetWord = document.querySelector<HTMLDivElement>('#target-word')!
 const glossLine = document.querySelector<HTMLDivElement>('#gloss-line')!
 const promptBlock = document.querySelector<HTMLDivElement>('#prompt-block')!
+const skipBtn = document.querySelector<HTMLButtonElement>('#skip-btn')!
 const hiddenInput = document.querySelector<HTMLInputElement>('#hidden-input')!
 const statAcc = document.querySelector<HTMLElement>('#stat-acc')!
 const statProgress = document.querySelector<HTMLElement>('#stat-progress')!
@@ -402,6 +408,8 @@ type QuizState = {
 const selectedRegions = new Set<BoneRegion>(BONE_REGIONS.map((r) => r.id))
 const selectedParts = new Set<BonePart>(BONE_PARTS.map((p) => p.id))
 const selectedMuscleRegions = new Set<MuscleRegion>(MUSCLE_REGIONS.map((r) => r.id))
+/** Muscle Quick filters. Default All. Common ignores region chips until the user leaves it. */
+let commonMusclesOnly = false
 let activePreset: FilterPreset | 'custom' = 'all'
 let moreFiltersOpen = false
 
@@ -430,6 +438,7 @@ function filteredBones(): AxialBone[] {
 }
 
 function filteredMuscles(): Muscle[] {
+  if (commonMusclesOnly) return filterCommonMuscles()
   return filterMuscles(selectedMuscleRegions)
 }
 
@@ -608,6 +617,7 @@ function updateHud(): void {
 
   updateGloss(bone)
   renderTargetWord(bone)
+  syncSkipButton()
 
   if (!state.revealing && document.activeElement === hiddenInput) {
     if (hiddenInput.value !== state.typed) hiddenInput.value = state.typed
@@ -654,7 +664,8 @@ function showMenu(): void {
   sideViews.hidden = true
   hiddenInput.value = ''
   statusEl.style.display = 'none'
-  footerTips.textContent = 'TAB REVEAL · ESC MENU · DRAG ROTATE · SCROLL ZOOM'
+  footerTips.textContent = 'SKIP / TAB REVEAL · ESC MENU · DRAG ROTATE · SCROLL ZOOM'
+  syncSkipButton()
   scene.clearTarget()
   scene.setSubject(state.subject)
   scene.showMenuView()
@@ -1250,6 +1261,13 @@ function onBackspace(): void {
   updateHud()
 }
 
+/** Hide Skip while the menu is up, the answer is showing, or the session is over. */
+function syncSkipButton(): void {
+  const show = state.playing && !playHud.hidden && !state.revealing && !state.finished
+  skipBtn.hidden = !show
+  skipBtn.disabled = !show
+}
+
 function revealAnswer(): void {
   if (!state.playing || state.revealing || state.finished) return
   const bone = current()
@@ -1354,25 +1372,52 @@ function renderMenuFilters(): void {
   if (!isBones) {
     const allBtn = document.createElement('button')
     allBtn.type = 'button'
-    const allOn = selectedMuscleRegions.size === MUSCLE_REGIONS.length
+    const allOn = !commonMusclesOnly && selectedMuscleRegions.size === MUSCLE_REGIONS.length
     allBtn.className = 'filter-chip' + (allOn ? ' filter-chip--on' : '')
     allBtn.innerHTML = `<span>All</span><em>${MUSCLES.length}</em>`
     allBtn.addEventListener('pointerdown', (e) => {
       e.preventDefault()
+      void unlockAudio()
+      commonMusclesOnly = false
       for (const r of MUSCLE_REGIONS) selectedMuscleRegions.add(r.id)
       renderMenuFilters()
       updatePoolCount()
     })
     menuMuscleRegions.appendChild(allBtn)
+
+    const commonBtn = document.createElement('button')
+    commonBtn.type = 'button'
+    const commonN = filterCommonMuscles().length
+    commonBtn.className =
+      'filter-chip filter-chip--preset' + (commonMusclesOnly ? ' filter-chip--on' : '')
+    commonBtn.innerHTML = `<span>Common</span><em>${commonN}</em>`
+    commonBtn.addEventListener('pointerdown', (e) => {
+      e.preventDefault()
+      void unlockAudio()
+      commonMusclesOnly = true
+      renderMenuFilters()
+      updatePoolCount()
+    })
+    menuMuscleRegions.appendChild(commonBtn)
+
     for (const { id, label } of MUSCLE_REGIONS) {
       const btn = document.createElement('button')
       btn.type = 'button'
       const n = MUSCLES.filter((m) => m.region === id).length
-      btn.className = 'filter-chip' + (selectedMuscleRegions.has(id) ? ' filter-chip--on' : '')
+      const regionOn = !commonMusclesOnly && selectedMuscleRegions.has(id)
+      btn.className = 'filter-chip' + (regionOn ? ' filter-chip--on' : '')
       btn.innerHTML = `<span>${label}</span><em>${n}</em>`
       btn.addEventListener('pointerdown', (e) => {
         e.preventDefault()
         void unlockAudio()
+        if (commonMusclesOnly) {
+          commonMusclesOnly = false
+          selectedMuscleRegions.clear()
+          selectedMuscleRegions.add(id)
+          renderMenuFilters()
+          updatePoolCount()
+          return
+        }
         if (selectedMuscleRegions.has(id)) {
           if (selectedMuscleRegions.size <= 1) return
           selectedMuscleRegions.delete(id)
@@ -1739,6 +1784,7 @@ hiddenInput.addEventListener('keydown', (e) => {
 })
 
 promptBlock.addEventListener('pointerdown', (e) => {
+  if ((e.target as HTMLElement | null)?.closest('#skip-btn')) return
   e.preventDefault()
   void unlockAudio()
   if (state.finished) {
@@ -1747,6 +1793,26 @@ promptBlock.addEventListener('pointerdown', (e) => {
   }
   focusInput()
 })
+
+skipBtn.addEventListener('pointerdown', (e) => {
+  e.preventDefault()
+  e.stopPropagation()
+  void unlockAudio()
+  revealAnswer()
+})
+
+function syncKeyboardInset(): void {
+  const vv = window.visualViewport
+  if (!vv) return
+  const overlap = Math.max(0, window.innerHeight - vv.offsetTop - vv.height)
+  const inset = Math.min(overlap, window.innerHeight * 0.62)
+  document.documentElement.style.setProperty('--keyboard-inset', `${Math.round(inset)}px`)
+}
+if (window.visualViewport) {
+  window.visualViewport.addEventListener('resize', syncKeyboardInset)
+  window.visualViewport.addEventListener('scroll', syncKeyboardInset)
+  syncKeyboardInset()
+}
 
 const PICK_MOVE_PX = 12
 let pointerStartX = 0

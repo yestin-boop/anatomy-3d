@@ -4,7 +4,9 @@
  */
 import { matchAliases, normalizeAnswerText } from '../src/data/answerMatch.ts'
 import {
+  COMMON_MUSCLE_IDS,
   MUSCLES,
+  filterCommonMuscles,
   muscleAnswersMatch,
   type Muscle,
 } from '../src/data/muscles.ts'
@@ -146,6 +148,40 @@ assert(!boneMatch('jaw', mandible.displayName, mandible.aliases, 'live'), 'jaw l
 assert(boneMatch('jaw', mandible.displayName, mandible.aliases, 'confirm'), 'jaw Enter/Done should succeed')
 assert(boneMatch('mandible', mandible.displayName, mandible.aliases, 'live'), 'mandible official live')
 assert(boneMatch('jawbone', mandible.displayName, mandible.aliases, 'live'), 'jawbone complete alias live')
+
+// ——— Common muscle preset (course-note subset) ———
+assert(COMMON_MUSCLE_IDS.length === 40, 'common list length is 40')
+assert(
+  new Set(COMMON_MUSCLE_IDS).size === COMMON_MUSCLE_IDS.length,
+  'common list has no duplicates',
+)
+const muscleIds = new Set(MUSCLES.map((m) => m.id))
+for (const id of COMMON_MUSCLE_IDS) {
+  assert(muscleIds.has(id), `common id exists on MUSCLES: ${id}`)
+}
+const commonMuscles = filterCommonMuscles()
+assert(
+  commonMuscles.length === COMMON_MUSCLE_IDS.length,
+  'filterCommonMuscles length matches the common list',
+)
+const commonIds = commonMuscles.map((m) => m.id)
+assert(new Set(commonIds).size === commonIds.length, 'filterCommonMuscles has no duplicates')
+for (const id of COMMON_MUSCLE_IDS) {
+  assert(commonIds.includes(id), `filterCommonMuscles includes ${id}`)
+}
+assert(commonIds.includes('deltoid'), 'common includes deltoid')
+assert(commonIds.includes('gastrocnemius'), 'common includes gastrocnemius')
+assert(!commonIds.includes('tibialis_anterior'), 'common excludes tibialis anterior')
+assert(!commonIds.includes('teres_major'), 'common excludes teres major')
+assert(!commonIds.includes('abductor_pollicis_brevis'), 'common excludes a hand intrinsic')
+let lastCatalogIndex = -1
+let catalogOrder = true
+for (const m of commonMuscles) {
+  const idx = MUSCLES.findIndex((item) => item.id === m.id)
+  if (idx <= lastCatalogIndex) catalogOrder = false
+  lastCatalogIndex = idx
+}
+assert(catalogOrder, 'filterCommonMuscles follows MUSCLES catalog order')
 
 if (failed) {
   console.error(`\n${passed} passed, ${failed} failed`)

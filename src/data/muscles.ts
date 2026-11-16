@@ -1318,6 +1318,70 @@ export function filterMuscles(regions: Iterable<MuscleRegion>): Muscle[] {
 }
 
 /**
+ * Easy Common quiz subset. Only note-list names that already exist in MUSCLES.
+ * - HPHS4109 Connective Tissue and Muscle Tissue, “Major Skeletal Muscles”:
+ *   SCM, trapezius, levator scapulae, rhomboid major/minor, serratus anterior,
+ *   latissimus dorsi, pectoralis major/minor, deltoid, SITS, biceps brachii,
+ *   coracobrachialis, brachialis, brachioradialis, triceps brachii, rectus
+ *   abdominis, external/internal oblique, transversus abdominis, erector spinae
+ *   (iliocostalis, longissimus, spinalis).
+ * - Anatomy & Physiology for Exercise: flexor carpi radialis/ulnaris, flexor
+ *   digitorum superficialis/profundus, gastrocnemius, soleus.
+ * - HPHS4107 injury notes / A&P examples: hamstrings (biceps femoris,
+ *   semitendinosus, semimembranosus), gluteus maximus, quadriceps (rectus
+ *   femoris and the three vasti).
+ */
+export const COMMON_MUSCLE_IDS: readonly string[] = Object.freeze([
+  'sternocleidomastoid',
+  'trapezius',
+  'levator_scapulae',
+  'rhomboid_major',
+  'rhomboid_minor',
+  'serratus_anterior',
+  'latissimus_dorsi',
+  'pectoralis_major',
+  'pectoralis_minor',
+  'deltoid',
+  'supraspinatus',
+  'infraspinatus',
+  'teres_minor',
+  'subscapularis',
+  'biceps_brachii',
+  'coracobrachialis',
+  'brachialis',
+  'brachioradialis',
+  'triceps_brachii',
+  'rectus_abdominis',
+  'external_oblique',
+  'internal_oblique',
+  'transversus_abdominis',
+  'iliocostalis',
+  'longissimus',
+  'spinalis',
+  'flexor_carpi_radialis',
+  'flexor_carpi_ulnaris',
+  'flexor_digitorum_superficialis',
+  'flexor_digitorum_profundus',
+  'gastrocnemius',
+  'soleus',
+  'biceps_femoris',
+  'semitendinosus',
+  'semimembranosus',
+  'gluteus_maximus',
+  'rectus_femoris',
+  'vastus_lateralis',
+  'vastus_medialis',
+  'vastus_intermedius',
+])
+
+const COMMON_MUSCLE_ID_SET = new Set<string>(COMMON_MUSCLE_IDS)
+
+/** Common-list muscles in MUSCLES catalog order. */
+export function filterCommonMuscles(): Muscle[] {
+  return MUSCLES.filter((m) => COMMON_MUSCLE_ID_SET.has(m.id))
+}
+
+/**
  * Named muscles not in this BodyParts3D OBJ pack, or skipped here on purpose.
  * Hip remains a single fused os coxae mesh per side.
  */
