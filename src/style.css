@@ -357,8 +357,19 @@ html, body {
   flex-direction: column;
   justify-content: flex-end;
   align-items: center;
-  /* Keyboard inset lifts the prompt (and Skip) above the iPhone keyboard. */
+  /* Keyboard inset lifts the prompt (and Skip) above a system keyboard. */
   padding: 0 16px max(72px, env(safe-area-inset-bottom), calc(var(--keyboard-inset, 0px) + 12px));
+}
+/* Touch quiz draws its own keys, so the system keyboard stays closed. */
+html.touch-quiz .hud {
+  padding: 0 10px max(8px, env(safe-area-inset-bottom));
+}
+html.touch-quiz .tap-hint { display: none; }
+html.touch-quiz .type-label { margin-bottom: 4px; }
+html.touch-quiz .gloss-line { margin-top: 4px; }
+html.touch-quiz .skip-btn { margin-top: 8px; }
+html.touch-quiz .target-word {
+  font-size: clamp(1.7rem, 7vw, 2.8rem);
 }
 .hud[hidden] { display: none !important; }
 
@@ -481,11 +492,67 @@ html, body {
 }
 .skip-btn[hidden] { display: none !important; }
 
+/* In-app keyboard. Shown only while a touch quiz is in progress. */
+.osk[hidden] { display: none !important; }
+.osk {
+  pointer-events: auto;
+  width: min(520px, 100%);
+  margin-top: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+  touch-action: manipulation;
+}
+.osk-row {
+  display: flex;
+  justify-content: center;
+  gap: 4px;
+}
+.osk-row:nth-child(3) { padding: 0 4%; }
+.osk-row:nth-child(4) { padding: 0 10%; }
+.osk-key {
+  appearance: none;
+  flex: 1 1 0;
+  min-width: 0;
+  height: 36px;
+  border-radius: 7px;
+  border: 1px solid rgba(200, 220, 255, 0.18);
+  background: rgba(14, 22, 38, 0.92);
+  color: var(--hud);
+  font: 600 16px/1 var(--font);
+  padding: 0 2px;
+  touch-action: manipulation;
+}
+.osk-key--wide { flex: 1.7 1 0; }
+.osk-row:last-child .osk-key--wide:first-child { flex: 4 1 0; }
+.osk-key[data-key="space"],
+.osk-key[data-key="done"] {
+  font-size: 13px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.osk-key:active {
+  background: rgba(232, 240, 255, 0.92);
+  color: #0b1220;
+}
+@media (max-height: 520px) {
+  html.touch-quiz .osk-key { height: 28px; }
+  html.touch-quiz .osk { gap: 3px; margin-top: 4px; }
+  html.touch-quiz .target-word { font-size: 1.4rem; }
+  html.touch-quiz .skip-btn { min-height: 36px; padding: 6px 14px; }
+}
+
 @keyframes blink {
   0%, 49% { opacity: 1; }
   50%, 100% { opacity: 0; }
 }
 
+/* Desktop still types through keydown. Touch quiz does not focus this field
+   (a 1px transparent input will not keep the iOS keyboard up, and focusing
+   it would stack a system keyboard on the in-app keys). */
 .hidden-input {
   position: fixed;
   left: 0;
@@ -496,6 +563,7 @@ html, body {
   border: 0;
   padding: 0;
   margin: 0;
+  font-size: 16px;
   color: transparent;
   caret-color: transparent;
   background: transparent;
@@ -546,18 +614,46 @@ html, body {
 }
 
 @media (max-width: 900px) {
-  #app:has(#view-panel:not([hidden])) .footer-bar {
-    bottom: 64px;
+  /* Tips and the BodyParts3D line were one row apart and overlapped on a phone. */
+  .footer-bar {
+    left: 10px;
+    right: 10px;
+    bottom: calc(max(6px, env(safe-area-inset-bottom)) + 2.5rem);
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    gap: 2px;
+    font-size: 0.5rem;
+    letter-spacing: 0.05em;
+    line-height: 1.35;
   }
-  #app:has(#view-panel:not([hidden])) .footer-attr {
-    bottom: 48px;
+  .footer-attr {
+    left: 10px;
+    right: 10px;
+    bottom: max(4px, env(safe-area-inset-bottom));
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 1px;
+    font-size: 0.5rem;
+    line-height: 1.3;
   }
-  #app:has(#view-pick-stack:not([hidden])) .footer-bar {
-    bottom: 126px;
-  }
-  #app:has(#view-pick-stack:not([hidden])) .footer-attr {
+  .footer-attr-sep { display: none; }
+  /* The in-app keyboard owns the bottom edge during a quiz. */
+  html.touch-quiz #app:has(#play-hud:not([hidden])) .footer-bar,
+  html.touch-quiz #app:has(#play-hud:not([hidden])) .footer-attr {
     display: none;
   }
+  #app:has(#view-panel:not([hidden])) .footer-bar {
+    display: none;
+  }
+  #app:has(#view-panel:not([hidden])) .footer-attr {
+    top: calc(env(safe-area-inset-top) + 54px);
+    bottom: auto;
+    display: block;
+    font-size: 0.48rem;
+  }
+  #app:has(#view-panel:not([hidden])) .footer-attr-sep { display: inline; }
   .side-views { display: none; }
   .menu-overlay {
     justify-content: center;
@@ -624,10 +720,72 @@ html, body {
   opacity: 0.38;
   pointer-events: none;
 }
-@media (max-width: 700px) {
-  .view-filters {
-    top: max(52px, calc(env(safe-area-inset-top) + 42px));
-    max-width: calc(100% - 20px);
+@media (max-width: 900px) {
+  /* View mode: 2x2 chip grid above the "Tap a structure" handle so
+     Cartilage and X-ray/Solid stay on screen (a single scrolling row hid them).
+     Quiz keeps only the X-ray/Solid group, still under the top chrome. */
+  .view-filters:not(.is-quiz) {
+    top: auto;
+    bottom: max(64px, calc(env(safe-area-inset-bottom) + 52px));
+    left: 0;
+    right: 0;
+    transform: none;
+    width: auto;
+    max-width: none;
+    display: grid;
+    grid-template-columns: auto auto;
+    justify-content: center;
+    justify-items: center;
+    align-items: center;
+    column-gap: 6px;
+    row-gap: 5px;
+    padding: 0 10px 4px;
+    overflow: visible;
+  }
+  .view-filters:not(.is-quiz) .view-filter-group { flex: 0 0 auto; }
+  .view-filters:not(.is-quiz) .view-filter-btn {
+    min-width: 0;
+    min-height: 32px;
+    padding: 6px 10px;
+    font-size: 0.62rem;
+    letter-spacing: 0.04em;
+  }
+  #app:has(#view-pick-stack:not([hidden])) .view-filters:not(.is-quiz) {
+    bottom: max(140px, calc(env(safe-area-inset-bottom) + 126px));
+  }
+  /* Expanded sheet covers the lower half. Don't leave chips on top of it. */
+  #app:has(#view-panel.is-expanded) .view-filters:not(.is-quiz) {
+    display: none !important;
+  }
+  .view-filters.is-quiz {
+    max-width: max-content;
+  }
+  #view-panel-handle-label {
+    max-width: calc(100vw - 48px);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+}
+@media (min-width: 901px) and (max-width: 1180px) {
+  .view-filters:not(.is-quiz) {
+    top: max(58px, calc(env(safe-area-inset-top) + 48px));
+    left: 12px;
+    right: calc(min(360px, 38vw) + 24px);
+    transform: none;
+    width: auto;
+    max-width: none;
+    flex-wrap: nowrap;
+    justify-content: flex-start;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+  .view-filters:not(.is-quiz)::-webkit-scrollbar { display: none; }
+  .view-filters:not(.is-quiz) .view-filter-group { flex: 0 0 auto; }
+  .view-filters:not(.is-quiz) .view-filter-btn {
+    min-width: 0;
+    padding: 6px 10px;
+    letter-spacing: 0.05em;
   }
 }
 

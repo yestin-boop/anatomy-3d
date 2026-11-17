@@ -272,6 +272,7 @@ app.innerHTML = `
         <span class="skip-cue">don't know</span>
       </button>
     </div>
+    <div class="osk" id="osk" hidden role="group" aria-label="Type the name"></div>
   </div>
 
   <input
@@ -291,8 +292,9 @@ app.innerHTML = `
     <span class="footer-meta" id="footer-meta">MODELS: PROCEDURAL · BODY PARTS 3D</span>
   </div>
   <div class="footer-attr">
-    BodyParts3D, © The Database Center for Life Science / CC BY 4.0
-    · Some trunk muscles from Z-Anatomy / Écorché, CC BY-SA 4.0
+    <span>BodyParts3D, © The Database Center for Life Science / CC BY 4.0</span>
+    <span class="footer-attr-sep"> · </span>
+    <span>Some trunk muscles from Z-Anatomy / Écorché, CC BY-SA 4.0</span>
   </div>
 `
 
@@ -309,6 +311,7 @@ const targetWord = document.querySelector<HTMLDivElement>('#target-word')!
 const glossLine = document.querySelector<HTMLDivElement>('#gloss-line')!
 const promptBlock = document.querySelector<HTMLDivElement>('#prompt-block')!
 const skipBtn = document.querySelector<HTMLButtonElement>('#skip-btn')!
+const onScreenKeyboard = document.querySelector<HTMLDivElement>('#osk')!
 const hiddenInput = document.querySelector<HTMLInputElement>('#hidden-input')!
 const statAcc = document.querySelector<HTMLElement>('#stat-acc')!
 const statProgress = document.querySelector<HTMLElement>('#stat-progress')!
@@ -348,6 +351,108 @@ const viewPickChips = document.querySelector<HTMLElement>('#view-pick-chips')!
 const footerTips = document.querySelector<HTMLElement>('#footer-tips')!
 const viewFilters = document.querySelector<HTMLDivElement>('#view-filters')!
 const viewLayerGroup = document.querySelector<HTMLDivElement>('#view-layer-group')!
+
+/**
+ * iPhone, iPad (including desktop-mode iPad), and other touch-primary devices.
+ * These get the in-app keyboard. A physical keyboard still works on desktop,
+ * and on iPad when the page itself receives keydown (external keyboards that
+ * deliver keys without a focused field).
+ */
+function useTouchQuizKeyboard(): boolean {
+  const ua = navigator.userAgent || ''
+  const touchPoints = navigator.maxTouchPoints || 0
+  const iOS =
+    /iPhone|iPad|iPod/i.test(ua) ||
+    (/Mac/i.test(navigator.platform || ua) && touchPoints > 1)
+  if (iOS) return true
+  const hasTouch = touchPoints > 0 || 'ontouchstart' in window
+  if (!hasTouch) return false
+  const coarse = window.matchMedia('(pointer: coarse)').matches
+  const noHover = window.matchMedia('(hover: none)').matches
+  if (coarse || noHover) return true
+  return window.matchMedia('(max-width: 820px)').matches
+}
+
+const touchQuiz = useTouchQuizKeyboard()
+if (touchQuiz) {
+  document.documentElement.classList.add('touch-quiz')
+  hiddenInput.setAttribute('inputmode', 'none')
+  hiddenInput.setAttribute('aria-hidden', 'true')
+  hiddenInput.tabIndex = -1
+}
+
+function isNarrowLayout(): boolean {
+  return window.matchMedia('(max-width: 900px)').matches
+}
+
+function buildOnScreenKeyboard(): void {
+  const rows: { key: string; label: string; wide?: boolean }[][] = [
+    ['1', '2', '3', '4', '5', '6', '7', '8', '9', '0'].map((key) => ({ key, label: key })),
+    ['q', 'w', 'e', 'r', 't', 'y', 'u', 'i', 'o', 'p'].map((key) => ({ key, label: key })),
+    ['a', 's', 'd', 'f', 'g', 'h', 'j', 'k', 'l'].map((key) => ({ key, label: key })),
+    [
+      ...['z', 'x', 'c', 'v', 'b', 'n', 'm'].map((key) => ({ key, label: key })),
+      { key: 'backspace', label: '⌫', wide: true },
+    ],
+    [
+      { key: 'space', label: 'space', wide: true },
+      { key: 'done', label: 'done', wide: true },
+    ],
+  ]
+  onScreenKeyboard.replaceChildren()
+  for (const row of rows) {
+    const line = document.createElement('div')
+    line.className = 'osk-row'
+    for (const spec of row) {
+      const btn = document.createElement('button')
+      btn.type = 'button'
+      btn.className = 'osk-key' + (spec.wide ? ' osk-key--wide' : '')
+      btn.dataset.key = spec.key
+      btn.textContent = spec.label
+      if (spec.key === 'backspace') btn.setAttribute('aria-label', 'Delete')
+      if (spec.key === 'space') btn.setAttribute('aria-label', 'Space')
+      if (spec.key === 'done') btn.setAttribute('aria-label', 'Submit answer')
+      line.appendChild(btn)
+    }
+    onScreenKeyboard.appendChild(line)
+  }
+}
+
+buildOnScreenKeyboard()
+
+let oskRepeat = 0
+function stopOskRepeat(): void {
+  window.clearTimeout(oskRepeat)
+  window.clearInterval(oskRepeat)
+  oskRepeat = 0
+}
+
+onScreenKeyboard.addEventListener('click', (e) => {
+  e.preventDefault()
+  e.stopPropagation()
+})
+onScreenKeyboard.addEventListener('pointerdown', (e) => {
+  const btn = (e.target as HTMLElement | null)?.closest<HTMLButtonElement>('button[data-key]')
+  if (!btn || onScreenKeyboard.hidden) return
+  // Keep the system keyboard dismissed. preventDefault stops the button taking focus.
+  e.preventDefault()
+  e.stopPropagation()
+  const key = btn.dataset.key || ''
+  pressOnScreenKey(key)
+  if (key !== 'backspace') return
+  stopOskRepeat()
+  oskRepeat = window.setTimeout(() => {
+    oskRepeat = window.setInterval(() => {
+      if (onScreenKeyboard.hidden) {
+        stopOskRepeat()
+        return
+      }
+      onBackspace()
+    }, 45)
+  }, 350)
+}, { passive: false })
+window.addEventListener('pointerup', stopOskRepeat)
+window.addEventListener('pointercancel', stopOskRepeat)
 
 const LOOK_KEY = 'anatomy-3d-material'
 
@@ -428,6 +533,33 @@ const state: QuizState = {
   finished: false,
   sessionCount: 0,
   subject: 'bones',
+}
+
+function syncFooterTips(): void {
+  const narrow = isNarrowLayout()
+  if (state.viewing) {
+    footerTips.textContent = narrow
+      ? 'TAP TO SELECT · DRAG ROTATE · PINCH ZOOM'
+      : 'SEARCH OR TAP TO SELECT · TAP AGAIN TO CYCLE · DRAG ROTATE · TWO-FINGER / RIGHT-DRAG PAN · SCROLL ZOOM · ESC MENU'
+  } else {
+    footerTips.textContent = narrow
+      ? 'DRAG ROTATE · PINCH ZOOM · ESC MENU'
+      : 'SKIP / TAB REVEAL · ESC MENU · DRAG ROTATE · SCROLL ZOOM'
+  }
+}
+
+function syncOnScreenKeyboard(): void {
+  const show = touchQuiz && state.playing && !state.finished && !playHud.hidden
+  onScreenKeyboard.hidden = !show
+}
+
+syncFooterTips()
+
+function pressOnScreenKey(key: string): void {
+  if (key === 'backspace') onBackspace()
+  else if (key === 'done') onConfirmAnswer()
+  else if (key === 'space') onChar(' ')
+  else if (/^[a-z0-9]$/.test(key)) onChar(key)
 }
 
 function filteredBones(): AxialBone[] {
@@ -592,7 +724,6 @@ function updateGloss(bone: QuizEntry | null): void {
 function updateHud(): void {
   const bone = current()
   const total = state.queue.length
-  const level = currentLevel()
   const acc =
     state.attempts === 0 ? 100 : Math.round((state.correct / state.attempts) * 100)
   statAcc.textContent = `${acc}%`
@@ -603,10 +734,13 @@ function updateHud(): void {
   const modeName =
     state.mode === 'combined' ? 'Learn' : LEVEL_LABEL[state.mode as Level]
   pillMode.textContent = modeName
+  // Combined keeps "Learn" + "round 1/3". A single level already names itself
+  // on the left pill, so the right pill is progress (the center stats hide on a phone).
+  const shown = state.finished ? total : Math.min(state.index + (total > 0 ? 1 : 0), total)
   pillRound.textContent =
     state.mode === 'combined'
       ? `round ${state.levelIndex + 1}/${state.levels.length}`
-      : LEVEL_LABEL[level]
+      : `${shown} / ${total}`
 
   if (bone && !state.finished) {
     typeLabel.textContent = `TYPE IT · ${bone.regionLabel}`
@@ -622,6 +756,7 @@ function updateHud(): void {
   if (!state.revealing && document.activeElement === hiddenInput) {
     if (hiddenInput.value !== state.typed) hiddenInput.value = state.typed
   }
+  syncOnScreenKeyboard()
 }
 
 function applyTarget(): void {
@@ -631,6 +766,9 @@ function applyTarget(): void {
 }
 
 function focusInput(): void {
+  // Touch quiz uses the on-screen keyboard. Focusing here would also raise
+  // the system keyboard and the two would stack over the model.
+  if (touchQuiz) return
   window.setTimeout(() => {
     try {
       hiddenInput.focus({ preventScroll: true })
@@ -664,7 +802,8 @@ function showMenu(): void {
   sideViews.hidden = true
   hiddenInput.value = ''
   statusEl.style.display = 'none'
-  footerTips.textContent = 'SKIP / TAB REVEAL · ESC MENU · DRAG ROTATE · SCROLL ZOOM'
+  syncFooterTips()
+  syncOnScreenKeyboard()
   syncSkipButton()
   scene.clearTarget()
   scene.setSubject(state.subject)
@@ -1114,7 +1253,7 @@ async function startView(): Promise<void> {
   chromeTop.classList.add('is-view')
   pillSubject.textContent = 'Study'
   pillMode.textContent = 'View'
-  footerTips.textContent = 'SEARCH OR TAP TO SELECT · TAP AGAIN TO CYCLE · DRAG ROTATE · TWO-FINGER / RIGHT-DRAG PAN · SCROLL ZOOM · ESC MENU'
+  syncFooterTips()
   viewFilters.hidden = false
   viewFilters.classList.remove('is-quiz')
   syncViewFilterButtons()
@@ -1319,7 +1458,9 @@ function updatePoolCount(): void {
   const musN = names.filter((m) =>
     m.startsWith('trap_') || m.startsWith('delt_') || m.startsWith('scm_') || m.startsWith('glut_'),
   ).length
-  footerMeta.textContent = `MODELS: BODY PARTS 3D · ${names.length} MESHES · ${ribN} RIBS · ${MUSCLES.length} MUSCLES`
+  footerMeta.textContent = isNarrowLayout()
+    ? `BODY PARTS 3D · ${names.length} MESHES`
+    : `MODELS: BODY PARTS 3D · ${names.length} MESHES · ${ribN} RIBS · ${MUSCLES.length} MUSCLES`
   void musN
 }
 
@@ -1748,6 +1889,10 @@ window.addEventListener('keydown', (e) => {
   }
 })
 
+hiddenInput.addEventListener('focus', () => {
+  if (touchQuiz) hiddenInput.blur()
+})
+
 hiddenInput.addEventListener('input', () => {
   void unlockAudio()
   if (!state.playing) {
@@ -1785,6 +1930,8 @@ hiddenInput.addEventListener('keydown', (e) => {
 
 promptBlock.addEventListener('pointerdown', (e) => {
   if ((e.target as HTMLElement | null)?.closest('#skip-btn')) return
+  // Not the focusing tap for the system keyboard. Touch quiz types on the
+  // on-screen keys, so this only blocks text selection and a scroll jump.
   e.preventDefault()
   void unlockAudio()
   if (state.finished) {
@@ -1814,6 +1961,11 @@ if (window.visualViewport) {
   syncKeyboardInset()
 }
 
+window.matchMedia('(max-width: 900px)').addEventListener('change', () => {
+  syncFooterTips()
+  updatePoolCount()
+})
+
 const PICK_MOVE_PX = 12
 let pointerStartX = 0
 let pointerStartY = 0
@@ -1824,7 +1976,8 @@ mainCanvas.addEventListener('pointerdown', (e) => {
   pointerStartX = e.clientX
   pointerStartY = e.clientY
   pointerIsPick = true
-  if (state.playing) focusInput()
+  // Refocusing on every rotate dismisses or fights the iOS keyboard.
+  if (state.playing && !touchQuiz) focusInput()
 })
 
 mainCanvas.addEventListener('pointermove', (e) => {

@@ -3,6 +3,7 @@ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js'
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js'
 import { CSS2DObject, CSS2DRenderer } from 'three/addons/renderers/CSS2DRenderer.js'
 import { assetUrl } from '../assetUrl'
+import { forEachGlb, glbConcurrency, releaseGlbSessionCache } from './glbLoad'
 import type { ViewAttachmentSite, ViewPrefer } from '../data/viewInfo'
 import { muscleVisibleAtLayer, type MuscleLayerFilter } from '../data/muscles'
 
@@ -188,6 +189,18 @@ export type ViewPickHit = {
 }
 
 /** Left / right from the mesh filename; vertebrae and unpaired bones are midline. */
+async function fetchManifest(manifestPath: string): Promise<string[]> {
+  try {
+    const res = await fetch(assetUrl(manifestPath))
+    if (!res.ok) return []
+    const urls = (await res.json()) as unknown
+    if (!Array.isArray(urls)) return []
+    return urls.filter((u): u is string => typeof u === 'string').map((u) => assetUrl(u))
+  } catch {
+    return []
+  }
+}
+
 function meshPickSide(name: string): 'l' | 'r' | null {
   if (name.startsWith('vertebra_')) return null
   if (/_l\d+$/.test(name) || name.endsWith('_l')) return 'l'
@@ -363,45 +376,22 @@ export class ThoraxScene {
     this.kindByName.clear()
     this.musclesLoaded = false
 
-    const boneUrls: string[] = await fetch(assetUrl('models/extra/manifest.json'))
-      .then((r) => r.json())
-      .then((urls: string[]) => urls.map((u) => assetUrl(u)))
-      .catch(() => [] as string[])
-    this.muscleUrls = await fetch(assetUrl('models/extra/muscles/manifest.json'))
-      .then((r) => r.json())
-      .then((urls: string[]) => urls.map((u) => assetUrl(u)))
-      .catch(() => [] as string[])
-    this.cartilageUrls = await fetch(assetUrl('models/extra/cartilage/manifest.json'))
-      .then((r) => r.json())
-      .then((urls: string[]) => urls.map((u) => assetUrl(u)))
-      .catch(() => [] as string[])
+    // thorax.glb and spine-360.glb are not in these manifests and are not fetched.
+    const [boneUrls, muscleUrls, cartilageUrls] = await Promise.all([
+      fetchManifest('models/extra/manifest.json'),
+      fetchManifest('models/extra/muscles/manifest.json'),
+      fetchManifest('models/extra/cartilage/manifest.json'),
+    ])
+    this.muscleUrls = muscleUrls
+    this.cartilageUrls = cartilageUrls
 
     if (boneUrls.length === 0) {
       throw new Error('No skeleton meshes in /models/extra/manifest.json')
     }
 
-    // Load bones in batches so first paint isn't blocked by 200+ parallel decodes
-    const batchSize = 24
-    for (let i = 0; i < boneUrls.length; i += batchSize) {
-      const batch = boneUrls.slice(i, i + batchSize)
-      const scenes = await Promise.all(batch.map((u) => this.loadOne(loader, u, 'bone')))
-      for (const item of scenes) {
-        if (!item) continue
-        this.ingestModel(item, 'bone')
-        this.body.add(item)
-      }
-    }
-
+    await this.loadGroup(loader, boneUrls, 'bone', 'bones', 'bones')
     if (this.cartilageUrls.length > 0) {
-      for (let i = 0; i < this.cartilageUrls.length; i += batchSize) {
-        const batch = this.cartilageUrls.slice(i, i + batchSize)
-        const scenes = await Promise.all(batch.map((u) => this.loadOne(loader, u, 'cartilage')))
-        for (const item of scenes) {
-          if (!item) continue
-          this.ingestModel(item, 'cartilage')
-          this.body.add(item)
-        }
-      }
+      await this.loadGroup(loader, this.cartilageUrls, 'cartilage', 'cartilage', 'bones')
     }
 
     this.applyDeterministicUpright()
@@ -426,24 +416,48 @@ export class ThoraxScene {
     void this.ensureMusclesLoaded()
   }
 
-  private async loadOne(
+  /**
+   * Parse one original GLB buffer (from a pack slice or its own file).
+   * Names come from the filename, same as before. Geometry is not rewritten.
+   */
+  private async ingestGlb(
     loader: GLTFLoader,
     url: string,
+    data: ArrayBuffer,
     kind: MeshKind,
-  ): Promise<THREE.Group | null> {
-    try {
-      const gltf = await loader.loadAsync(url)
-      const base = url.split('/').pop()?.replace(/\.glb$/i, '') || ''
+  ): Promise<void> {
+    const base = url.split('/').pop()?.replace(/\.glb$/i, '') || ''
+    const gltf = await loader.parseAsync(data, '')
+    gltf.scene.traverse((o) => {
+      if (o instanceof THREE.Mesh && base) {
+        o.name = base
+        ;(o.userData as { kind?: string }).kind = kind
+      }
+    })
+    this.ingestModel(gltf.scene, kind)
+    this.body.add(gltf.scene)
+    if (kind === 'muscle') {
       gltf.scene.traverse((o) => {
-        if (o instanceof THREE.Mesh && base) {
-          o.name = base
-          ;(o.userData as { kind?: string }).kind = kind
-        }
+        if (o instanceof THREE.Mesh) o.visible = this.viewMode || this.subject === 'muscles'
       })
-      return gltf.scene
-    } catch (err) {
-      console.warn('Failed to load', url, err)
-      return null
+    }
+  }
+
+  private async loadGroup(
+    loader: GLTFLoader,
+    urls: readonly string[],
+    kind: MeshKind,
+    packName: string,
+    role: 'bones' | 'muscles',
+  ): Promise<void> {
+    try {
+      await forEachGlb(urls, {
+        packName,
+        concurrency: glbConcurrency(role),
+        onFile: (url, data) => this.ingestGlb(loader, url, data, kind),
+      })
+    } finally {
+      releaseGlbSessionCache()
     }
   }
 
@@ -461,20 +475,7 @@ export class ThoraxScene {
 
   private async loadMusclesInternal(): Promise<void> {
     const loader = new GLTFLoader()
-    const batchSize = 12
-    for (let i = 0; i < this.muscleUrls.length; i += batchSize) {
-      const batch = this.muscleUrls.slice(i, i + batchSize)
-      const scenes = await Promise.all(batch.map((u) => this.loadOne(loader, u, 'muscle')))
-      for (const item of scenes) {
-        if (!item) continue
-        this.ingestModel(item, 'muscle')
-        this.body.add(item)
-        // Keep muscles hidden until subject is muscles (or View mode)
-        item.traverse((o) => {
-          if (o instanceof THREE.Mesh) o.visible = this.viewMode || this.subject === 'muscles'
-        })
-      }
-    }
+    await this.loadGroup(loader, this.muscleUrls, 'muscle', 'muscles', 'muscles')
     // Re-center once so muscle extents don't shift upright frame mid-session
     // (muscles sit on same BP3D frame; bbox already dominated by skeleton height)
     this.musclesLoaded = true
