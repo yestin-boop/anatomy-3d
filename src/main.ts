@@ -30,6 +30,11 @@ import { CARTILAGE, type CartilageRegion } from './data/cartilage'
 import { ThoraxScene, type MaterialLook, type ViewSubjectFilter } from './scene/ThoraxScene'
 import { playCorrectChime, playKeyTap, playWrongTick, unlockAudio } from './audio/chime'
 import { getBoneView, getCartilageView, getMuscleView, type ViewAttachmentSite, type ViewSide } from './data/viewInfo'
+import {
+  probeTouchQuiz,
+  sanitizeTypedInput,
+  shouldUseNativeSoftKeyboard,
+} from './input/quizKeyboard'
 
 /** Bonetype three-level model (+ Combined runs all back-to-back). */
 type Level = 'see' | 'hint' | 'memory'
@@ -264,7 +269,21 @@ app.innerHTML = `
   <div class="hud" id="play-hud" hidden>
     <div class="prompt-block" id="prompt-block">
       <div class="type-label" id="type-label">TYPE IT · SPINE</div>
-      <div class="target-word" id="target-word"></div>
+      <div class="type-field" id="type-field">
+        <div class="target-word" id="target-word"></div>
+        <input
+          id="hidden-input"
+          class="hidden-input"
+          type="text"
+          inputmode="text"
+          autocomplete="off"
+          autocapitalize="none"
+          autocorrect="off"
+          spellcheck="false"
+          enterkeyhint="done"
+          aria-label="Type the name"
+        />
+      </div>
       <div class="gloss-line" id="gloss-line"></div>
       <p class="tap-hint" id="tap-hint">Tap to type</p>
       <button type="button" class="skip-btn" id="skip-btn">
@@ -272,20 +291,7 @@ app.innerHTML = `
         <span class="skip-cue">don't know</span>
       </button>
     </div>
-    <div class="osk" id="osk" hidden role="group" aria-label="Type the name"></div>
   </div>
-
-  <input
-    id="hidden-input"
-    class="hidden-input"
-    type="text"
-    autocomplete="off"
-    autocapitalize="off"
-    autocorrect="off"
-    spellcheck="false"
-    enterkeyhint="done"
-    aria-label="Type the bone name"
-  />
 
   <div class="footer-bar">
     <span class="footer-tips" id="footer-tips">SKIP / TAB REVEAL · ESC MENU · DRAG ROTATE · SCROLL ZOOM</span>
@@ -311,7 +317,7 @@ const targetWord = document.querySelector<HTMLDivElement>('#target-word')!
 const glossLine = document.querySelector<HTMLDivElement>('#gloss-line')!
 const promptBlock = document.querySelector<HTMLDivElement>('#prompt-block')!
 const skipBtn = document.querySelector<HTMLButtonElement>('#skip-btn')!
-const onScreenKeyboard = document.querySelector<HTMLDivElement>('#osk')!
+const tapHint = document.querySelector<HTMLParagraphElement>('#tap-hint')!
 const hiddenInput = document.querySelector<HTMLInputElement>('#hidden-input')!
 const statAcc = document.querySelector<HTMLElement>('#stat-acc')!
 const statProgress = document.querySelector<HTMLElement>('#stat-progress')!
@@ -353,106 +359,17 @@ const viewFilters = document.querySelector<HTMLDivElement>('#view-filters')!
 const viewLayerGroup = document.querySelector<HTMLDivElement>('#view-layer-group')!
 
 /**
- * iPhone, iPad (including desktop-mode iPad), and other touch-primary devices.
- * These get the in-app keyboard. A physical keyboard still works on desktop,
+ * iPhone, iPad (including desktop-mode iPad), and other touch-primary devices
+ * use the native OS keyboard. A physical keyboard still works on desktop,
  * and on iPad when the page itself receives keydown (external keyboards that
  * deliver keys without a focused field).
  */
-function useTouchQuizKeyboard(): boolean {
-  const ua = navigator.userAgent || ''
-  const touchPoints = navigator.maxTouchPoints || 0
-  const iOS =
-    /iPhone|iPad|iPod/i.test(ua) ||
-    (/Mac/i.test(navigator.platform || ua) && touchPoints > 1)
-  if (iOS) return true
-  const hasTouch = touchPoints > 0 || 'ontouchstart' in window
-  if (!hasTouch) return false
-  const coarse = window.matchMedia('(pointer: coarse)').matches
-  const noHover = window.matchMedia('(hover: none)').matches
-  if (coarse || noHover) return true
-  return window.matchMedia('(max-width: 820px)').matches
-}
-
-const touchQuiz = useTouchQuizKeyboard()
-if (touchQuiz) {
-  document.documentElement.classList.add('touch-quiz')
-  hiddenInput.setAttribute('inputmode', 'none')
-  hiddenInput.setAttribute('aria-hidden', 'true')
-  hiddenInput.tabIndex = -1
-}
+const touchQuiz = shouldUseNativeSoftKeyboard(probeTouchQuiz(window, navigator))
+if (touchQuiz) document.documentElement.classList.add('touch-quiz')
 
 function isNarrowLayout(): boolean {
   return window.matchMedia('(max-width: 900px)').matches
 }
-
-function buildOnScreenKeyboard(): void {
-  const rows: { key: string; label: string; wide?: boolean }[][] = [
-    ['1', '2', '3', '4', '5', '6', '7', '8', '9', '0'].map((key) => ({ key, label: key })),
-    ['q', 'w', 'e', 'r', 't', 'y', 'u', 'i', 'o', 'p'].map((key) => ({ key, label: key })),
-    ['a', 's', 'd', 'f', 'g', 'h', 'j', 'k', 'l'].map((key) => ({ key, label: key })),
-    [
-      ...['z', 'x', 'c', 'v', 'b', 'n', 'm'].map((key) => ({ key, label: key })),
-      { key: 'backspace', label: '⌫', wide: true },
-    ],
-    [
-      { key: 'space', label: 'space', wide: true },
-      { key: 'done', label: 'done', wide: true },
-    ],
-  ]
-  onScreenKeyboard.replaceChildren()
-  for (const row of rows) {
-    const line = document.createElement('div')
-    line.className = 'osk-row'
-    for (const spec of row) {
-      const btn = document.createElement('button')
-      btn.type = 'button'
-      btn.className = 'osk-key' + (spec.wide ? ' osk-key--wide' : '')
-      btn.dataset.key = spec.key
-      btn.textContent = spec.label
-      if (spec.key === 'backspace') btn.setAttribute('aria-label', 'Delete')
-      if (spec.key === 'space') btn.setAttribute('aria-label', 'Space')
-      if (spec.key === 'done') btn.setAttribute('aria-label', 'Submit answer')
-      line.appendChild(btn)
-    }
-    onScreenKeyboard.appendChild(line)
-  }
-}
-
-buildOnScreenKeyboard()
-
-let oskRepeat = 0
-function stopOskRepeat(): void {
-  window.clearTimeout(oskRepeat)
-  window.clearInterval(oskRepeat)
-  oskRepeat = 0
-}
-
-onScreenKeyboard.addEventListener('click', (e) => {
-  e.preventDefault()
-  e.stopPropagation()
-})
-onScreenKeyboard.addEventListener('pointerdown', (e) => {
-  const btn = (e.target as HTMLElement | null)?.closest<HTMLButtonElement>('button[data-key]')
-  if (!btn || onScreenKeyboard.hidden) return
-  // Keep the system keyboard dismissed. preventDefault stops the button taking focus.
-  e.preventDefault()
-  e.stopPropagation()
-  const key = btn.dataset.key || ''
-  pressOnScreenKey(key)
-  if (key !== 'backspace') return
-  stopOskRepeat()
-  oskRepeat = window.setTimeout(() => {
-    oskRepeat = window.setInterval(() => {
-      if (onScreenKeyboard.hidden) {
-        stopOskRepeat()
-        return
-      }
-      onBackspace()
-    }, 45)
-  }, 350)
-}, { passive: false })
-window.addEventListener('pointerup', stopOskRepeat)
-window.addEventListener('pointercancel', stopOskRepeat)
 
 const LOOK_KEY = 'anatomy-3d-material'
 
@@ -548,19 +465,7 @@ function syncFooterTips(): void {
   }
 }
 
-function syncOnScreenKeyboard(): void {
-  const show = touchQuiz && state.playing && !state.finished && !playHud.hidden
-  onScreenKeyboard.hidden = !show
-}
-
 syncFooterTips()
-
-function pressOnScreenKey(key: string): void {
-  if (key === 'backspace') onBackspace()
-  else if (key === 'done') onConfirmAnswer()
-  else if (key === 'space') onChar(' ')
-  else if (/^[a-z0-9]$/.test(key)) onChar(key)
-}
 
 function filteredBones(): AxialBone[] {
   if (activePreset !== 'custom') {
@@ -756,7 +661,7 @@ function updateHud(): void {
   if (!state.revealing && document.activeElement === hiddenInput) {
     if (hiddenInput.value !== state.typed) hiddenInput.value = state.typed
   }
-  syncOnScreenKeyboard()
+  syncTapHint()
 }
 
 function applyTarget(): void {
@@ -765,17 +670,48 @@ function applyTarget(): void {
   scene.setTarget(bone.meshNames)
 }
 
+function quizInputShouldFocus(): boolean {
+  return state.playing && !state.finished && !playHud.hidden
+}
+
+function focusInputNow(): void {
+  if (!quizInputShouldFocus()) return
+  if (document.activeElement === hiddenInput) return
+  try {
+    hiddenInput.focus({ preventScroll: true })
+  } catch {
+    hiddenInput.focus()
+  }
+}
+
 function focusInput(): void {
-  // Touch quiz uses the on-screen keyboard. Focusing here would also raise
-  // the system keyboard and the two would stack over the model.
-  if (touchQuiz) return
-  window.setTimeout(() => {
-    try {
-      hiddenInput.focus({ preventScroll: true })
-    } catch {
-      hiddenInput.focus()
-    }
-  }, 0)
+  if (!quizInputShouldFocus()) return
+  // Touch needs a synchronous focus when we still have a user gesture
+  // (Start, tap-to-type). A timeout here would drop that gesture on iOS
+  // and the keyboard would never rise. Desktop keeps the tick so the HUD
+  // can paint first, matching the previous physical-keyboard path.
+  if (touchQuiz) {
+    focusInputNow()
+    return
+  }
+  window.setTimeout(() => focusInputNow(), 0)
+}
+
+/** Show "Tap to type" on touch only when the system keyboard is not up. */
+function syncTapHint(): void {
+  const show =
+    touchQuiz &&
+    state.playing &&
+    !playHud.hidden &&
+    !state.finished &&
+    !state.revealing &&
+    document.activeElement !== hiddenInput
+  tapHint.classList.toggle('is-visible', show)
+}
+
+function blurQuizInput(): void {
+  hiddenInput.blur()
+  syncTapHint()
 }
 
 function wait(ms: number): Promise<void> {
@@ -801,9 +737,9 @@ function showMenu(): void {
   viewFilters.classList.remove('is-quiz')
   sideViews.hidden = true
   hiddenInput.value = ''
+  blurQuizInput()
   statusEl.style.display = 'none'
   syncFooterTips()
-  syncOnScreenKeyboard()
   syncSkipButton()
   scene.clearTarget()
   scene.setSubject(state.subject)
@@ -1245,6 +1181,7 @@ async function startView(): Promise<void> {
   state.revealing = false
   state.viewing = true
   hiddenInput.value = ''
+  blurQuizInput()
   menuOverlay.hidden = true
   playHud.hidden = true
   sideViews.hidden = true
@@ -1290,15 +1227,6 @@ async function startSession(): Promise<void> {
   if (pool.length === 0) return
   void unlockAudio()
 
-  if (state.subject === 'muscles') {
-    statusEl.style.display = ''
-    statusEl.textContent = 'Loading muscles…'
-    await scene.setSubjectAsync('muscles')
-    statusEl.style.display = 'none'
-  } else {
-    scene.setSubject('bones')
-  }
-
   let queue = shuffle(pool)
   if (state.sessionCount > 0 && queue.length > state.sessionCount) {
     queue = queue.slice(0, state.sessionCount)
@@ -1324,8 +1252,22 @@ async function startSession(): Promise<void> {
   viewFilters.classList.add('is-quiz')
   syncLookButtons()
   sideViews.hidden = false
-  statusEl.style.display = 'none'
+  updateHud()
+  // Raise the native keyboard in this user gesture, before any model-load
+  // await, which would drop iOS's permission to show it.
+  focusInput()
 
+  if (state.subject === 'muscles') {
+    statusEl.style.display = ''
+    statusEl.textContent = 'Loading muscles…'
+    await scene.setSubjectAsync('muscles')
+    statusEl.style.display = 'none'
+  } else {
+    scene.setSubject('bones')
+    statusEl.style.display = 'none'
+  }
+
+  if (!state.playing) return
   applyTarget()
   updateHud()
   focusInput()
@@ -1356,6 +1298,7 @@ async function onCorrect(): Promise<void> {
       return
     }
     state.finished = true
+    blurQuizInput()
     updateHud()
     return
   }
@@ -1416,6 +1359,9 @@ function revealAnswer(): void {
   state.typed = ''
   hiddenInput.value = ''
   updateHud()
+  // Skip is a user gesture: re-assert focus now so the keyboard stays up
+  // through the reveal and onto the next item.
+  focusInputNow()
   void (async () => {
     await wait(1400)
     state.revealing = false
@@ -1430,6 +1376,7 @@ function revealAnswer(): void {
         return
       }
       state.finished = true
+      blurQuizInput()
       updateHud()
       return
     }
@@ -1889,8 +1836,33 @@ window.addEventListener('keydown', (e) => {
   }
 })
 
+// If iOS blurs the field because the user grabbed the model, restore focus
+// in the same gesture so the keyboard stays up. Do not call focus() on every
+// rotate while already focused — that is what used to fight the keyboard.
+let retainSoftKeyboard = false
+
+function beginCanvasKeyboardRetain(): void {
+  if (touchQuiz && quizInputShouldFocus() && document.activeElement === hiddenInput) {
+    retainSoftKeyboard = true
+  }
+}
+
+function endCanvasKeyboardRetain(): void {
+  window.setTimeout(() => {
+    retainSoftKeyboard = false
+  }, 0)
+}
+
 hiddenInput.addEventListener('focus', () => {
-  if (touchQuiz) hiddenInput.blur()
+  syncTapHint()
+})
+
+hiddenInput.addEventListener('blur', () => {
+  if (retainSoftKeyboard && quizInputShouldFocus()) {
+    focusInputNow()
+    return
+  }
+  syncTapHint()
 })
 
 hiddenInput.addEventListener('input', () => {
@@ -1909,7 +1881,7 @@ hiddenInput.addEventListener('input', () => {
     return
   }
   const raw = hiddenInput.value
-  const cleaned = raw.toLowerCase().replace(/[^a-z0-9 \-]/g, '')
+  const cleaned = sanitizeTypedInput(raw)
   if (cleaned !== raw) hiddenInput.value = cleaned
   const bone = current()
   const prev = state.typed
@@ -1930,8 +1902,13 @@ hiddenInput.addEventListener('keydown', (e) => {
 
 promptBlock.addEventListener('pointerdown', (e) => {
   if ((e.target as HTMLElement | null)?.closest('#skip-btn')) return
-  // Not the focusing tap for the system keyboard. Touch quiz types on the
-  // on-screen keys, so this only blocks text selection and a scroll jump.
+  // Let a direct tap on the field focus it natively. preventDefault on that
+  // path can cancel the focus and drop the iOS keyboard.
+  if ((e.target as HTMLElement | null)?.closest('#hidden-input')) {
+    void unlockAudio()
+    if (state.finished) showMenu()
+    return
+  }
   e.preventDefault()
   void unlockAudio()
   if (state.finished) {
@@ -1951,6 +1928,9 @@ skipBtn.addEventListener('pointerdown', (e) => {
 function syncKeyboardInset(): void {
   const vv = window.visualViewport
   if (!vv) return
+  // iOS may try to scroll a focused field into view; pin the layout viewport
+  // so --keyboard-inset is the only lift for the prompt and Skip.
+  if (touchQuiz && (window.scrollX || window.scrollY)) window.scrollTo(0, 0)
   const overlap = Math.max(0, window.innerHeight - vv.offsetTop - vv.height)
   const inset = Math.min(overlap, window.innerHeight * 0.62)
   document.documentElement.style.setProperty('--keyboard-inset', `${Math.round(inset)}px`)
@@ -1976,9 +1956,17 @@ mainCanvas.addEventListener('pointerdown', (e) => {
   pointerStartX = e.clientX
   pointerStartY = e.clientY
   pointerIsPick = true
-  // Refocusing on every rotate dismisses or fights the iOS keyboard.
-  if (state.playing && !touchQuiz) focusInput()
+  if (touchQuiz) {
+    beginCanvasKeyboardRetain()
+    return
+  }
+  // Desktop: keep the (already open) hidden field focused after a click
+  // on the canvas. Do not do this on touch — refocusing on every rotate
+  // dismisses or fights the iOS keyboard.
+  if (state.playing) focusInput()
 })
+window.addEventListener('pointerup', endCanvasKeyboardRetain)
+window.addEventListener('pointercancel', endCanvasKeyboardRetain)
 
 mainCanvas.addEventListener('pointermove', (e) => {
   if (!pointerIsPick) return
