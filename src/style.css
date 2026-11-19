@@ -530,6 +530,17 @@ html.touch-quiz .target-word {
   letter-spacing: 0.02em;
   z-index: 2;
   pointer-events: auto;
+  outline: none;
+  box-shadow: none;
+  appearance: none;
+  -webkit-appearance: none;
+  -webkit-tap-highlight-color: transparent;
+}
+.hidden-input:focus,
+.hidden-input:focus-visible {
+  outline: none;
+  border: 0;
+  box-shadow: none;
 }
 
 .hidden-input::selection {
