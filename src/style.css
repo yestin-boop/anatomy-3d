@@ -543,6 +543,16 @@ html.touch-quiz .target-word {
   box-shadow: none;
 }
 
+/* If a browser still autofills, don't let it paint a yellow field over the word. */
+.hidden-input:-webkit-autofill,
+.hidden-input:-webkit-autofill:hover,
+.hidden-input:-webkit-autofill:focus {
+  -webkit-text-fill-color: transparent;
+  caret-color: transparent;
+  box-shadow: 0 0 0 1000px transparent inset;
+  transition: background-color 99999s ease-out;
+}
+
 .hidden-input::selection {
   background: transparent;
   color: transparent;

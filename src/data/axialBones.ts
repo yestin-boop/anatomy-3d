@@ -855,6 +855,87 @@ export function filterBones(
   return AXIAL_BONES.filter((b) => rSet.has(b.region) && pSet.has(b.part))
 }
 
+/**
+ * Easy Common bone quiz. Only bones named in the course notes that already
+ * exist in AXIAL_BONES.
+ * - HPHS4109 The Skeletal System & Joints (Anatomy & Physiology for Exercise):
+ *   frontal, parietal, temporal, occipital, maxilla, zygomatic, mandible;
+ *   atlas (C1), axis (C2), sacrum; sternum and xiphoid; ribs 1–12; clavicle,
+ *   scapula, humerus, radius, ulna; all eight carpals (scaphoid, lunate,
+ *   triquetral, pisiform, trapezium, trapezoid, capitate, hamate); metacarpals
+ *   as a group; hand and foot phalanges; ilium, ischium, and pubis (one fused
+ *   hip bone in this pack); femur, patella, tibia, fibula; all seven tarsals
+ *   (calcaneus, talus, navicular, cuboid, medial / intermediate / lateral
+ *   cuneiform); metatarsals as a group.
+ *   Named there but not in this pack: sphenoid, ethmoid, nasal, lacrimal,
+ *   palatine, inferior nasal conchae, vomer, hyoid, coccyx.
+ * - HPHS4109 LT1 revision sheet: no additional bone names.
+ * Numbered vertebrae other than C1 and C2, the manubrium, and the separate
+ * metacarpal / metatarsal numbers are not named, so they stay out of Common.
+ */
+export const COMMON_BONE_IDS: readonly string[] = Object.freeze([
+  'c1',
+  'c2',
+  'sacrum',
+  'sternum_body',
+  'xiphoid',
+  'rib1',
+  'rib2',
+  'rib3',
+  'rib4',
+  'rib5',
+  'rib6',
+  'rib7',
+  'rib8',
+  'rib9',
+  'rib10',
+  'rib11',
+  'rib12',
+  'frontal',
+  'parietal',
+  'temporal',
+  'occipital',
+  'mandible',
+  'maxilla',
+  'zygomatic',
+  'clavicle',
+  'scapula',
+  'humerus',
+  'radius',
+  'ulna',
+  'hip',
+  'femur',
+  'patella',
+  'tibia',
+  'fibula',
+  'scaphoid',
+  'lunate',
+  'triquetrum',
+  'pisiform',
+  'trapezium',
+  'trapezoid',
+  'capitate',
+  'hamate',
+  'metacarpals',
+  'hand_phalanges',
+  'calcaneus',
+  'talus',
+  'navicular',
+  'cuboid',
+  'cuneiform_medial',
+  'cuneiform_intermediate',
+  'cuneiform_lateral',
+  'metatarsals',
+  'foot_phalanges',
+])
+
+const COMMON_BONE_ID_SET = new Set<string>(COMMON_BONE_IDS)
+
+/** Common-list bones in AXIAL_BONES catalog order. */
+export function filterCommonBones(): AxialBone[] {
+  return AXIAL_BONES.filter((b) => COMMON_BONE_ID_SET.has(b.id))
+}
+
 export function countByRegion(): Record<BoneRegion, number> {
   const out = { skull: 0, spine: 0, thorax: 0, upper: 0, lower: 0, pelvis: 0 }
   for (const b of AXIAL_BONES) out[b.region]++

@@ -8,6 +8,7 @@ import {
   answersMatch,
   applyPreset,
   filterBones,
+  filterCommonBones,
   shuffle,
   type AxialBone,
   type BonePart,
@@ -27,7 +28,8 @@ import {
   type MuscleLayerFilter,
 } from './data/muscles'
 import { CARTILAGE, type CartilageRegion } from './data/cartilage'
-import { ThoraxScene, type MaterialLook, type ViewSubjectFilter } from './scene/ThoraxScene'
+import { ThoraxScene, type FramingReport, type MaterialLook, type ViewSubjectFilter } from './scene/ThoraxScene'
+import { insetsChanged, type FramingInsets } from './scene/framing'
 import { playCorrectChime, playKeyTap, playWrongTick, unlockAudio } from './audio/chime'
 import { getBoneView, getCartilageView, getMuscleView, type ViewAttachmentSite, type ViewSide } from './data/viewInfo'
 import {
@@ -272,16 +274,17 @@ app.innerHTML = `
       <div class="type-field" id="type-field">
         <div class="target-word" id="target-word"></div>
         <input
-          id="hidden-input"
+          id="answer"
+          name="anatomy-answer"
           class="hidden-input"
           type="text"
           inputmode="text"
           autocomplete="off"
-          autocapitalize="none"
           autocorrect="off"
+          autocapitalize="none"
           spellcheck="false"
-          enterkeyhint="done"
-          aria-label="Type the name"
+          enterkeyhint="go"
+          aria-label="Answer"
         />
       </div>
       <div class="gloss-line" id="gloss-line"></div>
@@ -318,7 +321,7 @@ const glossLine = document.querySelector<HTMLDivElement>('#gloss-line')!
 const promptBlock = document.querySelector<HTMLDivElement>('#prompt-block')!
 const skipBtn = document.querySelector<HTMLButtonElement>('#skip-btn')!
 const tapHint = document.querySelector<HTMLParagraphElement>('#tap-hint')!
-const hiddenInput = document.querySelector<HTMLInputElement>('#hidden-input')!
+const hiddenInput = document.querySelector<HTMLInputElement>('#answer')!
 const statAcc = document.querySelector<HTMLElement>('#stat-acc')!
 const statProgress = document.querySelector<HTMLElement>('#stat-progress')!
 const pillMode = document.querySelector<HTMLElement>('#pill-mode')!
@@ -364,7 +367,8 @@ const viewLayerGroup = document.querySelector<HTMLDivElement>('#view-layer-group
  * and on iPad when the page itself receives keydown (external keyboards that
  * deliver keys without a focused field).
  */
-const touchQuiz = shouldUseNativeSoftKeyboard(probeTouchQuiz(window, navigator))
+const forceTouchFraming = new URLSearchParams(location.search).get('touch') === '1'
+const touchQuiz = forceTouchFraming || shouldUseNativeSoftKeyboard(probeTouchQuiz(window, navigator))
 if (touchQuiz) document.documentElement.classList.add('touch-quiz')
 
 function isNarrowLayout(): boolean {
@@ -432,6 +436,8 @@ const selectedParts = new Set<BonePart>(BONE_PARTS.map((p) => p.id))
 const selectedMuscleRegions = new Set<MuscleRegion>(MUSCLE_REGIONS.map((r) => r.id))
 /** Muscle Quick filters. Default All. Common ignores region chips until the user leaves it. */
 let commonMusclesOnly = false
+/** Bone Quick filters. Same Common-to-region behaviour as muscles. */
+let commonBonesOnly = false
 let activePreset: FilterPreset | 'custom' = 'all'
 let moreFiltersOpen = false
 
@@ -468,6 +474,7 @@ function syncFooterTips(): void {
 syncFooterTips()
 
 function filteredBones(): AxialBone[] {
+  if (commonBonesOnly) return filterCommonBones()
   if (activePreset !== 'custom') {
     return applyPreset(activePreset).bones
   }
@@ -662,11 +669,13 @@ function updateHud(): void {
     if (hiddenInput.value !== state.typed) hiddenInput.value = state.typed
   }
   syncTapHint()
+  scheduleFramingSync()
 }
 
 function applyTarget(): void {
   const bone = current()
   if (!bone) return
+  syncFramingInsetsNow()
   scene.setTarget(bone.meshNames)
 }
 
@@ -746,6 +755,7 @@ function showMenu(): void {
   scene.showMenuView()
   renderMenuFilters()
   updatePoolCount()
+  syncFramingInsetsNow()
 }
 
 
@@ -1028,7 +1038,7 @@ function applyViewSelection(sel: ViewSelection | null): void {
     scene.clearViewSelection()
     return
   }
-  scene.setViewSelection(sel.meshNames, attachmentsFor(sel))
+  scene.setViewSelection(meshesToFrame(sel), attachmentsFor(sel))
 }
 
 function selectionKey(sel: { id: string; side: ViewSide | null }): string {
@@ -1141,13 +1151,15 @@ function commitViewSelection(stack: ViewSelection[], index: number, clientX?: nu
     hasLastPick = true
   }
   applyViewSelection(sel)
-  scene.frameViewSelection(meshesToFrame(sel))
-  renderPickStack(stack, index)
   if (!viewPanel.classList.contains('is-expanded')) {
     // Auto-open the sheet on a new selection so the copy is readable.
     viewPanel.classList.add('is-expanded')
     viewPanelToggle.setAttribute('aria-expanded', 'true')
   }
+  syncFramingInsetsNow()
+  scene.frameViewSelection(meshesToFrame(sel))
+  renderPickStack(stack, index)
+  scheduleFramingSync()
 }
 
 function onViewPick(clientX: number, clientY: number): void {
@@ -1215,6 +1227,7 @@ async function startView(): Promise<void> {
   }
   if (!state.viewing) return
   statusEl.style.display = 'none'
+  syncFramingInsetsNow()
 }
 
 function levelsForMode(mode: PlayMode): Level[] {
@@ -1440,18 +1453,35 @@ function renderMenuFilters(): void {
     for (const { id, label } of FILTER_PRESETS) {
       const btn = document.createElement('button')
       btn.type = 'button'
-      const on = activePreset === id
+      const on = !commonBonesOnly && activePreset === id
       btn.className = 'filter-chip filter-chip--preset' + (on ? ' filter-chip--on' : '')
       const n = applyPreset(id).bones.length
       btn.innerHTML = `<span>${label}</span><em>${n}</em>`
       btn.addEventListener('pointerdown', (e) => {
         e.preventDefault()
         void unlockAudio()
+        commonBonesOnly = false
         setPreset(id)
         renderMenuFilters()
         updatePoolCount()
       })
       menuPresets.appendChild(btn)
+      if (id === 'all') {
+        const commonBtn = document.createElement('button')
+        commonBtn.type = 'button'
+        const commonN = filterCommonBones().length
+        commonBtn.className =
+          'filter-chip filter-chip--preset' + (commonBonesOnly ? ' filter-chip--on' : '')
+        commonBtn.innerHTML = `<span>Common</span><em>${commonN}</em>`
+        commonBtn.addEventListener('pointerdown', (e) => {
+          e.preventDefault()
+          void unlockAudio()
+          commonBonesOnly = true
+          renderMenuFilters()
+          updatePoolCount()
+        })
+        menuPresets.appendChild(commonBtn)
+      }
     }
   }
 
@@ -1529,7 +1559,7 @@ function renderMenuFilters(): void {
   for (const { id, label } of BONE_REGIONS) {
     const btn = document.createElement('button')
     btn.type = 'button'
-    btn.className = 'filter-chip' + (selectedRegions.has(id) ? ' filter-chip--on' : '')
+    btn.className = 'filter-chip' + (!commonBonesOnly && selectedRegions.has(id) ? ' filter-chip--on' : '')
     btn.innerHTML = `<span>${label}</span><em>${regionCounts[id] ?? 0}</em>`
     btn.addEventListener('pointerdown', (e) => {
       e.preventDefault()
@@ -1544,7 +1574,7 @@ function renderMenuFilters(): void {
     const btn = document.createElement('button')
     btn.type = 'button'
     btn.className =
-      'filter-chip filter-chip--part' + (selectedParts.has(id) ? ' filter-chip--on' : '')
+      'filter-chip filter-chip--part' + (!commonBonesOnly && selectedParts.has(id) ? ' filter-chip--on' : '')
     const preview = AXIAL_BONES.filter(
       (b) => selectedRegions.has(b.region) && b.part === id,
     ).length
@@ -1578,6 +1608,17 @@ function renderMenuFilters(): void {
 }
 
 function toggleRegion(id: BoneRegion): void {
+  if (commonBonesOnly) {
+    commonBonesOnly = false
+    activePreset = 'custom'
+    selectedRegions.clear()
+    selectedParts.clear()
+    for (const p of BONE_PARTS) selectedParts.add(p.id)
+    selectedRegions.add(id)
+    renderMenuFilters()
+    updatePoolCount()
+    return
+  }
   activePreset = 'custom'
   const wasOn = selectedRegions.has(id)
   if (wasOn) {
@@ -1603,6 +1644,7 @@ function toggleRegion(id: BoneRegion): void {
 }
 
 function togglePart(id: BonePart): void {
+  if (commonBonesOnly) commonBonesOnly = false
   activePreset = 'custom'
   const wasOn = selectedParts.has(id)
   if (wasOn) {
@@ -1754,6 +1796,7 @@ viewPanelToggle.addEventListener('pointerdown', (e) => {
   const open = !viewPanel.classList.contains('is-expanded')
   viewPanel.classList.toggle('is-expanded', open)
   viewPanelToggle.setAttribute('aria-expanded', open ? 'true' : 'false')
+  scheduleFramingSync()
 })
 
 viewPickChips.addEventListener('pointerdown', (e) => {
@@ -1904,7 +1947,7 @@ promptBlock.addEventListener('pointerdown', (e) => {
   if ((e.target as HTMLElement | null)?.closest('#skip-btn')) return
   // Let a direct tap on the field focus it natively. preventDefault on that
   // path can cancel the focus and drop the iOS keyboard.
-  if ((e.target as HTMLElement | null)?.closest('#hidden-input')) {
+  if ((e.target as HTMLElement | null)?.closest('#answer')) {
     void unlockAudio()
     if (state.finished) showMenu()
     return
@@ -1925,15 +1968,26 @@ skipBtn.addEventListener('pointerdown', (e) => {
   revealAnswer()
 })
 
+/** QA can pin a keyboard height. Null uses the real visualViewport overlap. */
+let forcedKeyboardInset: number | null = null
+const ZERO_FRAME_INSETS: FramingInsets = { top: 0, right: 0, bottom: 0, left: 0 }
+let appliedInsets: FramingInsets = { top: -1, right: -1, bottom: -1, left: -1 }
+let appliedFraming = false
+let framingSyncTimer = 0
+
 function syncKeyboardInset(): void {
   const vv = window.visualViewport
-  if (!vv) return
-  // iOS may try to scroll a focused field into view; pin the layout viewport
-  // so --keyboard-inset is the only lift for the prompt and Skip.
-  if (touchQuiz && (window.scrollX || window.scrollY)) window.scrollTo(0, 0)
-  const overlap = Math.max(0, window.innerHeight - vv.offsetTop - vv.height)
-  const inset = Math.min(overlap, window.innerHeight * 0.62)
-  document.documentElement.style.setProperty('--keyboard-inset', `${Math.round(inset)}px`)
+  if (forcedKeyboardInset != null) {
+    document.documentElement.style.setProperty('--keyboard-inset', `${Math.round(forcedKeyboardInset)}px`)
+  } else if (vv) {
+    // iOS may try to scroll a focused field into view; pin the layout viewport
+    // so --keyboard-inset is the only lift for the prompt and Skip.
+    if (touchQuiz && (window.scrollX || window.scrollY)) window.scrollTo(0, 0)
+    const overlap = Math.max(0, window.innerHeight - vv.offsetTop - vv.height)
+    const inset = Math.min(overlap, window.innerHeight * 0.62)
+    document.documentElement.style.setProperty('--keyboard-inset', `${Math.round(inset)}px`)
+  }
+  scheduleFramingSync()
 }
 if (window.visualViewport) {
   window.visualViewport.addEventListener('resize', syncKeyboardInset)
@@ -1941,9 +1995,85 @@ if (window.visualViewport) {
   syncKeyboardInset()
 }
 
+function framingActive(): boolean {
+  if (state.viewing && !viewPanel.hidden) return true
+  return touchQuiz && state.playing && !playHud.hidden
+}
+
+/** Pixels of canvas covered by chrome, the prompt, the keyboard, or the study panel. */
+function measureOcclusionInsets(): FramingInsets {
+  const canvas = mainCanvas.getBoundingClientRect()
+  const width = Math.max(canvas.width, 1)
+  const height = Math.max(canvas.height, 1)
+  let top = 0
+  let right = 0
+  let bottom = 0
+  let left = 0
+  const gap = 10
+
+  const takeTop = (el: HTMLElement) => {
+    if (el.hidden) return
+    const rect = el.getBoundingClientRect()
+    if (rect.width < 8 || rect.height < 8) return
+    if (rect.bottom < canvas.top || rect.top > canvas.top + height * 0.45) return
+    top = Math.max(top, rect.bottom - canvas.top)
+  }
+
+  if (!chromeTop.hidden) takeTop(chromeTop)
+  if (!viewFilters.hidden) {
+    const rect = viewFilters.getBoundingClientRect()
+    if (rect.top < canvas.top + height * 0.4) takeTop(viewFilters)
+    else if (rect.height > 8 && rect.top > canvas.top + height * 0.35) {
+      bottom = Math.max(bottom, canvas.bottom - rect.top)
+    }
+  }
+
+  if (state.playing && !playHud.hidden) {
+    const rect = promptBlock.getBoundingClientRect()
+    if (rect.height > 8) bottom = Math.max(bottom, canvas.bottom - rect.top)
+  }
+
+  if (state.viewing && !viewPanel.hidden) {
+    const rect = viewPanel.getBoundingClientRect()
+    const overlapW = Math.min(rect.right, canvas.right) - Math.max(rect.left, canvas.left)
+    const overlapH = Math.min(rect.bottom, canvas.bottom) - Math.max(rect.top, canvas.top)
+    if (overlapW > 8 && overlapH > 8) {
+      const bottomSheet = rect.width > width * 0.65 && rect.top > canvas.top + height * 0.28
+      if (bottomSheet) bottom = Math.max(bottom, canvas.bottom - rect.top)
+      else if (rect.left > canvas.left + width * 0.45) right = Math.max(right, canvas.right - rect.left)
+      else if (rect.right < canvas.left + width * 0.55) left = Math.max(left, rect.right - canvas.left)
+    }
+  }
+
+  return {
+    top: top > 0 ? top + gap : 0,
+    right: right > 0 ? right + gap : 0,
+    bottom: bottom > 0 ? bottom + gap : 0,
+    left: left > 0 ? left + gap : 0,
+  }
+}
+
+function syncFramingInsetsNow(): void {
+  const insets = framingActive() ? measureOcclusionInsets() : ZERO_FRAME_INSETS
+  const enabled = framingActive()
+  if (appliedFraming === enabled && !insetsChanged(appliedInsets, insets, 6)) return
+  appliedInsets = insets
+  appliedFraming = enabled
+  scene.setFramingInsets(insets, enabled)
+}
+
+function scheduleFramingSync(): void {
+  window.clearTimeout(framingSyncTimer)
+  framingSyncTimer = window.setTimeout(syncFramingInsetsNow, 90)
+}
+
+window.addEventListener('resize', scheduleFramingSync)
+viewPanel.addEventListener('transitionend', scheduleFramingSync)
+
 window.matchMedia('(max-width: 900px)').addEventListener('change', () => {
   syncFooterTips()
   updatePoolCount()
+  scheduleFramingSync()
 })
 
 const PICK_MOVE_PX = 12
@@ -1989,7 +2119,134 @@ mainCanvas.addEventListener('pointercancel', () => {
   pointerIsPick = false
 })
 
+function qaEntry(subject: 'bones' | 'muscles', id: string): ViewSelection {
+  if (subject === 'muscles') {
+    const muscle = MUSCLES.find((m) => m.id === id)
+    if (!muscle) throw new Error(`unknown muscle ${id}`)
+    const clicked = muscle.meshNames.find((n) => meshSide(n) === 'l') ?? muscle.meshNames[0]!
+    return {
+      kind: 'muscle',
+      id,
+      displayName: muscle.displayName,
+      regionLabel: MUSCLE_REGION_LABEL[muscle.region],
+      meshNames: muscle.meshNames,
+      side: meshSide(clicked),
+      clickedMesh: clicked,
+    }
+  }
+  const bone = AXIAL_BONES.find((b) => b.id === id)
+  if (!bone) throw new Error(`unknown bone ${id}`)
+  const clicked = bone.meshNames.find((n) => meshSide(n) === 'l') ?? bone.meshNames[0]!
+  return {
+    kind: 'bone',
+    id,
+    displayName: bone.displayName,
+    regionLabel: REGION_LABEL[bone.region],
+    meshNames: bone.meshNames,
+    side: meshSide(clicked),
+    clickedMesh: clicked,
+  }
+}
+
+async function qaShowQuiz(
+  subject: 'bones' | 'muscles',
+  id: string,
+  keyboardPx: number,
+): Promise<FramingReport> {
+  forcedKeyboardInset = keyboardPx
+  syncKeyboardInset()
+  if (state.viewing) {
+    scene.exitView()
+    state.viewing = false
+  }
+  state.subject = subject
+  state.playing = true
+  state.finished = false
+  state.revealing = false
+  state.viewing = false
+  state.mode = 'memory'
+  state.levels = ['memory']
+  state.levelIndex = 0
+  state.typed = ''
+  state.correct = 0
+  state.attempts = 0
+  menuOverlay.hidden = true
+  playHud.hidden = false
+  viewPanel.hidden = true
+  viewPanel.classList.remove('is-expanded')
+  chromeTop.hidden = false
+  chromeTop.classList.remove('is-view')
+  viewFilters.hidden = false
+  viewFilters.classList.add('is-quiz')
+  sideViews.hidden = true
+  scene.setLook('solid')
+  syncLookButtons()
+  if (subject === 'muscles') await scene.setSubjectAsync('muscles')
+  else scene.setSubject('bones')
+  if (!state.playing) return scene.getFramingReport()
+  const sel = qaEntry(subject, id)
+  state.queue = [
+    subject === 'muscles'
+      ? muscleToEntry(MUSCLES.find((m) => m.id === id)!)
+      : boneToEntry(AXIAL_BONES.find((b) => b.id === id)!),
+  ]
+  state.index = 0
+  updateHud()
+  syncFramingInsetsNow()
+  scene.setTarget(sel.meshNames)
+  await scene.whenPoseSettled()
+  syncFramingInsetsNow()
+  await scene.whenPoseSettled()
+  return scene.getFramingReport()
+}
+
+async function qaShowView(subject: 'bones' | 'muscles', id: string): Promise<FramingReport> {
+  forcedKeyboardInset = 0
+  syncKeyboardInset()
+  scene.setLook('solid')
+  if (!state.viewing) await startView()
+  scene.setLook('solid')
+  syncLookButtons()
+  const sel = qaEntry(subject, id)
+  viewPanel.classList.add('is-expanded')
+  viewPanelToggle.setAttribute('aria-expanded', 'true')
+  applyViewSelection(sel)
+  syncFramingInsetsNow()
+  scene.frameViewSelection(meshesToFrame(sel))
+  await scene.whenPoseSettled()
+  syncFramingInsetsNow()
+  await scene.whenPoseSettled()
+  return scene.getFramingReport()
+}
+
+function qaShowCommonBones(): { count: number; total: number; label: string } {
+  if (state.viewing) {
+    scene.exitView()
+    state.viewing = false
+  }
+  state.playing = false
+  state.subject = 'bones'
+  commonBonesOnly = true
+  showMenu()
+  return {
+    count: filterCommonBones().length,
+    total: AXIAL_BONES.length,
+    label: poolCount.textContent ?? '',
+  }
+}
+
+function installQaHooks(): void {
+  const api = {
+    showQuiz: qaShowQuiz,
+    showView: qaShowView,
+    showCommonBones: qaShowCommonBones,
+    report: () => scene.getFramingReport(),
+  }
+  ;(window as unknown as { __anatomyQA: typeof api }).__anatomyQA = api
+}
+
 async function runQaMode(mode: string): Promise<void> {
+  if (mode === 'shot') return
   await wait(500)
   if (mode === 'menu' || mode === 'ribs') {
     showMenu()
@@ -2122,7 +2379,10 @@ void (async () => {
     showMenu()
     updatePoolCount()
     const qa = new URLSearchParams(location.search).get('qa')
-    if (qa) await runQaMode(qa)
+    if (qa) {
+      installQaHooks()
+      await runQaMode(qa)
+    }
   } catch (err) {
     console.error(err)
     statusEl.classList.add('error')

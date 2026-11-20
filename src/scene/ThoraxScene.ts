@@ -6,6 +6,15 @@ import { assetUrl } from '../assetUrl'
 import { forEachGlb, glbConcurrency, releaseGlbSessionCache } from './glbLoad'
 import type { ViewAttachmentSite, ViewPrefer } from '../data/viewInfo'
 import { muscleVisibleAtLayer, type MuscleLayerFilter } from '../data/muscles'
+import {
+  anatomicalViewCandidates,
+  fitDistance,
+  insetsChanged,
+  namesForOneSide,
+  viewOffsetForBand,
+  visibleBand,
+  type FramingInsets,
+} from './framing'
 
 export type ViewSubjectFilter = 'both' | 'bones' | 'muscles'
 export type MaterialLook = 'xray' | 'solid'
@@ -163,6 +172,8 @@ const VIEW_CARTILAGE_SELECTED = {
 }
 const VIEW_DIM_OPACITY_BONE = 0.13
 const VIEW_DIM_OPACITY_MUSCLE = 0.1
+/** Non-target muscles that sit in front of the quiz target. Low enough that a solid target still reads. */
+const OCCLUDER_OPACITY = 0.03
 
 /** Ignore contralateral hits and stop once the ray has gone this far past the first hit. */
 const PICK_MAX_DEPTH = 0.5
@@ -174,6 +185,22 @@ const QUIZ_FRAME_MIN_SPAN = 0.4
 
 /** BodyParts3D pack is Z-up (cranial +Z). This Euler maps cranial → +Y, anterior → +Z. */
 export const UPRIGHT_EULER = { x: -Math.PI / 2, y: 0, z: 0 }
+
+const ZERO_INSETS: FramingInsets = { top: 0, right: 0, bottom: 0, left: 0 }
+
+export type FramingReport = {
+  viewId: string
+  distance: number
+  offsetX: number
+  offsetY: number
+  occluderCount: number
+  spinning: boolean
+  yaw: number
+  framingEnabled: boolean
+  camera: { x: number; y: number; z: number }
+  target: { x: number; y: number; z: number }
+  insets: FramingInsets
+}
 
 export type ThoraxSceneOptions = {
   mainCanvas: HTMLCanvasElement
@@ -265,6 +292,19 @@ export class ThoraxScene {
     elapsed: number
     duration: number
   } | null = null
+  /** CSS-pixel canvas size. View offset and fit distance are in this space. */
+  private viewWidth = 1
+  private viewHeight = 1
+  private framingEnabled = false
+  private framingTarget: FramingInsets = { top: 0, right: 0, bottom: 0, left: 0 }
+  private framingCurrent: FramingInsets = { top: 0, right: 0, bottom: 0, left: 0 }
+  /** Sphere radius of the part currently being framed. 0 = full body / idle. */
+  private framedRadius = 0
+  private occluderIds = new Set<string>()
+  private lastViewId = 'anterior'
+  private lastScore = 0
+  private userOrbiting = false
+  private pendingRefit = false
 
   constructor(opts: ThoraxSceneOptions) {
     this.mainCanvas = opts.mainCanvas
@@ -301,9 +341,15 @@ export class ThoraxScene {
     this.controls.maxPolarAngle = Math.PI - 0.15
     this.controls.addEventListener('start', () => {
       this.spinning = false
+      this.userOrbiting = true
       this.cancelViewFrame()
     })
     this.controls.addEventListener('end', () => {
+      this.userOrbiting = false
+      if (this.pendingRefit) {
+        this.pendingRefit = false
+        this.refitFramedDistance()
+      }
       window.setTimeout(() => {
         if (!this.disposed && !this.viewMode && this.targetIds.size === 0) this.spinning = true
       }, 1800)
@@ -571,6 +617,7 @@ export class ThoraxScene {
 
   private frameFullBody(): void {
     this.cancelViewFrame()
+    this.framedRadius = 0
     this.focusTarget.set(0, 0, 0)
     this.focusDist = this.fitRadius / Math.tan((this.camera.fov * Math.PI) / 360) * 1.55
     this.camera.up.set(0, 1, 0)
@@ -648,6 +695,7 @@ export class ThoraxScene {
             transparent: true,
             depthWrite: false,
           })
+          if (this.occluderIds.has(name)) mat.opacity = OCCLUDER_OPACITY
           mesh.renderOrder = 1
         } else if (solid) {
           this.applyPalette(mat, VIEW_BONE, { transparent: false, depthWrite: true })
@@ -676,6 +724,7 @@ export class ThoraxScene {
           mesh.renderOrder = 10
         } else if (hasTarget) {
           this.applyPalette(mat, MUSCLE_CONTEXT_FADE, { transparent: true, depthWrite: false })
+          if (this.occluderIds.has(name)) mat.opacity = OCCLUDER_OPACITY
           mesh.renderOrder = 2
         } else if (solid) {
           this.applyPalette(mat, MUSCLE_GHOST, { transparent: false, depthWrite: true })
@@ -689,11 +738,17 @@ export class ThoraxScene {
   }
 
   setTarget(meshNames: string[]): void {
-    this.targetIds = new Set(meshNames)
+    const present = meshNames.filter((n) => this.meshByName.has(n))
+    const framed = namesForOneSide(present)
+    this.targetIds = new Set(framed.length > 0 ? framed : meshNames)
+    // Hold yaw at 0 so anterior / medial directions stay anatomical.
+    // Spin stays off for the question so it cannot walk off that angle.
     this.spinning = false
+    this.spin.rotation.y = 0
+    this.body.updateMatrixWorld(true)
     this.controls.minDistance = VIEW_MIN_DISTANCE
+    this.frameMeshes([...this.targetIds])
     this.applySubjectVisibility()
-    this.frameMeshes(meshNames)
   }
 
   /** Drop the quiz highlight without changing the camera. */
@@ -702,27 +757,18 @@ export class ThoraxScene {
     if (!this.viewMode) this.applySubjectVisibility()
   }
 
-  /** Prefer one side so paired L/R targets don't frame the whole body. */
-  private namesForQuizFrame(meshNames: string[]): string[] {
-    const present = meshNames.filter((n) => this.meshByName.has(n))
-    const left = present.filter((n) => meshPickSide(n) === 'l')
-    const right = present.filter((n) => meshPickSide(n) === 'r')
-    const mid = present.filter((n) => meshPickSide(n) == null)
-    if (left.length && right.length) return [...left, ...mid]
-    return present
-  }
-
   private frameMeshes(meshNames: string[]): void {
     this.body.updateMatrixWorld(true)
     const box = new THREE.Box3()
-    let any = false
-    for (const name of this.namesForQuizFrame(meshNames)) {
+    const present: string[] = []
+    for (const name of meshNames) {
       const mesh = this.meshByName.get(name)
       if (!mesh) continue
       box.expandByObject(mesh)
-      any = true
+      present.push(name)
     }
-    if (!any) {
+    if (present.length === 0) {
+      this.framedRadius = 0
       this.frameFullBody()
       this.updateSideCameras()
       return
@@ -736,17 +782,15 @@ export class ThoraxScene {
     const center = box.getCenter(new THREE.Vector3())
     const padded = box.getSize(new THREE.Vector3())
     const radius = Math.max(padded.x, padded.y, padded.z) * 0.5
-    const fovTan = Math.tan((this.camera.fov * Math.PI) / 360)
-    const dist = Math.max(radius / fovTan * 1.55, VIEW_MIN_DISTANCE + 0.08)
+    const dir = this.chooseViewDirection(center, radius, present)
+    const dist = this.distanceFor(radius, 0.7, VIEW_MIN_DISTANCE + 0.05)
+    const endPos = center.clone().addScaledVector(dir, dist)
     this.focusTarget.copy(center)
     this.focusDist = dist
+    this.framedRadius = radius
     this.camera.up.set(0, 1, 0)
-    // Stand slightly to the outside of a left/right part so the torso doesn't fill the frame.
-    const lateral = Math.abs(center.x) > 0.2 ? Math.sign(center.x) * 0.42 : 0.22
-    this.camera.position.set(center.x + dist * lateral, center.y + radius * 0.18, center.z + dist)
     this.controls.minDistance = VIEW_MIN_DISTANCE
-    this.controls.target.copy(center)
-    this.controls.update()
+    this.startViewPose(center, endPos, 0.46)
     this.updateSideCamerasAround(center, dist)
   }
 
@@ -774,10 +818,13 @@ export class ThoraxScene {
     const parent = this.mainCanvas.parentElement
     const w = parent?.clientWidth || window.innerWidth
     const h = parent?.clientHeight || window.innerHeight
+    this.viewWidth = w
+    this.viewHeight = h
     this.camera.aspect = w / Math.max(h, 1)
     this.camera.updateProjectionMatrix()
     this.renderer.setSize(w, h, false)
     this.labelRenderer.setSize(w, h)
+    this.applyFramingOffset()
 
     for (const side of this.sideViews) {
       const pw = side.canvas.parentElement?.clientWidth || 120
@@ -796,8 +843,10 @@ export class ThoraxScene {
       // World Y only — body upright Euler stays on `body`
       this.spin.rotation.y += dt * 0.22
     }
+    this.lerpFramingInsets(dt)
     this.tickViewFrame(dt)
     this.controls.update()
+    this.applyFramingOffset()
     this.renderer.render(this.scene, this.camera)
     this.labelRenderer.render(this.scene, this.camera)
     for (const side of this.sideViews) {
@@ -852,6 +901,7 @@ export class ThoraxScene {
   exitView(): void {
     if (!this.viewMode) return
     this.viewMode = false
+    this.framedRadius = 0
     this.cancelViewFrame()
     this.controls.enablePan = false
     this.controls.minDistance = DEFAULT_MIN_DISTANCE
@@ -940,53 +990,36 @@ export class ThoraxScene {
   }
 
   /**
-   * Ease the orbit target to the given meshes and set distance from their
-   * bbox. View-only. Preserves the current look direction so a cycle does
-   * not whip the camera around. Small parts (neck vertebrae) frame tight;
-   * larger muscles get a looser pad. Quiz {@link frameMeshes} is unchanged.
+   * Ease onto the selected meshes in View. Keeps the current direction when
+   * the part is already readable, otherwise swings to the clearer angle.
+   * Distance fits the band above or beside the study panel.
    */
   frameViewSelection(meshNames: string[]): void {
     if (!this.viewMode || meshNames.length === 0) return
     this.body.updateMatrixWorld(true)
     const box = new THREE.Box3()
-    let any = false
+    const present: string[] = []
     for (const name of meshNames) {
       const mesh = this.meshByName.get(name)
       if (!mesh) continue
       box.expandByObject(mesh)
-      any = true
+      present.push(name)
     }
-    if (!any) return
+    if (present.length === 0) return
 
     const center = box.getCenter(new THREE.Vector3())
     const size = box.getSize(new THREE.Vector3())
     const radius = Math.max(size.x, size.y, size.z, 0.08) * 0.5
-    const fovTan = Math.tan((this.camera.fov * Math.PI) / 360)
-    const pad = THREE.MathUtils.lerp(
-      2.05,
-      2.7,
-      THREE.MathUtils.smoothstep(radius, 0.05, 0.35),
-    )
-    const dist = Math.max(radius / fovTan * pad, VIEW_MIN_DISTANCE + 0.06)
-
-    const startTarget = this.controls.target.clone()
-    const startPos = this.camera.position.clone()
-    const offset = startPos.clone().sub(startTarget)
-    if (offset.lengthSq() < 1e-8) offset.set(0.25, 0.15, 1)
-    offset.setLength(dist)
-    const endPos = center.clone().add(offset)
+    const dir = this.directionOrBest(center, radius, present)
+    const dist = this.distanceFor(radius, 0.68, VIEW_MIN_DISTANCE + 0.05)
+    const endPos = center.clone().addScaledVector(dir, dist)
 
     this.focusTarget.copy(center)
     this.focusDist = dist
+    this.framedRadius = radius
     this.camera.up.set(0, 1, 0)
-    this.viewFrame = {
-      startTarget,
-      endTarget: center,
-      startPos,
-      endPos,
-      elapsed: 0,
-      duration: 0.5,
-    }
+    this.startViewPose(center, endPos, 0.5)
+    this.applyViewPresentation()
   }
 
   private cancelViewFrame(): void {
@@ -1135,7 +1168,7 @@ export class ThoraxScene {
             depthWrite: selected,
           })
           if (dim) {
-            mat.opacity = VIEW_DIM_OPACITY_MUSCLE
+            mat.opacity = this.fadedOpacity(name, VIEW_DIM_OPACITY_MUSCLE)
             mat.transparent = true
             mat.depthWrite = false
           }
@@ -1145,7 +1178,7 @@ export class ThoraxScene {
             transparent: true,
             depthWrite: selected,
           })
-          if (dim) mat.opacity = 0.06
+          if (dim) mat.opacity = this.fadedOpacity(name, 0.06)
           mesh.renderOrder = selected ? 10 : 1
         } else {
           this.applyPalette(mat, selected ? TARGET : GHOST, {
@@ -1153,7 +1186,7 @@ export class ThoraxScene {
             depthWrite: selected,
           })
           if (dim) {
-            mat.opacity = VIEW_DIM_OPACITY_BONE
+            mat.opacity = this.fadedOpacity(name, VIEW_DIM_OPACITY_BONE)
             mat.transparent = true
             mat.depthWrite = false
           }
@@ -1171,7 +1204,7 @@ export class ThoraxScene {
         mat.roughness = pal.roughness
         mat.metalness = pal.metalness
         mat.transparent = dim
-        mat.opacity = dim ? VIEW_DIM_OPACITY_MUSCLE : 1
+        mat.opacity = dim ? this.fadedOpacity(name, VIEW_DIM_OPACITY_MUSCLE) : 1
         mat.depthWrite = !dim
         mesh.renderOrder = selected ? 10 : 2
       } else if (isCartilage) {
@@ -1182,7 +1215,7 @@ export class ThoraxScene {
         mat.roughness = pal.roughness
         mat.metalness = pal.metalness
         mat.transparent = true
-        mat.opacity = dim ? 0.06 : pal.opacity
+        mat.opacity = dim ? this.fadedOpacity(name, 0.06) : pal.opacity
         mat.depthWrite = selected || !dim
         mesh.renderOrder = selected ? 10 : 1
       } else {
@@ -1193,7 +1226,7 @@ export class ThoraxScene {
         mat.roughness = pal.roughness
         mat.metalness = pal.metalness
         mat.transparent = dim
-        mat.opacity = dim ? VIEW_DIM_OPACITY_BONE : 1
+        mat.opacity = dim ? this.fadedOpacity(name, VIEW_DIM_OPACITY_BONE) : 1
         mat.depthWrite = !dim
         mesh.renderOrder = selected ? 10 : 1
       }
@@ -1374,6 +1407,291 @@ export class ThoraxScene {
     group.add(tag)
 
     this.markerGroup.add(group)
+  }
+
+  /**
+   * Screen-space occlusion of the 3D view, in CSS pixels.
+   * Touch quiz and View pass the chips, HUD, keyboard, and study panel.
+   * Desktop quiz passes enabled=false and keeps a full-frame camera.
+   */
+  setFramingInsets(insets: FramingInsets, enabled: boolean): void {
+    const next: FramingInsets = {
+      top: Math.max(0, insets.top),
+      right: Math.max(0, insets.right),
+      bottom: Math.max(0, insets.bottom),
+      left: Math.max(0, insets.left),
+    }
+    const changed = this.framingEnabled !== enabled || insetsChanged(this.framingTarget, enabled ? next : ZERO_INSETS, 6)
+    this.framingEnabled = enabled
+    this.framingTarget = enabled ? next : { ...ZERO_INSETS }
+    if (!changed) return
+    if (this.userOrbiting) {
+      this.pendingRefit = true
+      return
+    }
+    this.refitFramedDistance()
+  }
+
+  whenPoseSettled(): Promise<void> {
+    return new Promise((resolve) => {
+      const start = performance.now()
+      const tick = () => {
+        if (this.disposed) {
+          resolve()
+          return
+        }
+        const c = this.framingCurrent
+        const t = this.framingTarget
+        const insetsDone =
+          Math.abs(c.top - t.top) < 0.6 &&
+          Math.abs(c.bottom - t.bottom) < 0.6 &&
+          Math.abs(c.left - t.left) < 0.6 &&
+          Math.abs(c.right - t.right) < 0.6
+        if ((!this.viewFrame && insetsDone) || performance.now() - start > 1800) {
+          resolve()
+          return
+        }
+        requestAnimationFrame(tick)
+      }
+      requestAnimationFrame(tick)
+    })
+  }
+
+  getFramingReport(): FramingReport {
+    const view = this.camera.view
+    const offset = this.camera.position.clone().sub(this.controls.target)
+    const round = (v: THREE.Vector3) => ({
+      x: Number(v.x.toFixed(3)),
+      y: Number(v.y.toFixed(3)),
+      z: Number(v.z.toFixed(3)),
+    })
+    return {
+      viewId: this.lastViewId,
+      distance: Number(offset.length().toFixed(3)),
+      offsetX: view?.enabled ? Math.round(view.offsetX) : 0,
+      offsetY: view?.enabled ? Math.round(view.offsetY) : 0,
+      occluderCount: this.occluderIds.size,
+      spinning: this.spinning,
+      yaw: Number(this.spin.rotation.y.toFixed(3)),
+      framingEnabled: this.framingEnabled,
+      camera: round(this.camera.position),
+      target: round(this.controls.target),
+      insets: {
+        top: Math.round(this.framingCurrent.top),
+        right: Math.round(this.framingCurrent.right),
+        bottom: Math.round(this.framingCurrent.bottom),
+        left: Math.round(this.framingCurrent.left),
+      },
+    }
+  }
+
+  private fadedOpacity(name: string, opacity: number): number {
+    return this.occluderIds.has(name) ? Math.min(opacity, OCCLUDER_OPACITY) : opacity
+  }
+
+  /** Layout viewport changes (keyboard, rotation) do not always emit window resize. */
+  private readViewSize(): boolean {
+    const parent = this.mainCanvas.parentElement
+    const w = parent?.clientWidth || window.innerWidth
+    const h = parent?.clientHeight || window.innerHeight
+    if (Math.abs(w - this.viewWidth) < 4 && Math.abs(h - this.viewHeight) < 4) return false
+    this.viewWidth = w
+    this.viewHeight = h
+    this.camera.aspect = w / Math.max(h, 1)
+    this.renderer.setSize(w, h, false)
+    this.labelRenderer.setSize(w, h)
+    return true
+  }
+
+  private distanceFor(radius: number, fill: number, minDistance: number): number {
+    this.readViewSize()
+    const w = Math.max(this.viewWidth, 1)
+    const h = Math.max(this.viewHeight, 1)
+    const insets = this.framingEnabled ? this.framingTarget : ZERO_INSETS
+    const band = visibleBand(w, h, insets)
+    return fitDistance({
+      radius,
+      fovDeg: this.camera.fov,
+      canvasWidth: w,
+      canvasHeight: h,
+      bandWidth: band.width,
+      bandHeight: band.height,
+      fill,
+      minDistance,
+    })
+  }
+
+  private refitFramedDistance(): void {
+    const posing = this.viewFrame
+    const radius =
+      this.framedRadius > 0 ? this.framedRadius : this.viewMode && this.framingEnabled ? this.fitRadius : 0
+    if (radius <= 0) return
+    const fill = this.framedRadius > 0 ? 0.7 : 0.82
+    const minD = this.framedRadius > 0 ? VIEW_MIN_DISTANCE + 0.05 : DEFAULT_MIN_DISTANCE
+    const dist = this.distanceFor(radius, fill, minD)
+    const pivot = posing ? posing.endTarget : this.controls.target
+    const from = posing
+      ? posing.endPos.clone().sub(posing.endTarget)
+      : this.camera.position.clone().sub(this.controls.target)
+    if (from.lengthSq() < 1e-8) from.set(0, 0.12, 1)
+    from.setLength(dist)
+    const endPos = pivot.clone().add(from)
+    this.focusDist = dist
+    if (posing) {
+      posing.endPos.copy(endPos)
+      return
+    }
+    if (endPos.distanceTo(this.camera.position) < 0.025) return
+    this.startViewPose(pivot.clone(), endPos, 0.34)
+  }
+
+  private startViewPose(endTarget: THREE.Vector3, endPos: THREE.Vector3, duration: number): void {
+    this.viewFrame = {
+      startTarget: this.controls.target.clone(),
+      endTarget: endTarget.clone(),
+      startPos: this.camera.position.clone(),
+      endPos: endPos.clone(),
+      elapsed: 0,
+      duration,
+    }
+  }
+
+  private lerpFramingInsets(dt: number): void {
+    const k = 1 - Math.exp(-Math.min(dt, 0.05) * 9)
+    const target = this.framingTarget
+    const current = this.framingCurrent
+    for (const key of ['top', 'right', 'bottom', 'left'] as const) {
+      const delta = target[key] - current[key]
+      if (Math.abs(delta) < 0.4) current[key] = target[key]
+      else current[key] += delta * k
+    }
+  }
+
+  private applyFramingOffset(): void {
+    if (this.readViewSize() && !this.userOrbiting) this.refitFramedDistance()
+    const w = this.viewWidth
+    const h = this.viewHeight
+    if (w < 2 || h < 2) return
+    const c = this.framingCurrent
+    const idle =
+      !this.framingEnabled && c.top < 0.5 && c.right < 0.5 && c.bottom < 0.5 && c.left < 0.5
+    if (idle) {
+      if (this.camera.view?.enabled) this.camera.clearViewOffset()
+      return
+    }
+    const band = visibleBand(w, h, c)
+    const off = viewOffsetForBand(w, h, band)
+    this.camera.setViewOffset(off.fullWidth, off.fullHeight, off.offsetX, off.offsetY, off.width, off.height)
+  }
+
+  private chooseViewDirection(center: THREE.Vector3, radius: number, names: string[]): THREE.Vector3 {
+    const half = Math.max(this.lastBboxSize.x * 0.5, 0.35)
+    const ranked = anatomicalViewCandidates({ x: center.x, y: center.y, z: center.z }, half)
+      .sort((a, b) => b.prior - a.prior)
+      .slice(0, 4)
+    let bestDir = new THREE.Vector3(0, 0.16, 1).normalize()
+    let bestScore = -Infinity
+    let bestOcc: string[] = []
+    let bestId = 'anterior'
+    let bestRatio = 0
+    for (const candidate of ranked) {
+      const dir = new THREE.Vector3(candidate.dir.x, candidate.dir.y, candidate.dir.z)
+      const scored = this.scoreDirection(center, radius, dir, names)
+      // Visibility can overturn a prior, but a clearly better angle
+      // (medial thigh, posterior hip) is not lost to a small ratio gap.
+      const score = scored.ratio * 0.7 + candidate.prior
+      if (score > bestScore) {
+        bestScore = score
+        bestDir = dir
+        bestOcc = scored.occluders
+        bestId = candidate.id
+        bestRatio = scored.ratio
+      }
+    }
+    this.occluderIds = new Set(bestOcc)
+    this.lastViewId = bestId
+    this.lastScore = bestRatio
+    return bestDir
+  }
+
+  /** Keep the current orbit when the part is already easy to see. */
+  private directionOrBest(center: THREE.Vector3, radius: number, names: string[]): THREE.Vector3 {
+    const best = this.chooseViewDirection(center, radius, names)
+    const current = this.camera.position.clone().sub(this.controls.target)
+    if (current.lengthSq() < 1e-6) return best
+    current.normalize()
+    const currentScore = this.scoreDirection(center, radius, current, names)
+    if (currentScore.ratio >= 0.72 && currentScore.ratio + 0.05 >= this.lastScore) {
+      this.occluderIds = new Set(currentScore.occluders)
+      this.lastViewId = 'kept'
+      return current
+    }
+    return best
+  }
+
+  private scoreDirection(
+    center: THREE.Vector3,
+    radius: number,
+    dir: THREE.Vector3,
+    names: string[],
+  ): { ratio: number; occluders: string[] } {
+    const target = new Set(names)
+    const kind = this.kindByName.get(names[0] ?? '') ?? 'bone'
+    const up = Math.abs(dir.y) > 0.85 ? new THREE.Vector3(1, 0, 0) : new THREE.Vector3(0, 1, 0)
+    const tangent = new THREE.Vector3().crossVectors(dir, up).normalize()
+    const bitangent = new THREE.Vector3().crossVectors(dir, tangent).normalize()
+    const reach = Math.max(radius * 3.2, 0.9)
+    const samples: Array<{ at: THREE.Vector3; w: number }> = [
+      { at: center.clone(), w: 2 },
+      { at: center.clone().addScaledVector(tangent, radius * 0.42), w: 1 },
+      { at: center.clone().addScaledVector(tangent, radius * -0.42), w: 1 },
+      { at: center.clone().addScaledVector(bitangent, radius * 0.42), w: 1 },
+      { at: center.clone().addScaledVector(bitangent, radius * -0.42), w: 1 },
+    ]
+    const meshes: THREE.Object3D[] = []
+    const reachLimit = reach + radius * 1.4
+    const scale = new THREE.Vector3()
+    const worldCenter = new THREE.Vector3()
+    for (const mesh of this.meshByName.values()) {
+      if (!mesh.visible || mesh.name === 'diaphragm') continue
+      const meshKind = this.kindByName.get(mesh.name) ?? 'bone'
+      if (meshKind !== kind && !target.has(mesh.name)) continue
+      if (!mesh.geometry.boundingSphere) mesh.geometry.computeBoundingSphere()
+      const sphere = mesh.geometry.boundingSphere
+      if (!sphere) continue
+      worldCenter.copy(sphere.center).applyMatrix4(mesh.matrixWorld)
+      mesh.getWorldScale(scale)
+      const worldR = sphere.radius * Math.max(scale.x, scale.y, scale.z)
+      if (worldCenter.distanceTo(center) > reachLimit + worldR) continue
+      meshes.push(mesh)
+    }
+    let weight = 0
+    let visible = 0
+    const blocked = new Map<string, number>()
+    const savedFar = this.raycaster.far
+    for (const sample of samples) {
+      const origin = sample.at.clone().addScaledVector(dir, reach)
+      this.raycaster.set(origin, sample.at.clone().sub(origin).normalize())
+      this.raycaster.far = reach + radius * 0.35
+      const hits = this.raycaster.intersectObjects(meshes, false)
+      weight += sample.w
+      for (const hit of hits) {
+        const hitName = hit.object.name
+        if (!hitName) continue
+        if (target.has(hitName)) {
+          visible += sample.w
+          break
+        }
+        if ((this.kindByName.get(hitName) ?? 'bone') === kind) {
+          blocked.set(hitName, (blocked.get(hitName) ?? 0) + sample.w)
+        }
+      }
+    }
+    this.raycaster.far = savedFar
+    return {
+      ratio: weight > 0 ? visible / weight : 0,
+      occluders: [...blocked.keys()],
+    }
   }
 
   dispose(): void {
