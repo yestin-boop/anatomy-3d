@@ -193,6 +193,11 @@ async function main() {
         true,
       )
 
+    if (process.env.QA_ASSERT_DELTOID === '1') {
+      await assertDeltoidScene(cdp, quiz)
+      return
+    }
+
     const targets = [
       ['muscles', 'vastus_medialis', 'vastus-medialis'],
       ['muscles', 'adductor_longus', 'adductor-longus'],
@@ -267,6 +272,92 @@ async function main() {
     }
   } finally {
     chrome.kill('SIGKILL')
+  }
+}
+
+function assertDeltoid(report, label) {
+  const view = report.viewId
+  const cam = report.camera?.x
+  const tgt = report.target?.x
+  const okView = view === 'posterior-lateral' || view === 'lateral'
+  const sameSide = typeof cam === 'number' && typeof tgt === 'number' && cam * tgt > 0
+  if (!okView || !sameSide) {
+    throw new Error(
+      `${label}: expected posterior-lateral or lateral from the muscle's own side, got ${view} camera.x ${cam} target.x ${tgt}`,
+    )
+  }
+  console.log(
+    `ok ${label} ${view} camera (${report.camera.x}, ${report.camera.y}, ${report.camera.z}) target (${report.target.x}, ${report.target.y}, ${report.target.z})`,
+  )
+}
+
+async function assertDeltoidScene(cdp, quiz) {
+  const layouts = [
+    ['390x844', 390, 844, true, 0],
+    ['390x544-keyboard', 390, 844, true, 300],
+    ['390x544', 390, 544, true, 0],
+    ['844x390', 844, 390, true, 0],
+    ['844x390-kb200', 844, 390, true, 200],
+    ['844x390-kb290', 844, 390, true, 290],
+    ['820x1180', 820, 1180, true, 0],
+    ['1440x900', 1440, 900, false, 0],
+  ]
+  for (const [label, width, height, mobile, keyboard] of layouts) {
+    await setViewport(cdp, width, height, mobile)
+    await delay(300)
+    const report = await quiz('muscles', 'deltoid', keyboard)
+    assertDeltoid(report, label)
+    const png = await cdp.send('Page.captureScreenshot', { format: 'png' })
+    await writeFile(`${OUT}/deltoid-${label}.png`, Buffer.from(png.data, 'base64'))
+  }
+
+  await setViewport(cdp, 390, 844, true)
+  await delay(200)
+  const order = [
+    ['muscles', 'deltoid'],
+    ['muscles', 'flexor_carpi_radialis'],
+    ['muscles', 'deltoid'],
+    ['bones', 'femur'],
+    ['muscles', 'deltoid'],
+  ]
+  const poses = []
+  for (const [subject, id] of order) {
+    const report = await quiz(subject, id, 0)
+    if (id === 'deltoid') {
+      assertDeltoid(report, `order-${poses.length}`)
+      poses.push(report)
+    }
+  }
+  const view = poses[0].viewId
+  if (!poses.every((row) => row.viewId === view)) {
+    throw new Error(`deltoid view changed across the run order: ${poses.map((row) => row.viewId).join(', ')}`)
+  }
+  const cam0 = poses[0].camera.x
+  if (!poses.every((row) => Math.abs(row.camera.x - cam0) < 0.05)) {
+    throw new Error(`deltoid camera moved across the run order: ${poses.map((row) => row.camera.x).join(', ')}`)
+  }
+
+  const expect = [
+    ['muscles', 'vastus_medialis', ['anterior-medial']],
+    ['muscles', 'adductor_longus', ['anterior-medial']],
+    ['muscles', 'gluteus_maximus', ['posterior', 'posterior-lateral']],
+    ['muscles', 'longissimus', ['posterior', 'posterior-lateral']],
+    ['muscles', 'flexor_carpi_radialis', ['anterior-lateral', 'anterior']],
+    ['bones', 'femur', ['anterior-medial']],
+    ['bones', 'scaphoid', ['anterior-lateral', 'anterior', 'lateral']],
+    ['bones', 'rib11', ['anterior-medial', 'anterior', 'lateral', 'posterior']],
+  ]
+  for (const [subject, id, views] of expect) {
+    const report = await quiz(subject, id, 0)
+    if (!views.includes(report.viewId)) {
+      throw new Error(`${id} view changed to ${report.viewId} (camera.x ${report.camera.x})`)
+    }
+    if (id === 'flexor_carpi_radialis' && !(report.camera.z > 0 && report.camera.z > Math.abs(report.camera.x) * 0.4)) {
+      throw new Error(
+        `flexor carpi radialis is still a side-on sliver: camera (${report.camera.x}, ${report.camera.z})`,
+      )
+    }
+    console.log(`ok ${id} ${report.viewId} camera.x ${report.camera.x} camera.z ${report.camera.z}`)
   }
 }
 

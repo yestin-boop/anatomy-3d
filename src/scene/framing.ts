@@ -37,6 +37,17 @@ export type ViewCandidate = {
   prior: number
 }
 
+/**
+ * Outer edge of the target box, plus which side the framed meshes belong to.
+ * Laterality uses this edge: a deltoid centre can sit near the clavicle while
+ * the muscle still reaches the outside of the shoulder.
+ */
+export type ViewSpan = {
+  minX: number
+  maxX: number
+  side?: 'l' | 'r' | null
+}
+
 function clamp(n: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, n))
 }
@@ -248,14 +259,24 @@ export function fitDistanceToExtents(opts: {
  * posterior view for a posterior muscle, and an outside view for a
  * far-lateral part. Occlusion scoring adds to these priors.
  */
-export function anatomicalViewCandidates(center: Vec3, bodyHalfWidth: number): ViewCandidate[] {
+export function anatomicalViewCandidates(
+  center: Vec3,
+  bodyHalfWidth: number,
+  span?: ViewSpan,
+): ViewCandidate[] {
   const half = Math.max(bodyHalfWidth, 0.2)
   const ax = center.x
   const az = center.z
-  // Only a narrow strip on the midline is unsided. A medial thigh muscle
-  // (adductor longus, about 0.09 off the midline) is still a sided target.
-  const lateralSign = Math.abs(ax) < Math.min(half * 0.12, 0.06) ? 0 : Math.sign(ax)
+  // Mesh side wins over the centre. The deltoid's centre can sit near the
+  // clavicle (x about 0.15) while every framed mesh is still the left shoulder.
+  const lateralSign =
+    span?.side === 'l' ? 1
+    : span?.side === 'r' ? -1
+    : Math.abs(ax) < Math.min(half * 0.12, 0.06) ? 0
+    : Math.sign(ax)
   const medial = -lateralSign
+  const outerAbs = span ? Math.max(Math.abs(span.minX), Math.abs(span.maxX)) : Math.abs(ax)
+  const reach = Math.max(Math.abs(ax), outerAbs)
   const lateralness = clamp(Math.abs(ax) / half, 0, 1)
   // A centre near the coronal plane is not "posterior". Vastus medialis and
   // the adductors sit close to z = 0. A centre behind about z = -0.1
@@ -266,17 +287,24 @@ export function anatomicalViewCandidates(center: Vec3, bodyHalfWidth: number): V
   const sided = lateralSign !== 0
   const medialWeight = sided ? clamp(1 - lateralness / 0.55, 0, 1) : 0
   const lateralWeight = sided ? clamp((lateralness - 0.35) / 0.45, 0, 1) : 0
-  // Shoulder and other far-lateral parts (deltoid) must not be viewed from
-  // across the torso. A medial thigh muscle sits close to the midline and
-  // still prefers an anterior-medial camera.
-  const farLateral = sided && (lateralness >= 0.45 || (Math.abs(ax) >= 0.3 && center.y > 0.65))
-  const shoulder =
-    clamp((center.y - 0.55) / 0.4, 0, 1) * clamp((Math.abs(ax) - 0.2) / 0.16, 0, 1)
+  // A shoulder-height part that is not already a back muscle (erector) or a
+  // front chest muscle (pectoralis) is viewed from its own side. The outer
+  // edge counts, so a medial centre with a lateral reach still qualifies.
+  const shoulderCap = center.y > 0.9 && reach >= 0.08 && az <= 0.02 && posteriorness < 0.35
+  const farLateral =
+    sided && (lateralness >= 0.45 || (Math.abs(ax) >= 0.3 && center.y > 0.65) || shoulderCap)
+  const shoulder = shoulderCap
+    ? 1
+    : clamp((center.y - 0.55) / 0.4, 0, 1) * clamp((reach - 0.2) / 0.16, 0, 1)
+  // A far-lateral forearm seen from the side is a thin sliver. Bring that
+  // camera forward; the thigh's anterior-lateral angle stays where it was.
+  const forearm =
+    !shoulderCap && center.y < 0.75 && center.y > -0.05 && lateralness >= 0.45 && Math.abs(az) < 0.08
 
   const out: ViewCandidate[] = []
   const push = (id: string, x: number, y: number, z: number, prior: number) => {
     const dir = norm(x, y, z)
-    if (farLateral && dir.x * ax < -0.04) return
+    if (farLateral && lateralSign !== 0 && dir.x * lateralSign < -0.04) return
     out.push({ id, dir, prior })
   }
 
@@ -293,9 +321,9 @@ export function anatomicalViewCandidates(center: Vec3, bodyHalfWidth: number): V
     )
     push(
       'anterior-lateral',
-      lateralSign * 0.9,
+      lateralSign * (forearm ? 0.4 : 0.9),
       0.22,
-      0.62,
+      forearm ? 0.95 : 0.62,
       (0.1 + anteriorness * 0.16 + lateralWeight * 0.46) * front,
     )
     push(
@@ -336,16 +364,28 @@ export function anatomicalViewCandidates(center: Vec3, bodyHalfWidth: number): V
  * of the body. Medial parts may still be seen from across the midline.
  * `dir` points from the target toward the camera.
  */
-export function cameraOnSameSide(center: Vec3, dir: Vec3, bodyHalfWidth: number): boolean {
+export function cameraOnSameSide(
+  center: Vec3,
+  dir: Vec3,
+  bodyHalfWidth: number,
+  span?: ViewSpan,
+): boolean {
   const half = Math.max(bodyHalfWidth, 0.2)
   const ax = center.x
-  const farLateral = Math.abs(ax) / half >= 0.45 || (Math.abs(ax) >= 0.3 && center.y > 0.65)
+  const az = center.z
+  const outerAbs = span ? Math.max(Math.abs(span.minX), Math.abs(span.maxX)) : Math.abs(ax)
+  const reach = Math.max(Math.abs(ax), outerAbs)
+  const posteriorness = clamp((-az - 0.1) / 0.16, 0, 1)
+  const shoulderCap = center.y > 0.9 && reach >= 0.08 && az <= 0.02 && posteriorness < 0.35
+  const farLateral = Math.abs(ax) / half >= 0.45 || (Math.abs(ax) >= 0.3 && center.y > 0.65) || shoulderCap
   if (!farLateral) return true
-  return dir.x * ax >= -0.04
+  const sign = span?.side === 'l' ? 1 : span?.side === 'r' ? -1 : Math.sign(ax)
+  if (!sign) return true
+  return dir.x * sign >= -0.04
 }
 
-export function preferredViewId(center: Vec3, bodyHalfWidth: number): string {
-  const candidates = anatomicalViewCandidates(center, bodyHalfWidth)
+export function preferredViewId(center: Vec3, bodyHalfWidth: number, span?: ViewSpan): string {
+  const candidates = anatomicalViewCandidates(center, bodyHalfWidth, span)
   let best = candidates[0]
   if (!best) return 'anterior'
   for (const c of candidates) {

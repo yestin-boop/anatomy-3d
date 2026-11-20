@@ -302,14 +302,18 @@ assert(
   `a hip muscle behind the coronal plane prefers a back view (got ${gluteId})`,
 )
 
-const deltoid = { x: 0.38, y: 1.15, z: -0.12 }
-const flexor = { x: 0.55, y: 0.3, z: 0.02 }
+// Live left deltoid: the framed centre sits near the clavicle, around
+// x 0.15, y 1.2, z -0.11. The box still reaches the outside of the shoulder
+// (about x 0.20 to 0.56). A test centre of x 0.38 hides that.
+const deltoid = { x: 0.15, y: 1.2, z: -0.11 }
+const deltoidSpan = { minX: 0.204, maxX: 0.559, side: 'l' as const }
+const flexor = { x: 0.56, y: 0.34, z: -0.01 }
 const femur = { x: 0.22, y: -0.45, z: 0.02 }
-const deltoidViews = [preferredViewId(deltoid, half)]
+const deltoidViews = [preferredViewId(deltoid, half, deltoidSpan)]
 preferredViewId(flexor, half)
-deltoidViews.push(preferredViewId(deltoid, half))
+deltoidViews.push(preferredViewId(deltoid, half, deltoidSpan))
 preferredViewId(femur, half)
-deltoidViews.push(preferredViewId(deltoid, half))
+deltoidViews.push(preferredViewId(deltoid, half, deltoidSpan))
 assert(
   deltoidViews.every((id) => id === deltoidViews[0]),
   `deltoid view does not depend on the previous target (got ${deltoidViews.join(', ')})`,
@@ -318,13 +322,33 @@ assert(
   deltoidViews[0] === 'posterior-lateral' || deltoidViews[0] === 'lateral',
   `deltoid prefers a same-side lateral view (got ${deltoidViews[0]})`,
 )
-for (const candidate of anatomicalViewCandidates(deltoid, half)) {
+for (const candidate of anatomicalViewCandidates(deltoid, half, deltoidSpan)) {
   assert(
-    cameraOnSameSide(deltoid, candidate.dir, half),
+    cameraOnSameSide(deltoid, candidate.dir, half, deltoidSpan),
     `deltoid candidate ${candidate.id} is not viewed from the opposite side`,
   )
   assert(candidate.dir.x > 0, `deltoid candidate ${candidate.id} camera stays on the muscle's side`)
 }
+const bareDeltoid = preferredViewId(deltoid, half)
+assert(
+  bareDeltoid === 'posterior-lateral' || bareDeltoid === 'lateral',
+  `a shoulder-height centre at x 0.15 is same-side even before the box is known (got ${bareDeltoid})`,
+)
+
+const erector = preferredViewId(
+  { x: 0.084, y: 0.964, z: -0.174 },
+  half,
+  { minX: -0.002, maxX: 0.169, side: 'l' },
+)
+assert(
+  erector === 'posterior' || erector === 'posterior-lateral',
+  `longissimus stays a back view (got ${erector})`,
+)
+const fcrDir = anatomicalViewCandidates(flexor, half).find((c) => c.id === 'anterior-lateral')
+assert(
+  fcrDir != null && fcrDir.dir.z > fcrDir.dir.x && fcrDir.dir.x > 0,
+  'flexor carpi radialis is seen from the front of its own side',
+)
 
 const medial = anatomicalViewCandidates({ x: -0.22, y: -0.7, z: 0.18 }, half).find(
   (c) => c.id === 'anterior-medial',

@@ -10,6 +10,7 @@ import {
   anatomicalViewCandidates,
   boxViewExtents,
   cameraOnSameSide,
+  type ViewSpan,
   fitDistanceToExtents,
   insetsChanged,
   namesForOneSide,
@@ -792,7 +793,7 @@ export class ThoraxScene {
     const size = box.getSize(new THREE.Vector3())
     const center = box.getCenter(new THREE.Vector3())
     const viewRadius = Math.max(size.x, size.y, size.z, VIEW_PICK_MIN_SPAN) * 0.5
-    const dir = this.chooseViewDirection(center, viewRadius, present)
+    const dir = this.chooseViewDirection(center, viewRadius, present, box)
     const dist = this.distanceForBox(box, dir)
     const endPos = center.clone().addScaledVector(dir, dist)
     this.focusTarget.copy(center)
@@ -1022,7 +1023,7 @@ export class ThoraxScene {
     const center = box.getCenter(new THREE.Vector3())
     const size = box.getSize(new THREE.Vector3())
     const viewRadius = Math.max(size.x, size.y, size.z, VIEW_PICK_MIN_SPAN) * 0.5
-    const dir = this.directionOrBest(center, viewRadius, present)
+    const dir = this.directionOrBest(center, viewRadius, present, box)
     const dist = this.distanceForBox(box, dir)
     const endPos = center.clone().addScaledVector(dir, dist)
 
@@ -1680,13 +1681,35 @@ export class ThoraxScene {
     this.camera.setViewOffset(off.fullWidth, off.fullHeight, off.offsetX, off.offsetY, off.width, off.height)
   }
 
-  private chooseViewDirection(center: THREE.Vector3, radius: number, names: string[]): THREE.Vector3 {
+  private viewSpan(box: THREE.Box3, names: string[]): ViewSpan {
+    let left = 0
+    let right = 0
+    for (const name of names) {
+      const side = meshPickSide(name)
+      if (side === 'l') left += 1
+      else if (side === 'r') right += 1
+    }
+    return {
+      minX: box.min.x,
+      maxX: box.max.x,
+      side: left > 0 && right === 0 ? 'l' : right > 0 && left === 0 ? 'r' : null,
+    }
+  }
+
+  private chooseViewDirection(
+    center: THREE.Vector3,
+    radius: number,
+    names: string[],
+    box: THREE.Box3,
+  ): THREE.Vector3 {
     const half = Math.max(this.lastBboxSize.x * 0.5, 0.35)
     const at = { x: center.x, y: center.y, z: center.z }
+    const span = this.viewSpan(box, names)
     // Priors and the same-side rule decide the shortlist. Occlusion only
     // breaks ties among those. The current camera and the previous question's
-    // fade are not inputs.
-    const ranked = anatomicalViewCandidates(at, half)
+    // fade are not inputs. Side comes from the mesh names and the outer edge
+    // of the box, not from a centre that can sit on the clavicle.
+    const ranked = anatomicalViewCandidates(at, half, span)
       .sort((a, b) => b.prior - a.prior || a.id.localeCompare(b.id))
       .slice(0, 4)
     let bestDir = new THREE.Vector3(0, 0.16, 1).normalize()
@@ -1722,17 +1745,23 @@ export class ThoraxScene {
    * of a posterior muscle, a look through the torso, or the previous target's
    * angle when that angle is blocked.
    */
-  private directionOrBest(center: THREE.Vector3, radius: number, names: string[]): THREE.Vector3 {
-    const best = this.chooseViewDirection(center, radius, names)
+  private directionOrBest(
+    center: THREE.Vector3,
+    radius: number,
+    names: string[],
+    box: THREE.Box3,
+  ): THREE.Vector3 {
+    const best = this.chooseViewDirection(center, radius, names, box)
     const half = Math.max(this.lastBboxSize.x * 0.5, 0.35)
     const at = { x: center.x, y: center.y, z: center.z }
+    const span = this.viewSpan(box, names)
     const strongPosterior = this.lastViewId.startsWith('posterior') && this.lastPrior >= 0.34
     if (strongPosterior) return best
     const current = this.camera.position.clone().sub(this.controls.target)
     if (current.lengthSq() < 1e-6) return best
     current.normalize()
     const currentDir = { x: current.x, y: current.y, z: current.z }
-    if (!cameraOnSameSide(at, currentDir, half)) return best
+    if (!cameraOnSameSide(at, currentDir, half, span)) return best
     const currentScore = this.scoreDirection(center, radius, current, names)
     if (currentScore.occluded >= 0.45) return best
     if (currentScore.ratio >= 0.72 && currentScore.ratio + 0.05 >= this.lastScore) {
