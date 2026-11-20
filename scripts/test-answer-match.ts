@@ -4,6 +4,11 @@
  */
 import { matchAliases, normalizeAnswerText } from '../src/data/answerMatch.ts'
 import {
+  AXIAL_BONES,
+  COMMON_BONE_IDS,
+  filterCommonBones,
+} from '../src/data/axialBones.ts'
+import {
   COMMON_MUSCLE_IDS,
   MUSCLES,
   filterCommonMuscles,
@@ -182,6 +187,74 @@ for (const m of commonMuscles) {
   lastCatalogIndex = idx
 }
 assert(catalogOrder, 'filterCommonMuscles follows MUSCLES catalog order')
+
+// ——— Common bone preset ———
+// HPHS4109 Skeletal System & Joints names these; only pack ids are included.
+assert(COMMON_BONE_IDS.length === 53, 'common bone list length is 53')
+assert(
+  new Set(COMMON_BONE_IDS).size === COMMON_BONE_IDS.length,
+  'common bone list has no duplicates',
+)
+const boneIds = new Set(AXIAL_BONES.map((b) => b.id))
+for (const id of COMMON_BONE_IDS) {
+  assert(boneIds.has(id), `common bone id exists on AXIAL_BONES: ${id}`)
+}
+const commonBones = filterCommonBones()
+assert(
+  commonBones.length === COMMON_BONE_IDS.length,
+  'filterCommonBones length matches the common list',
+)
+const commonBoneIds = commonBones.map((b) => b.id)
+for (const id of COMMON_BONE_IDS) {
+  assert(commonBoneIds.includes(id), `filterCommonBones includes ${id}`)
+}
+for (const id of [
+  'frontal',
+  'mandible',
+  'c1',
+  'c2',
+  'sacrum',
+  'sternum_body',
+  'xiphoid',
+  'rib1',
+  'rib5',
+  'rib12',
+  'clavicle',
+  'scaphoid',
+  'lunate',
+  'triquetrum',
+  'hamate',
+  'metacarpals',
+  'hand_phalanges',
+  'hip',
+  'femur',
+  'patella',
+  'talus',
+  'calcaneus',
+  'navicular',
+  'cuneiform_intermediate',
+  'metatarsals',
+  'foot_phalanges',
+]) {
+  assert(commonBoneIds.includes(id), `common bones include the named pack bone ${id}`)
+}
+assert(!commonBoneIds.includes('c7'), 'common bones skip an unnamed cervical vertebra')
+assert(!commonBoneIds.includes('t6'), 'common bones skip an unnamed thoracic vertebra')
+assert(!commonBoneIds.includes('l5'), 'common bones skip an unnamed lumbar vertebra')
+assert(!commonBoneIds.includes('manubrium'), 'common bones skip the unnamed manubrium')
+assert(!commonBoneIds.includes('metacarpal3'), 'common bones skip an individual metacarpal')
+assert(!commonBoneIds.includes('metatarsal1'), 'common bones skip an individual metatarsal')
+assert(!boneIds.has('hyoid'), 'hyoid is named in the notes and absent from the pack')
+assert(!boneIds.has('coccyx'), 'coccyx is named in the notes and absent from the pack')
+let lastBoneIndex = -1
+let boneOrder = true
+for (const bone of commonBones) {
+  const idx = AXIAL_BONES.findIndex((item) => item.id === bone.id)
+  if (idx <= lastBoneIndex) boneOrder = false
+  lastBoneIndex = idx
+}
+assert(boneOrder, 'filterCommonBones follows AXIAL_BONES catalog order')
+assert(commonBones.length < AXIAL_BONES.length, 'common bones are a subset of the pack')
 
 if (failed) {
   console.error(`\n${passed} passed, ${failed} failed`)

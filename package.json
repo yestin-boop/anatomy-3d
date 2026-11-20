@@ -7,7 +7,7 @@
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
-    "test": "node --experimental-strip-types --import ./scripts/register-ts-ext.mjs scripts/test-answer-match.ts && node --experimental-strip-types --import ./scripts/register-ts-ext.mjs scripts/test-quiz-keyboard.ts"
+    "test": "node --experimental-strip-types --import ./scripts/register-ts-ext.mjs scripts/test-answer-match.ts && node --experimental-strip-types --import ./scripts/register-ts-ext.mjs scripts/test-quiz-keyboard.ts && node --experimental-strip-types --import ./scripts/register-ts-ext.mjs scripts/test-framing.ts"
   },
   "dependencies": {
     "three": "^0.170.0"
