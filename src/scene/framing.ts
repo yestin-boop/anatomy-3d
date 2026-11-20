@@ -252,7 +252,9 @@ export function anatomicalViewCandidates(center: Vec3, bodyHalfWidth: number): V
   const half = Math.max(bodyHalfWidth, 0.2)
   const ax = center.x
   const az = center.z
-  const lateralSign = Math.abs(ax) < half * 0.12 ? 0 : Math.sign(ax)
+  // Only a narrow strip on the midline is unsided. A medial thigh muscle
+  // (adductor longus, about 0.09 off the midline) is still a sided target.
+  const lateralSign = Math.abs(ax) < Math.min(half * 0.12, 0.06) ? 0 : Math.sign(ax)
   const medial = -lateralSign
   const lateralness = clamp(Math.abs(ax) / half, 0, 1)
   // A centre near the coronal plane is not "posterior". Vastus medialis and
@@ -264,10 +266,18 @@ export function anatomicalViewCandidates(center: Vec3, bodyHalfWidth: number): V
   const sided = lateralSign !== 0
   const medialWeight = sided ? clamp(1 - lateralness / 0.55, 0, 1) : 0
   const lateralWeight = sided ? clamp((lateralness - 0.35) / 0.45, 0, 1) : 0
+  // Shoulder and other far-lateral parts (deltoid) must not be viewed from
+  // across the torso. A medial thigh muscle sits close to the midline and
+  // still prefers an anterior-medial camera.
+  const farLateral = sided && (lateralness >= 0.45 || (Math.abs(ax) >= 0.3 && center.y > 0.65))
+  const shoulder =
+    clamp((center.y - 0.55) / 0.4, 0, 1) * clamp((Math.abs(ax) - 0.2) / 0.16, 0, 1)
 
   const out: ViewCandidate[] = []
   const push = (id: string, x: number, y: number, z: number, prior: number) => {
-    out.push({ id, dir: norm(x, y, z), prior })
+    const dir = norm(x, y, z)
+    if (farLateral && dir.x * ax < -0.04) return
+    out.push({ id, dir, prior })
   }
 
   push('anterior', lateralSign * 0.16, 0.18, 1, (0.08 + anteriorness * 0.34) * front)
@@ -293,7 +303,10 @@ export function anatomicalViewCandidates(center: Vec3, bodyHalfWidth: number): V
       lateralSign * 0.72,
       0.24,
       -0.82,
-      0.12 + posteriorness * (0.4 + lateralWeight * 0.22),
+      0.12 +
+        posteriorness * (0.4 + lateralWeight * 0.22) +
+        shoulder * 0.62 +
+        (farLateral ? 0.08 : 0),
     )
     push(
       'posterior-medial',
@@ -307,7 +320,7 @@ export function anatomicalViewCandidates(center: Vec3, bodyHalfWidth: number): V
       lateralSign,
       0.18,
       az >= 0 ? 0.12 : -0.12,
-      0.08 + lateralWeight * 0.28,
+      0.08 + lateralWeight * 0.28 + shoulder * 0.28,
     )
   }
 
@@ -316,6 +329,19 @@ export function anatomicalViewCandidates(center: Vec3, bodyHalfWidth: number): V
   }
 
   return out
+}
+
+/**
+ * A far-lateral target (deltoid, outer hip) is only viewed from its own side
+ * of the body. Medial parts may still be seen from across the midline.
+ * `dir` points from the target toward the camera.
+ */
+export function cameraOnSameSide(center: Vec3, dir: Vec3, bodyHalfWidth: number): boolean {
+  const half = Math.max(bodyHalfWidth, 0.2)
+  const ax = center.x
+  const farLateral = Math.abs(ax) / half >= 0.45 || (Math.abs(ax) >= 0.3 && center.y > 0.65)
+  if (!farLateral) return true
+  return dir.x * ax >= -0.04
 }
 
 export function preferredViewId(center: Vec3, bodyHalfWidth: number): string {

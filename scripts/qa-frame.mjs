@@ -217,6 +217,25 @@ async function main() {
       }
     }
 
+    const sequence = [
+      ['muscles', 'deltoid', 'seq-1-deltoid'],
+      ['muscles', 'flexor_carpi_radialis', 'seq-2-flexor'],
+      ['muscles', 'deltoid', 'seq-3-deltoid'],
+      ['bones', 'femur', 'seq-4-femur'],
+      ['muscles', 'deltoid', 'seq-5-deltoid'],
+    ]
+    if (sequence.some(([, , name]) => want(name))) {
+      for (const [subject, id, name] of sequence) {
+        await shot(cdp, name, 390, 844, true, () => quiz(subject, id, 0))
+      }
+    }
+    if (want('iphone-view-glute')) {
+      await shot(cdp, 'iphone-view-glute', 390, 844, true, async () => {
+        await cdp.evaluate(`window.__anatomyQA.showView('muscles', 'vastus_medialis')`, true)
+        return cdp.evaluate(`window.__anatomyQA.showView('muscles', 'gluteus_maximus')`, true)
+      })
+    }
+
     const desktopWanted = targets.some(([, , slug]) => want(`desktop-${slug}`))
     if (desktopWanted) {
       await setViewport(cdp, 1440, 900, false)
@@ -242,9 +261,9 @@ async function main() {
     const ranked = records.filter((row) => row.report && typeof row.report.fillPct === 'number')
     ranked.sort((a, b) => a.name.localeCompare(b.name))
     for (const row of ranked) {
-      const band = row.report.fitBand
-      const bandNote = band ? ` band ${band.w}x${band.h}` : ''
-      console.log(`${String(row.report.fillPct).padStart(3)}%  ${row.name}${bandNote}`)
+      const view = row.report.viewId ? ` ${row.report.viewId}` : ''
+      const cam = row.report.camera ? ` camx ${row.report.camera.x}` : ''
+      console.log(`${String(row.report.fillPct).padStart(3)}%  ${row.name}${view}${cam}`)
     }
   } finally {
     chrome.kill('SIGKILL')

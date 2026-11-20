@@ -6,6 +6,7 @@ import * as THREE from 'three'
 import {
   anatomicalViewCandidates,
   boxViewExtents,
+  cameraOnSameSide,
   fitDistance,
   fitDistanceToExtents,
   insetsChanged,
@@ -289,11 +290,41 @@ assert(
   preferredViewId({ x: -0.22, y: -0.7, z: -0.06 }, half) === 'anterior-medial',
   'a medial thigh muscle near the coronal plane stays anterior-medial',
 )
+const adductorId = preferredViewId({ x: 0.09, y: -0.32, z: 0 }, half)
+assert(
+  adductorId === 'anterior-medial',
+  `an adductor just off the midline stays anterior-medial (got ${adductorId})`,
+)
+
 const gluteId = preferredViewId({ x: 0.17, y: 0.04, z: -0.2 }, half)
 assert(
   gluteId === 'posterior' || gluteId === 'posterior-lateral',
   `a hip muscle behind the coronal plane prefers a back view (got ${gluteId})`,
 )
+
+const deltoid = { x: 0.38, y: 1.15, z: -0.12 }
+const flexor = { x: 0.55, y: 0.3, z: 0.02 }
+const femur = { x: 0.22, y: -0.45, z: 0.02 }
+const deltoidViews = [preferredViewId(deltoid, half)]
+preferredViewId(flexor, half)
+deltoidViews.push(preferredViewId(deltoid, half))
+preferredViewId(femur, half)
+deltoidViews.push(preferredViewId(deltoid, half))
+assert(
+  deltoidViews.every((id) => id === deltoidViews[0]),
+  `deltoid view does not depend on the previous target (got ${deltoidViews.join(', ')})`,
+)
+assert(
+  deltoidViews[0] === 'posterior-lateral' || deltoidViews[0] === 'lateral',
+  `deltoid prefers a same-side lateral view (got ${deltoidViews[0]})`,
+)
+for (const candidate of anatomicalViewCandidates(deltoid, half)) {
+  assert(
+    cameraOnSameSide(deltoid, candidate.dir, half),
+    `deltoid candidate ${candidate.id} is not viewed from the opposite side`,
+  )
+  assert(candidate.dir.x > 0, `deltoid candidate ${candidate.id} camera stays on the muscle's side`)
+}
 
 const medial = anatomicalViewCandidates({ x: -0.22, y: -0.7, z: 0.18 }, half).find(
   (c) => c.id === 'anterior-medial',

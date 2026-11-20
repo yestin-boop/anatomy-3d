@@ -9,6 +9,7 @@ import { muscleVisibleAtLayer, type MuscleLayerFilter } from '../data/muscles'
 import {
   anatomicalViewCandidates,
   boxViewExtents,
+  cameraOnSameSide,
   fitDistanceToExtents,
   insetsChanged,
   namesForOneSide,
@@ -182,6 +183,12 @@ const PICK_MAX_DEPTH = 0.5
 /** Floor for tight framing of small parts (hand bones, cervical vertebrae). */
 const VIEW_MIN_DISTANCE = 0.28
 const DEFAULT_MIN_DISTANCE = 0.8
+/**
+ * View selection samples a disc around the target. A thin curved muscle's
+ * box diagonal is a poor radius for that disc (the samples miss the belly),
+ * so the disc uses half the longest side, and at least this span.
+ */
+const VIEW_PICK_MIN_SPAN = 0.4
 
 /** BodyParts3D pack is Z-up (cranial +Z). This Euler maps cranial → +Y, anterior → +Z. */
 export const UPRIGHT_EULER = { x: -Math.PI / 2, y: 0, z: 0 }
@@ -306,6 +313,7 @@ export class ThoraxScene {
   private occluderIds = new Set<string>()
   private lastViewId = 'anterior'
   private lastScore = 0
+  private lastPrior = 0
   private userOrbiting = false
   private holdUserOrbit = false
   private pendingRefit = false
@@ -783,8 +791,8 @@ export class ThoraxScene {
     }
     const size = box.getSize(new THREE.Vector3())
     const center = box.getCenter(new THREE.Vector3())
-    const radius = 0.5 * Math.max(size.length(), 0.08)
-    const dir = this.chooseViewDirection(center, radius, present)
+    const viewRadius = Math.max(size.x, size.y, size.z, VIEW_PICK_MIN_SPAN) * 0.5
+    const dir = this.chooseViewDirection(center, viewRadius, present)
     const dist = this.distanceForBox(box, dir)
     const endPos = center.clone().addScaledVector(dir, dist)
     this.focusTarget.copy(center)
@@ -1013,8 +1021,8 @@ export class ThoraxScene {
     this.holdUserOrbit = false
     const center = box.getCenter(new THREE.Vector3())
     const size = box.getSize(new THREE.Vector3())
-    const radius = 0.5 * Math.max(size.length(), 0.08)
-    const dir = this.directionOrBest(center, radius, present)
+    const viewRadius = Math.max(size.x, size.y, size.z, VIEW_PICK_MIN_SPAN) * 0.5
+    const dir = this.directionOrBest(center, viewRadius, present)
     const dist = this.distanceForBox(box, dir)
     const endPos = center.clone().addScaledVector(dir, dist)
 
@@ -1261,14 +1269,42 @@ export class ThoraxScene {
 
   private placeAttachmentMarkers(sites: ViewAttachmentSite[]): void {
     this.body.updateMatrixWorld(true)
+    const placed: {
+      point: THREE.Vector3
+      outward: THREE.Vector3
+      kind: 'origin' | 'insertion'
+      label: string
+    }[] = []
     for (const site of sites) {
-      const placed = this.nearestAttachmentPoint(site.muscleMeshes, site.boneMeshes, site.prefer)
-      if (!placed) {
+      const hit = this.nearestAttachmentPoint(site.muscleMeshes, site.boneMeshes, site.prefer)
+      if (!hit) {
         console.warn('[view] no attachment point for', site.label, site.muscleMeshes, site.boneMeshes)
         continue
       }
-      this.addMarker(placed.point, placed.outward, site.kind, site.label)
+      placed.push({ point: hit.point, outward: hit.outward, kind: site.kind, label: site.label })
     }
+    // Origin and insertion often land on nearly the same screen point
+    // (gluteus maximus: sacrum over femur). Shift the origin up and toward
+    // the midline, and the insertion down and outward, so the pills clear.
+    const nudged = new Set<number>()
+    for (let i = 0; i < placed.length; i++) {
+      for (let j = i + 1; j < placed.length; j++) {
+        const a = placed[i]!
+        const b = placed[j]!
+        if (a.kind === b.kind || nudged.has(i) || nudged.has(j)) continue
+        if (a.point.distanceTo(b.point) > 0.35) continue
+        const origin = a.kind === 'origin' ? a : b
+        const insertion = a.kind === 'insertion' ? a : b
+        const side = Math.sign(origin.point.x || insertion.point.x) || 1
+        origin.point.y += 0.08
+        origin.point.x -= side * 0.06
+        insertion.point.y -= 0.12
+        insertion.point.x += side * 0.1
+        nudged.add(i)
+        nudged.add(j)
+      }
+    }
+    for (const pin of placed) this.addMarker(pin.point, pin.outward, pin.kind, pin.label)
   }
 
   /**
@@ -1547,10 +1583,11 @@ export class ThoraxScene {
     )
     this.framedExtents = ext
     const limiting = Math.min(band.width, band.height)
-    // Under ~120px the keyboard has eaten the screen. Fit to a readable
-    // slice of the short side so the target fills that sliver, instead of
-    // zooming out until the whole body is a speck.
-    const minBandPx = limiting < 120 ? Math.max(120, Math.min(w, h) * 0.62) : 0
+    // A strip under ~90px (phone landscape with a tall keyboard) cannot hold
+    // an oversized target. Fit the whole box into that strip, even if the
+    // part is then small. A slightly taller short band can still use 120px
+    // so the part stays readable.
+    const minBandPx = limiting < 90 ? 0 : limiting < 120 ? 120 : 0
     return fitDistanceToExtents({
       halfWidth: ext.halfWidth,
       halfHeight: ext.halfHeight,
@@ -1566,7 +1603,9 @@ export class ThoraxScene {
       // A carpal-sized part stays far enough to keep the neighbouring bones in frame.
       contextHalf: 0.11,
       minDistance: VIEW_MIN_DISTANCE + 0.05,
-      maxDistance: 14,
+      // A ~50px strip needs a much longer pull-back before a thigh or the
+      // erector spinae fits inside it. Taller bands keep the usual cap.
+      maxDistance: limiting < 90 ? 48 : 14,
     })
   }
 
@@ -1643,41 +1682,59 @@ export class ThoraxScene {
 
   private chooseViewDirection(center: THREE.Vector3, radius: number, names: string[]): THREE.Vector3 {
     const half = Math.max(this.lastBboxSize.x * 0.5, 0.35)
-    const ranked = anatomicalViewCandidates({ x: center.x, y: center.y, z: center.z }, half)
-      .sort((a, b) => b.prior - a.prior)
+    const at = { x: center.x, y: center.y, z: center.z }
+    // Priors and the same-side rule decide the shortlist. Occlusion only
+    // breaks ties among those. The current camera and the previous question's
+    // fade are not inputs.
+    const ranked = anatomicalViewCandidates(at, half)
+      .sort((a, b) => b.prior - a.prior || a.id.localeCompare(b.id))
       .slice(0, 4)
     let bestDir = new THREE.Vector3(0, 0.16, 1).normalize()
     let bestScore = -Infinity
     let bestOcc: string[] = []
     let bestId = 'anterior'
     let bestRatio = 0
+    let bestPrior = 0
     for (const candidate of ranked) {
       const dir = new THREE.Vector3(candidate.dir.x, candidate.dir.y, candidate.dir.z)
       const scored = this.scoreDirection(center, radius, dir, names)
-      // Visibility can overturn a prior, but a clearly better angle
-      // (medial thigh, posterior hip) is not lost to a small ratio gap.
-      const score = scored.ratio * 0.7 + candidate.prior
-      if (score > bestScore) {
+      // A clearly better prior (medial thigh, posterior hip, same-side shoulder)
+      // is not lost to an occlusion gap. The ray ratio only breaks a close call.
+      const score = candidate.prior + scored.ratio * 0.12
+      if (score > bestScore || (score === bestScore && candidate.id.localeCompare(bestId) < 0)) {
         bestScore = score
         bestDir = dir
         bestOcc = scored.occluders
         bestId = candidate.id
         bestRatio = scored.ratio
+        bestPrior = candidate.prior
       }
     }
     this.occluderIds = new Set(bestOcc)
     this.lastViewId = bestId
     this.lastScore = bestRatio
+    this.lastPrior = bestPrior
     return bestDir
   }
 
-  /** Keep the current orbit when the part is already easy to see. */
+  /**
+   * View mode may keep an orbit the user already has, but not a front view
+   * of a posterior muscle, a look through the torso, or the previous target's
+   * angle when that angle is blocked.
+   */
   private directionOrBest(center: THREE.Vector3, radius: number, names: string[]): THREE.Vector3 {
     const best = this.chooseViewDirection(center, radius, names)
+    const half = Math.max(this.lastBboxSize.x * 0.5, 0.35)
+    const at = { x: center.x, y: center.y, z: center.z }
+    const strongPosterior = this.lastViewId.startsWith('posterior') && this.lastPrior >= 0.34
+    if (strongPosterior) return best
     const current = this.camera.position.clone().sub(this.controls.target)
     if (current.lengthSq() < 1e-6) return best
     current.normalize()
+    const currentDir = { x: current.x, y: current.y, z: current.z }
+    if (!cameraOnSameSide(at, currentDir, half)) return best
     const currentScore = this.scoreDirection(center, radius, current, names)
+    if (currentScore.occluded >= 0.45) return best
     if (currentScore.ratio >= 0.72 && currentScore.ratio + 0.05 >= this.lastScore) {
       this.occluderIds = new Set(currentScore.occluders)
       this.lastViewId = 'kept'
@@ -1691,7 +1748,7 @@ export class ThoraxScene {
     radius: number,
     dir: THREE.Vector3,
     names: string[],
-  ): { ratio: number; occluders: string[] } {
+  ): { ratio: number; occluded: number; occluders: string[] } {
     const target = new Set(names)
     const kind = this.kindByName.get(names[0] ?? '') ?? 'bone'
     const up = Math.abs(dir.y) > 0.85 ? new THREE.Vector3(1, 0, 0) : new THREE.Vector3(0, 1, 0)
@@ -1709,8 +1766,10 @@ export class ThoraxScene {
     const reachLimit = reach + radius * 1.4
     const scale = new THREE.Vector3()
     const worldCenter = new THREE.Vector3()
-    for (const mesh of this.meshByName.values()) {
-      if (!mesh.visible || mesh.name === 'diaphragm') continue
+    const ordered = [...this.meshByName.values()].sort((a, b) => a.name.localeCompare(b.name))
+    for (const mesh of ordered) {
+      // Visibility and the previous question's fade are not part of the angle.
+      if (mesh.name === 'diaphragm') continue
       const meshKind = this.kindByName.get(mesh.name) ?? 'bone'
       if (meshKind !== kind && !target.has(mesh.name)) continue
       if (!mesh.geometry.boundingSphere) mesh.geometry.computeBoundingSphere()
@@ -1724,6 +1783,7 @@ export class ThoraxScene {
     }
     let weight = 0
     let visible = 0
+    let occluded = 0
     const blocked = new Map<string, number>()
     const savedFar = this.raycaster.far
     for (const sample of samples) {
@@ -1732,22 +1792,26 @@ export class ThoraxScene {
       this.raycaster.far = reach + radius * 0.35
       const hits = this.raycaster.intersectObjects(meshes, false)
       weight += sample.w
+      let sawBlocker = false
       for (const hit of hits) {
         const hitName = hit.object.name
         if (!hitName) continue
         if (target.has(hitName)) {
           visible += sample.w
+          if (sawBlocker) occluded += sample.w
           break
         }
         if ((this.kindByName.get(hitName) ?? 'bone') === kind) {
           blocked.set(hitName, (blocked.get(hitName) ?? 0) + sample.w)
+          sawBlocker = true
         }
       }
     }
     this.raycaster.far = savedFar
     return {
       ratio: weight > 0 ? visible / weight : 0,
-      occluders: [...blocked.keys()],
+      occluded: weight > 0 ? occluded / weight : 0,
+      occluders: [...blocked.keys()].sort(),
     }
   }
 

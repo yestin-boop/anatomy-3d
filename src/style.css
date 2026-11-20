@@ -852,10 +852,12 @@ html.touch-quiz.phone-landscape.keyboard-open .view-filters.is-quiz {
 .view-pin--origin {
   background: #f0c56e;
   color: #2a1c00;
+  transform: translate(-85%, -220%);
 }
 .view-pin--insertion {
   background: #6ed0c6;
   color: #06221f;
+  transform: translate(-15%, 70%);
 }
 
 .chrome--top.is-view .chrome-center,
