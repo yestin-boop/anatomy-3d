@@ -128,6 +128,119 @@ export function fitDistance(opts: {
   return Math.max(distV, distH, opts.minDistance)
 }
 
+export type ViewExtents = {
+  /** Half-size of the box across the screen. */
+  halfWidth: number
+  /** Half-size of the box up the screen. */
+  halfHeight: number
+  /** How far the nearest corner sits toward the camera from the box centre. */
+  depth: number
+}
+
+/** Camera basis: `forward` points from the target toward the camera. */
+export function cameraBasis(dir: Vec3): { right: Vec3; up: Vec3; forward: Vec3 } {
+  const forward = norm(dir.x, dir.y, dir.z)
+  let right = norm(forward.z, 0, -forward.x) // world up × forward, flattened
+  if (Math.hypot(forward.x, forward.z) < 1e-4) right = { x: 1, y: 0, z: 0 }
+  const up = {
+    x: forward.y * right.z - forward.z * right.y,
+    y: forward.z * right.x - forward.x * right.z,
+    z: forward.x * right.y - forward.y * right.x,
+  }
+  const ul = Math.hypot(up.x, up.y, up.z) || 1
+  return { right, up: { x: up.x / ul, y: up.y / ul, z: up.z / ul }, forward }
+}
+
+/**
+ * Screen-aligned extents of an axis-aligned box. `half` is half the box
+ * size on the world axes. Depth is positive toward the camera.
+ */
+export function boxViewExtents(half: Vec3, dir: Vec3): ViewExtents {
+  const { right, up, forward } = cameraBasis(dir)
+  let halfWidth = 0
+  let halfHeight = 0
+  let depth = 0
+  for (const sx of [-1, 1]) {
+    for (const sy of [-1, 1]) {
+      for (const sz of [-1, 1]) {
+        const x = half.x * sx
+        const y = half.y * sy
+        const z = half.z * sz
+        halfWidth = Math.max(halfWidth, Math.abs(x * right.x + y * right.y + z * right.z))
+        halfHeight = Math.max(halfHeight, Math.abs(x * up.x + y * up.y + z * up.z))
+        depth = Math.max(depth, x * forward.x + y * forward.y + z * forward.z)
+      }
+    }
+  }
+  return { halfWidth, halfHeight, depth }
+}
+
+/**
+ * Distance so the projected box fills `fill` (default 62%) of the band's
+ * limiting side and still sits inside that band. Width and height are fitted
+ * separately, so a long thin muscle is not treated as a sphere that has to
+ * fit through the phone's narrow side. `depth` pulls the camera back enough
+ * that the near corner does not spill past the frame.
+ * A target smaller than `contextHalf` on both axes will not get closer than
+ * the distance that frames that context window.
+ */
+export function fitDistanceToExtents(opts: {
+  halfWidth: number
+  halfHeight: number
+  depth?: number
+  fovDeg: number
+  canvasWidth: number
+  canvasHeight: number
+  bandWidth: number
+  bandHeight: number
+  fill?: number
+  marginPx?: number
+  /** Fit as if the band were at least this tall/wide, so a keyboard sliver does not zoom out to the whole body. */
+  minBandPx?: number
+  contextHalf?: number
+  minDistance: number
+  maxDistance?: number
+}): number {
+  const fill = clamp(opts.fill ?? 0.62, 0.55, 0.7)
+  const canvasW = Math.max(opts.canvasWidth, 1)
+  const canvasH = Math.max(opts.canvasHeight, 1)
+  const margin = Math.max(0, opts.marginPx ?? 12)
+  const minBand = Math.max(0, opts.minBandPx ?? 0)
+  const bandW = clamp(
+    Math.max(opts.bandWidth, Math.min(minBand, canvasW)) - margin * 2,
+    canvasW * 0.12,
+    canvasW,
+  )
+  const bandH = clamp(
+    Math.max(opts.bandHeight, Math.min(minBand, canvasH)) - margin * 2,
+    canvasH * 0.12,
+    canvasH,
+  )
+  const depth = Math.max(0, opts.depth ?? 0)
+  const axis = (half: number, frac: number, fov: number) => {
+    const angle = 2 * Math.atan(Math.tan(fov / 2) * frac)
+    return half / Math.max(Math.tan((fill * angle) / 2), 1e-4) + depth
+  }
+  const vFov = (opts.fovDeg * Math.PI) / 180
+  const hFov = 2 * Math.atan(Math.tan(vFov / 2) * (canvasW / canvasH))
+  const halfW = Math.max(opts.halfWidth, 1e-4)
+  const halfH = Math.max(opts.halfHeight, 1e-4)
+  let dist = Math.max(
+    axis(halfH, bandH / canvasH, vFov),
+    axis(halfW, bandW / canvasW, hFov),
+    opts.minDistance,
+  )
+  const context = opts.contextHalf ?? 0
+  if (context > 0 && opts.halfWidth < context && opts.halfHeight < context) {
+    const contextDist = Math.max(
+      axis(context, bandH / canvasH, vFov),
+      axis(context, bandW / canvasW, hFov),
+    )
+    dist = Math.max(dist, contextDist)
+  }
+  return Math.min(dist, opts.maxDistance ?? 14)
+}
+
 /**
  * Candidate camera directions in the upright body frame
  * (cranial +Y, anterior +Z, the body's right +X).

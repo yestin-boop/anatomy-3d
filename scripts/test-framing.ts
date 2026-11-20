@@ -5,7 +5,9 @@
 import * as THREE from 'three'
 import {
   anatomicalViewCandidates,
+  boxViewExtents,
   fitDistance,
+  fitDistanceToExtents,
   insetsChanged,
   meshSide,
   namesForOneSide,
@@ -143,6 +145,123 @@ const narrow = fitDistance({
   minDistance: 0.33,
 })
 assert(narrow > wide, 'a narrow free column pulls the camera back')
+
+// A tall thin muscle must be fitted by its height, not as a sphere shoved through the phone's width.
+const thinSphere = fitDistance({
+  radius: 0.67,
+  fovDeg: 38,
+  canvasWidth: 390,
+  canvasHeight: 844,
+  bandWidth: 390,
+  bandHeight: 520,
+  fill: 0.62,
+  minDistance: 0.33,
+})
+const thinBox = fitDistanceToExtents({
+  halfWidth: 0.1,
+  halfHeight: 0.67,
+  depth: 0.06,
+  fovDeg: 38,
+  canvasWidth: 390,
+  canvasHeight: 844,
+  bandWidth: 390,
+  bandHeight: 520,
+  fill: 0.62,
+  marginPx: 14,
+  minDistance: 0.33,
+})
+assert(thinBox < thinSphere * 0.9, `tall thin target stays closer than a sphere fit (${thinBox.toFixed(2)} vs ${thinSphere.toFixed(2)})`)
+
+const wideRib = fitDistanceToExtents({
+  halfWidth: 0.42,
+  halfHeight: 0.12,
+  depth: 0.16,
+  fovDeg: 38,
+  canvasWidth: 1440,
+  canvasHeight: 900,
+  bandWidth: 1440,
+  bandHeight: 900,
+  fill: 0.62,
+  marginPx: 14,
+  minDistance: 0.33,
+})
+const flatRib = fitDistanceToExtents({
+  halfWidth: 0.42,
+  halfHeight: 0.12,
+  depth: 0,
+  fovDeg: 38,
+  canvasWidth: 1440,
+  canvasHeight: 900,
+  bandWidth: 1440,
+  bandHeight: 900,
+  fill: 0.62,
+  marginPx: 14,
+  minDistance: 0.33,
+})
+assert(wideRib > flatRib, 'depth toward the camera pulls back so the near end stays in frame')
+
+const carpal = fitDistanceToExtents({
+  halfWidth: 0.03,
+  halfHeight: 0.02,
+  depth: 0.01,
+  fovDeg: 38,
+  canvasWidth: 390,
+  canvasHeight: 844,
+  bandWidth: 390,
+  bandHeight: 520,
+  fill: 0.62,
+  contextHalf: 0.11,
+  minDistance: 0.33,
+})
+const carpalTight = fitDistanceToExtents({
+  halfWidth: 0.03,
+  halfHeight: 0.02,
+  depth: 0.01,
+  fovDeg: 38,
+  canvasWidth: 390,
+  canvasHeight: 844,
+  bandWidth: 390,
+  bandHeight: 520,
+  fill: 0.62,
+  contextHalf: 0,
+  minDistance: 0.33,
+})
+assert(carpal > carpalTight * 1.4, 'a carpal keeps enough distance to show the wrist around it')
+
+const sliver = fitDistanceToExtents({
+  halfWidth: 0.11,
+  halfHeight: 0.5,
+  depth: 0.19,
+  fovDeg: 38,
+  canvasWidth: 844,
+  canvasHeight: 390,
+  bandWidth: 844,
+  bandHeight: 40,
+  fill: 0.66,
+  marginPx: 12,
+  minDistance: 0.33,
+  maxDistance: 14,
+})
+const readable = fitDistanceToExtents({
+  halfWidth: 0.11,
+  halfHeight: 0.5,
+  depth: 0.19,
+  fovDeg: 38,
+  canvasWidth: 844,
+  canvasHeight: 390,
+  bandWidth: 844,
+  bandHeight: 40,
+  fill: 0.66,
+  marginPx: 12,
+  minBandPx: 120,
+  minDistance: 0.33,
+  maxDistance: 14,
+})
+assert(readable < sliver * 0.9, `a sub-120px band stays close enough to read (${readable.toFixed(2)} vs ${sliver.toFixed(2)})`)
+
+const anterior = boxViewExtents({ x: 0.1, y: 0.5, z: 0.08 }, { x: 0, y: 0, z: 1 })
+assert(anterior.halfHeight > 0.45 && anterior.halfWidth < 0.15, 'an anterior view of a tall box is tall on screen')
+assert(anterior.depth < 0.1, 'an anterior view has little depth toward the camera')
 
 const half = 0.9
 assert(

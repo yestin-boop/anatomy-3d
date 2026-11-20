@@ -1975,6 +1975,19 @@ let appliedInsets: FramingInsets = { top: -1, right: -1, bottom: -1, left: -1 }
 let appliedFraming = false
 let framingSyncTimer = 0
 
+function currentKeyboardInset(): number {
+  if (forcedKeyboardInset != null) return forcedKeyboardInset
+  const raw = getComputedStyle(document.documentElement).getPropertyValue('--keyboard-inset')
+  const n = Number.parseFloat(raw)
+  return Number.isFinite(n) ? n : 0
+}
+
+function syncHudChrome(): void {
+  const land = touchQuiz && window.innerWidth > window.innerHeight && window.innerHeight <= 520
+  document.documentElement.classList.toggle('phone-landscape', land)
+  document.documentElement.classList.toggle('keyboard-open', currentKeyboardInset() > 40)
+}
+
 function syncKeyboardInset(): void {
   const vv = window.visualViewport
   if (forcedKeyboardInset != null) {
@@ -1987,6 +2000,7 @@ function syncKeyboardInset(): void {
     const inset = Math.min(overlap, window.innerHeight * 0.62)
     document.documentElement.style.setProperty('--keyboard-inset', `${Math.round(inset)}px`)
   }
+  syncHudChrome()
   scheduleFramingSync()
 }
 if (window.visualViewport) {
@@ -2029,8 +2043,18 @@ function measureOcclusionInsets(): FramingInsets {
   }
 
   if (state.playing && !playHud.hidden) {
-    const rect = promptBlock.getBoundingClientRect()
-    if (rect.height > 8) bottom = Math.max(bottom, canvas.bottom - rect.top)
+    // The prompt text is translucent, so fitting above it made the target a
+    // small slice of the area the user can actually see. Reserve the keyboard
+    // and the solid Skip control; let the label overlay surrounding anatomy.
+    const keyboard = Math.max(0, currentKeyboardInset())
+    let control = 0
+    if (!skipBtn.hidden) {
+      const skip = skipBtn.getBoundingClientRect()
+      if (skip.height > 8 && skip.top > canvas.top + height * 0.35) {
+        control = Math.min(skip.height + 16, 72)
+      }
+    }
+    bottom = Math.max(bottom, keyboard + control)
   }
 
   if (state.viewing && !viewPanel.hidden) {
@@ -2045,12 +2069,24 @@ function measureOcclusionInsets(): FramingInsets {
     }
   }
 
-  return {
-    top: top > 0 ? top + gap : 0,
-    right: right > 0 ? right + gap : 0,
-    bottom: bottom > 0 ? bottom + gap : 0,
-    left: left > 0 ? left + gap : 0,
+  let topOut = top > 0 ? top + gap : 0
+  let rightOut = right > 0 ? right + gap : 0
+  let bottomOut = bottom > 0 ? bottom + gap : 0
+  let leftOut = left > 0 ? left + gap : 0
+
+  // Phone landscape plus a keyboard can leave a sliver. Drop the prompt so the
+  // target keeps the strip above the keyboard; the fit then refuses to treat
+  // a band under 120px as the whole frame.
+  if (
+    document.documentElement.classList.contains('phone-landscape') &&
+    height - topOut - bottomOut < 120
+  ) {
+    const keyboard = Math.min(Math.max(0, currentKeyboardInset()), height * 0.85)
+    bottomOut = keyboard
+    if (keyboard > 40) topOut = Math.min(topOut, 46)
   }
+
+  return { top: topOut, right: rightOut, bottom: bottomOut, left: leftOut }
 }
 
 function syncFramingInsetsNow(): void {
@@ -2067,7 +2103,11 @@ function scheduleFramingSync(): void {
   framingSyncTimer = window.setTimeout(syncFramingInsetsNow, 90)
 }
 
-window.addEventListener('resize', scheduleFramingSync)
+window.addEventListener('resize', () => {
+  syncHudChrome()
+  scheduleFramingSync()
+})
+syncHudChrome()
 viewPanel.addEventListener('transitionend', scheduleFramingSync)
 
 window.matchMedia('(max-width: 900px)').addEventListener('change', () => {

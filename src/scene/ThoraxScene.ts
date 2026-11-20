@@ -8,12 +8,14 @@ import type { ViewAttachmentSite, ViewPrefer } from '../data/viewInfo'
 import { muscleVisibleAtLayer, type MuscleLayerFilter } from '../data/muscles'
 import {
   anatomicalViewCandidates,
-  fitDistance,
+  boxViewExtents,
+  fitDistanceToExtents,
   insetsChanged,
   namesForOneSide,
   viewOffsetForBand,
   visibleBand,
   type FramingInsets,
+  type ViewExtents,
 } from './framing'
 
 export type ViewSubjectFilter = 'both' | 'bones' | 'muscles'
@@ -180,8 +182,6 @@ const PICK_MAX_DEPTH = 0.5
 /** Floor for tight framing of small parts (hand bones, cervical vertebrae). */
 const VIEW_MIN_DISTANCE = 0.28
 const DEFAULT_MIN_DISTANCE = 0.8
-/** Minimum region to show around a tiny quiz target (about a hand / wrist). */
-const QUIZ_FRAME_MIN_SPAN = 0.4
 
 /** BodyParts3D pack is Z-up (cranial +Z). This Euler maps cranial → +Y, anterior → +Z. */
 export const UPRIGHT_EULER = { x: -Math.PI / 2, y: 0, z: 0 }
@@ -200,6 +200,8 @@ export type FramingReport = {
   camera: { x: number; y: number; z: number }
   target: { x: number; y: number; z: number }
   insets: FramingInsets
+  /** Projected box vs the visible band, on the tighter axis. About 62 is the aim. */
+  fillPct: number
 }
 
 export type ThoraxSceneOptions = {
@@ -298,12 +300,14 @@ export class ThoraxScene {
   private framingEnabled = false
   private framingTarget: FramingInsets = { top: 0, right: 0, bottom: 0, left: 0 }
   private framingCurrent: FramingInsets = { top: 0, right: 0, bottom: 0, left: 0 }
-  /** Sphere radius of the part currently being framed. 0 = full body / idle. */
-  private framedRadius = 0
+  /** World AABB of that part. Null when the camera is on the whole body. */
+  private framedBox: THREE.Box3 | null = null
+  private framedExtents: ViewExtents | null = null
   private occluderIds = new Set<string>()
   private lastViewId = 'anterior'
   private lastScore = 0
   private userOrbiting = false
+  private holdUserOrbit = false
   private pendingRefit = false
 
   constructor(opts: ThoraxSceneOptions) {
@@ -342,6 +346,7 @@ export class ThoraxScene {
     this.controls.addEventListener('start', () => {
       this.spinning = false
       this.userOrbiting = true
+      this.holdUserOrbit = true
       this.cancelViewFrame()
     })
     this.controls.addEventListener('end', () => {
@@ -617,7 +622,8 @@ export class ThoraxScene {
 
   private frameFullBody(): void {
     this.cancelViewFrame()
-    this.framedRadius = 0
+    this.framedBox = null
+    this.framedExtents = null
     this.focusTarget.set(0, 0, 0)
     this.focusDist = this.fitRadius / Math.tan((this.camera.fov * Math.PI) / 360) * 1.55
     this.camera.up.set(0, 1, 0)
@@ -745,6 +751,7 @@ export class ThoraxScene {
     // Spin stays off for the question so it cannot walk off that angle.
     this.spinning = false
     this.spin.rotation.y = 0
+    this.holdUserOrbit = false
     this.body.updateMatrixWorld(true)
     this.controls.minDistance = VIEW_MIN_DISTANCE
     this.frameMeshes([...this.targetIds])
@@ -768,26 +775,21 @@ export class ThoraxScene {
       present.push(name)
     }
     if (present.length === 0) {
-      this.framedRadius = 0
+      this.framedBox = null
+      this.framedExtents = null
       this.frameFullBody()
       this.updateSideCameras()
       return
     }
     const size = box.getSize(new THREE.Vector3())
-    box.expandByVector(new THREE.Vector3(
-      Math.max(0, QUIZ_FRAME_MIN_SPAN - size.x) / 2,
-      Math.max(0, QUIZ_FRAME_MIN_SPAN - size.y) / 2,
-      Math.max(0, QUIZ_FRAME_MIN_SPAN - size.z) / 2,
-    ))
     const center = box.getCenter(new THREE.Vector3())
-    const padded = box.getSize(new THREE.Vector3())
-    const radius = Math.max(padded.x, padded.y, padded.z) * 0.5
+    const radius = 0.5 * Math.max(size.length(), 0.08)
     const dir = this.chooseViewDirection(center, radius, present)
-    const dist = this.distanceFor(radius, 0.7, VIEW_MIN_DISTANCE + 0.05)
+    const dist = this.distanceForBox(box, dir)
     const endPos = center.clone().addScaledVector(dir, dist)
     this.focusTarget.copy(center)
     this.focusDist = dist
-    this.framedRadius = radius
+    this.framedBox = box.clone()
     this.camera.up.set(0, 1, 0)
     this.controls.minDistance = VIEW_MIN_DISTANCE
     this.startViewPose(center, endPos, 0.46)
@@ -901,7 +903,8 @@ export class ThoraxScene {
   exitView(): void {
     if (!this.viewMode) return
     this.viewMode = false
-    this.framedRadius = 0
+    this.framedBox = null
+    this.framedExtents = null
     this.cancelViewFrame()
     this.controls.enablePan = false
     this.controls.minDistance = DEFAULT_MIN_DISTANCE
@@ -1007,16 +1010,17 @@ export class ThoraxScene {
     }
     if (present.length === 0) return
 
+    this.holdUserOrbit = false
     const center = box.getCenter(new THREE.Vector3())
     const size = box.getSize(new THREE.Vector3())
-    const radius = Math.max(size.x, size.y, size.z, 0.08) * 0.5
+    const radius = 0.5 * Math.max(size.length(), 0.08)
     const dir = this.directionOrBest(center, radius, present)
-    const dist = this.distanceFor(radius, 0.68, VIEW_MIN_DISTANCE + 0.05)
+    const dist = this.distanceForBox(box, dir)
     const endPos = center.clone().addScaledVector(dir, dist)
 
     this.focusTarget.copy(center)
     this.focusDist = dist
-    this.framedRadius = radius
+    this.framedBox = box.clone()
     this.camera.up.set(0, 1, 0)
     this.startViewPose(center, endPos, 0.5)
     this.applyViewPresentation()
@@ -1424,6 +1428,12 @@ export class ThoraxScene {
     const changed = this.framingEnabled !== enabled || insetsChanged(this.framingTarget, enabled ? next : ZERO_INSETS, 6)
     this.framingEnabled = enabled
     this.framingTarget = enabled ? next : { ...ZERO_INSETS }
+    // The view offset and the fit distance read different copies. Keep them
+    // on the same band; the camera pose still eases into the new distance.
+    this.framingCurrent.top = this.framingTarget.top
+    this.framingCurrent.right = this.framingTarget.right
+    this.framingCurrent.bottom = this.framingTarget.bottom
+    this.framingCurrent.left = this.framingTarget.left
     if (!changed) return
     if (this.userOrbiting) {
       this.pendingRefit = true
@@ -1482,7 +1492,26 @@ export class ThoraxScene {
         bottom: Math.round(this.framingCurrent.bottom),
         left: Math.round(this.framingCurrent.left),
       },
+      fillPct: this.currentFillPct(),
     }
+  }
+
+  /** How much of the visible band the projected box occupies, on the tighter axis. */
+  private currentFillPct(): number {
+    const ext = this.framedExtents
+    if (!ext) return 0
+    const w = Math.max(this.viewWidth, 1)
+    const h = Math.max(this.viewHeight, 1)
+    const insets = this.framingEnabled ? this.framingCurrent : ZERO_INSETS
+    const band = visibleBand(w, h, insets)
+    const dist = Math.max(this.camera.position.distanceTo(this.controls.target) - ext.depth, 0.05)
+    const vFov = (this.camera.fov * Math.PI) / 180
+    const hFov = 2 * Math.atan(Math.tan(vFov / 2) * (w / h))
+    const worldH = 2 * dist * Math.tan(vFov / 2) * (band.height / h)
+    const worldW = 2 * dist * Math.tan(hFov / 2) * (band.width / w)
+    const fillH = (ext.halfHeight * 2) / Math.max(worldH, 1e-4)
+    const fillW = (ext.halfWidth * 2) / Math.max(worldW, 1e-4)
+    return Math.round(Math.max(fillH, fillW) * 100)
   }
 
   private fadedOpacity(name: string, opacity: number): number {
@@ -1498,42 +1527,59 @@ export class ThoraxScene {
     this.viewWidth = w
     this.viewHeight = h
     this.camera.aspect = w / Math.max(h, 1)
+    this.camera.updateProjectionMatrix()
     this.renderer.setSize(w, h, false)
     this.labelRenderer.setSize(w, h)
     return true
   }
 
-  private distanceFor(radius: number, fill: number, minDistance: number): number {
+  /** Fit the part's real projected box into the visible band. */
+  private distanceForBox(box: THREE.Box3, dir: THREE.Vector3): number {
     this.readViewSize()
     const w = Math.max(this.viewWidth, 1)
     const h = Math.max(this.viewHeight, 1)
     const insets = this.framingEnabled ? this.framingTarget : ZERO_INSETS
     const band = visibleBand(w, h, insets)
-    return fitDistance({
-      radius,
+    const size = box.getSize(this._scratchA)
+    const ext = boxViewExtents(
+      { x: size.x * 0.5, y: size.y * 0.5, z: size.z * 0.5 },
+      { x: dir.x, y: dir.y, z: dir.z },
+    )
+    this.framedExtents = ext
+    const limiting = Math.min(band.width, band.height)
+    // Under ~120px the keyboard has eaten the screen. Fit to a readable
+    // slice of the short side so the target fills that sliver, instead of
+    // zooming out until the whole body is a speck.
+    const minBandPx = limiting < 120 ? Math.max(120, Math.min(w, h) * 0.62) : 0
+    return fitDistanceToExtents({
+      halfWidth: ext.halfWidth,
+      halfHeight: ext.halfHeight,
+      depth: ext.depth,
       fovDeg: this.camera.fov,
       canvasWidth: w,
       canvasHeight: h,
       bandWidth: band.width,
       bandHeight: band.height,
-      fill,
-      minDistance,
+      fill: 0.66,
+      marginPx: 12,
+      minBandPx,
+      // A carpal-sized part stays far enough to keep the neighbouring bones in frame.
+      contextHalf: 0.11,
+      minDistance: VIEW_MIN_DISTANCE + 0.05,
+      maxDistance: 14,
     })
   }
 
   private refitFramedDistance(): void {
     const posing = this.viewFrame
-    const radius =
-      this.framedRadius > 0 ? this.framedRadius : this.viewMode && this.framingEnabled ? this.fitRadius : 0
-    if (radius <= 0) return
-    const fill = this.framedRadius > 0 ? 0.7 : 0.82
-    const minD = this.framedRadius > 0 ? VIEW_MIN_DISTANCE + 0.05 : DEFAULT_MIN_DISTANCE
-    const dist = this.distanceFor(radius, fill, minD)
-    const pivot = posing ? posing.endTarget : this.controls.target
+    const box = this.framedBox
+    if (!box || box.isEmpty()) return
     const from = posing
       ? posing.endPos.clone().sub(posing.endTarget)
       : this.camera.position.clone().sub(this.controls.target)
     if (from.lengthSq() < 1e-8) from.set(0, 0.12, 1)
+    const dist = this.distanceForBox(box, from.clone().normalize())
+    const pivot = posing ? posing.endTarget : this.controls.target
     from.setLength(dist)
     const endPos = pivot.clone().add(from)
     this.focusDist = dist
@@ -1541,7 +1587,7 @@ export class ThoraxScene {
       posing.endPos.copy(endPos)
       return
     }
-    if (endPos.distanceTo(this.camera.position) < 0.025) return
+    if (endPos.distanceTo(this.camera.position) < Math.max(0.04, dist * 0.015)) return
     this.startViewPose(pivot.clone(), endPos, 0.34)
   }
 
@@ -1568,7 +1614,18 @@ export class ThoraxScene {
   }
 
   private applyFramingOffset(): void {
-    if (this.readViewSize() && !this.userOrbiting) this.refitFramedDistance()
+    this.readViewSize()
+    // A pointerdown without a pointerup (focus changes, headless taps) leaves
+    // the orbit flag set and freezes the camera on a stale band.
+    const pointers = (this.controls as unknown as { _pointers?: unknown[] })._pointers
+    if (this.userOrbiting && (!pointers || pointers.length === 0)) {
+      this.userOrbiting = false
+      this.holdUserOrbit = false
+      if (this.pendingRefit) this.pendingRefit = false
+    }
+    // Insets and the layout viewport can change after the first fit. Keep the
+    // distance on the current band until the user is actually dragging.
+    if (!this.userOrbiting && !this.holdUserOrbit) this.refitFramedDistance()
     const w = this.viewWidth
     const h = this.viewHeight
     if (w < 2 || h < 2) return

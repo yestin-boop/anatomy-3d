@@ -193,50 +193,38 @@ async function main() {
         true,
       )
 
-    await shot(cdp, 'iphone-keyboard-vastus-medialis', 390, 844, true, () =>
-      quiz('muscles', 'vastus_medialis', 300),
-    )
-    await shot(cdp, 'iphone-vastus-medialis', 390, 844, true, () =>
-      quiz('muscles', 'vastus_medialis', 0),
-    )
-    await shot(cdp, 'iphone-landscape-vastus-medialis', 844, 390, true, () =>
-      quiz('muscles', 'vastus_medialis', 0),
-    )
-    await shot(cdp, 'ipad-vastus-medialis', 820, 1180, true, () =>
-      quiz('muscles', 'vastus_medialis', 0),
-    )
-    await shot(cdp, 'iphone-keyboard-adductor-longus', 390, 844, true, () =>
-      quiz('muscles', 'adductor_longus', 300),
-    )
-    await shot(cdp, 'iphone-gluteus-maximus', 390, 844, true, () =>
-      quiz('muscles', 'gluteus_maximus', 0),
-    )
-    await shot(cdp, 'iphone-keyboard-multifidus', 390, 844, true, () =>
-      quiz('muscles', 'multifidus', 300),
-    )
-    await shot(cdp, 'iphone-flexor-carpi-radialis', 390, 844, true, () =>
-      quiz('muscles', 'flexor_carpi_radialis', 0),
-    )
-    await shot(cdp, 'iphone-keyboard-scaphoid', 390, 844, true, () =>
-      quiz('bones', 'scaphoid', 300),
-    )
-    await shot(cdp, 'iphone-view-vastus-medialis', 390, 844, true, () =>
-      cdp.evaluate(`window.__anatomyQA.showView('muscles', 'vastus_medialis')`, true),
-    )
-    await shot(cdp, 'iphone-common-bones', 390, 844, true, () =>
-      cdp.evaluate(`window.__anatomyQA.showCommonBones()`, true),
-    )
-
-    if (want('desktop-vastus-medialis') || want('desktop-scaphoid')) {
-    await setViewport(cdp, 1440, 900, false)
-    await openApp(cdp, false)
+    const targets = [
+      ['muscles', 'vastus_medialis', 'vastus-medialis'],
+      ['muscles', 'adductor_longus', 'adductor-longus'],
+      ['muscles', 'gluteus_maximus', 'gluteus-maximus'],
+      ['muscles', 'longissimus', 'erector-spinae'],
+      ['muscles', 'flexor_carpi_radialis', 'flexor-carpi-radialis'],
+      ['muscles', 'deltoid', 'deltoid'],
+      ['bones', 'scaphoid', 'scaphoid'],
+      ['bones', 'femur', 'femur'],
+      ['bones', 'rib11', 'rib11'],
+    ]
+    const phoneLayouts = [
+      ['iphone-kb', 390, 844, 300],
+      ['iphone', 390, 844, 0],
+      ['land-kb', 844, 390, 300],
+      ['land', 844, 390, 0],
+      ['ipad', 820, 1180, 0],
+    ]
+    for (const [prefix, width, height, keyboard] of phoneLayouts) {
+      for (const [subject, id, slug] of targets) {
+        await shot(cdp, `${prefix}-${slug}`, width, height, true, () => quiz(subject, id, keyboard))
+      }
     }
-    await shot(cdp, 'desktop-vastus-medialis', 1440, 900, false, () =>
-      cdp.evaluate(`window.__anatomyQA.showQuiz('muscles', 'vastus_medialis', 0)`, true),
-    )
-    await shot(cdp, 'desktop-scaphoid', 1440, 900, false, () =>
-      cdp.evaluate(`window.__anatomyQA.showQuiz('bones', 'scaphoid', 0)`, true),
-    )
+
+    const desktopWanted = targets.some(([, , slug]) => want(`desktop-${slug}`))
+    if (desktopWanted) {
+      await setViewport(cdp, 1440, 900, false)
+      await openApp(cdp, false)
+    }
+    for (const [subject, id, slug] of targets) {
+      await shot(cdp, `desktop-${slug}`, 1440, 900, false, () => quiz(subject, id, 0))
+    }
 
     let records = shots
     if (only.size > 0) {
@@ -251,6 +239,13 @@ async function main() {
     }
     await writeFile(`${OUT}/framing-reports.json`, JSON.stringify(records, null, 2))
     console.log('wrote', records.length, 'records')
+    const ranked = records.filter((row) => row.report && typeof row.report.fillPct === 'number')
+    ranked.sort((a, b) => a.name.localeCompare(b.name))
+    for (const row of ranked) {
+      const band = row.report.fitBand
+      const bandNote = band ? ` band ${band.w}x${band.h}` : ''
+      console.log(`${String(row.report.fillPct).padStart(3)}%  ${row.name}${bandNote}`)
+    }
   } finally {
     chrome.kill('SIGKILL')
   }

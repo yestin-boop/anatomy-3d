@@ -502,6 +502,52 @@ html.touch-quiz .target-word {
   html.touch-quiz .skip-btn { min-height: 36px; padding: 6px 14px; }
 }
 
+/* Phone landscape: the keyboard would otherwise eat the whole band.
+   Drop the eyebrow and the tap hint, put Skip beside the answer, and
+   park X-ray/Solid in the top bar (hidden once the keyboard is up). */
+html.touch-quiz.phone-landscape .type-label,
+html.touch-quiz.phone-landscape .gloss-line,
+html.touch-quiz.phone-landscape .tap-hint {
+  display: none !important;
+}
+html.touch-quiz.phone-landscape .hud {
+  padding: 0 12px max(4px, env(safe-area-inset-bottom), calc(var(--keyboard-inset, 0px) + 4px));
+}
+html.touch-quiz.phone-landscape .prompt-block {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: min(520px, 72vw);
+}
+html.touch-quiz.phone-landscape .type-field { flex: 1 1 auto; }
+html.touch-quiz.phone-landscape .target-word {
+  font-size: 1.15rem;
+  min-height: 0;
+}
+html.touch-quiz.phone-landscape .skip-btn {
+  margin: 0;
+  flex: 0 0 auto;
+  min-height: 32px;
+  padding: 6px 12px;
+}
+html.touch-quiz.phone-landscape .view-filters.is-quiz {
+  top: max(6px, env(safe-area-inset-top));
+  left: 50%;
+  right: auto;
+  transform: translateX(-50%);
+  max-width: max-content;
+}
+html.touch-quiz.phone-landscape .view-filters.is-quiz .view-filter-btn {
+  min-height: 28px;
+  min-width: 0;
+  padding: 4px 8px;
+}
+html.touch-quiz.phone-landscape.keyboard-open .view-filters.is-quiz {
+  display: none !important;
+}
+
 @keyframes blink {
   0%, 49% { opacity: 1; }
   50%, 100% { opacity: 0; }
