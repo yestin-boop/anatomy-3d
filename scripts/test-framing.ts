@@ -1,18 +1,25 @@
 /**
- * Framing math: visible-band offset, fit distance, and view-direction priors.
+ * Framing math: visible-band offset, fit distance, and the catalog view.
  * Run: npm test
  */
 import * as THREE from 'three'
+import { AXIAL_BONES } from '../src/data/axialBones.ts'
 import {
-  anatomicalViewCandidates,
+  ANATOMICAL_VIEWS,
+  catalogCoverage,
+  directionFor,
+  sideFromBox,
+  viewForBone,
+  viewForMuscle,
+} from '../src/data/anatomicalViews.ts'
+import { MUSCLES } from '../src/data/muscles.ts'
+import {
   boxViewExtents,
-  cameraOnSameSide,
   fitDistance,
   fitDistanceToExtents,
   insetsChanged,
   meshSide,
   namesForOneSide,
-  preferredViewId,
   viewOffsetForBand,
   visibleBand,
 } from '../src/scene/framing.ts'
@@ -264,99 +271,76 @@ const anterior = boxViewExtents({ x: 0.1, y: 0.5, z: 0.08 }, { x: 0, y: 0, z: 1 
 assert(anterior.halfHeight > 0.45 && anterior.halfWidth < 0.15, 'an anterior view of a tall box is tall on screen')
 assert(anterior.depth < 0.1, 'an anterior view has little depth toward the camera')
 
-const half = 0.9
+const coverage = catalogCoverage()
+assert(coverage.muscles === 132, `every playable muscle is in the catalog (${coverage.muscles})`)
+assert(coverage.bones === AXIAL_BONES.length && coverage.bones > 0, 'every bone is in the catalog')
 assert(
-  preferredViewId({ x: -0.22, y: -0.7, z: 0.2 }, half) === 'anterior-medial',
-  'medial anterior thigh (vastus medialis / adductors) prefers anterior-medial',
+  coverage.unknownOverrides.length === 0,
+  `muscle view overrides name real muscles (${coverage.unknownOverrides.join(', ')})`,
 )
-assert(
-  preferredViewId({ x: -0.7, y: -0.7, z: 0.16 }, half) === 'anterior-lateral',
-  'lateral anterior thigh prefers anterior-lateral',
-)
-const posteriorId = preferredViewId({ x: -0.32, y: -0.2, z: -0.38 }, half)
-assert(
-  posteriorId === 'posterior' || posteriorId === 'posterior-lateral',
-  `posterior muscle prefers a back view (got ${posteriorId})`,
-)
-assert(
-  preferredViewId({ x: 0.02, y: 0.4, z: 0.22 }, half) === 'anterior',
-  'midline anterior bone prefers a front view',
-)
-assert(
-  preferredViewId({ x: -0.04, y: 0.2, z: -0.2 }, half) === 'posterior',
-  'midline back muscle prefers a posterior view',
-)
-assert(
-  preferredViewId({ x: -0.22, y: -0.7, z: -0.06 }, half) === 'anterior-medial',
-  'a medial thigh muscle near the coronal plane stays anterior-medial',
-)
-const adductorId = preferredViewId({ x: 0.09, y: -0.32, z: 0 }, half)
-assert(
-  adductorId === 'anterior-medial',
-  `an adductor just off the midline stays anterior-medial (got ${adductorId})`,
-)
-
-const gluteId = preferredViewId({ x: 0.17, y: 0.04, z: -0.2 }, half)
-assert(
-  gluteId === 'posterior' || gluteId === 'posterior-lateral',
-  `a hip muscle behind the coronal plane prefers a back view (got ${gluteId})`,
-)
-
-// Live left deltoid: the framed centre sits near the clavicle, around
-// x 0.15, y 1.2, z -0.11. The box still reaches the outside of the shoulder
-// (about x 0.20 to 0.56). A test centre of x 0.38 hides that.
-const deltoid = { x: 0.15, y: 1.2, z: -0.11 }
-const deltoidSpan = { minX: 0.204, maxX: 0.559, side: 'l' as const }
-const flexor = { x: 0.56, y: 0.34, z: -0.01 }
-const femur = { x: 0.22, y: -0.45, z: 0.02 }
-const deltoidViews = [preferredViewId(deltoid, half, deltoidSpan)]
-preferredViewId(flexor, half)
-deltoidViews.push(preferredViewId(deltoid, half, deltoidSpan))
-preferredViewId(femur, half)
-deltoidViews.push(preferredViewId(deltoid, half, deltoidSpan))
-assert(
-  deltoidViews.every((id) => id === deltoidViews[0]),
-  `deltoid view does not depend on the previous target (got ${deltoidViews.join(', ')})`,
-)
-assert(
-  deltoidViews[0] === 'posterior-lateral' || deltoidViews[0] === 'lateral',
-  `deltoid prefers a same-side lateral view (got ${deltoidViews[0]})`,
-)
-for (const candidate of anatomicalViewCandidates(deltoid, half, deltoidSpan)) {
-  assert(
-    cameraOnSameSide(deltoid, candidate.dir, half, deltoidSpan),
-    `deltoid candidate ${candidate.id} is not viewed from the opposite side`,
-  )
-  assert(candidate.dir.x > 0, `deltoid candidate ${candidate.id} camera stays on the muscle's side`)
+for (const muscle of MUSCLES) {
+  assert(ANATOMICAL_VIEWS.includes(viewForMuscle(muscle)), `${muscle.id} has a catalog view`)
 }
-const bareDeltoid = preferredViewId(deltoid, half)
-assert(
-  bareDeltoid === 'posterior-lateral' || bareDeltoid === 'lateral',
-  `a shoulder-height centre at x 0.15 is same-side even before the box is known (got ${bareDeltoid})`,
-)
+for (const bone of AXIAL_BONES) {
+  assert(ANATOMICAL_VIEWS.includes(viewForBone(bone)), `${bone.id} has a catalog view`)
+}
 
-const erector = preferredViewId(
-  { x: 0.084, y: 0.964, z: -0.174 },
-  half,
-  { minX: -0.002, maxX: 0.169, side: 'l' },
-)
-assert(
-  erector === 'posterior' || erector === 'posterior-lateral',
-  `longissimus stays a back view (got ${erector})`,
-)
-const fcrDir = anatomicalViewCandidates(flexor, half).find((c) => c.id === 'anterior-lateral')
-assert(
-  fcrDir != null && fcrDir.dir.z > fcrDir.dir.x && fcrDir.dir.x > 0,
-  'flexor carpi radialis is seen from the front of its own side',
-)
+function muscleView(id: string): string {
+  const muscle = MUSCLES.find((row) => row.id === id)
+  if (!muscle) return 'missing'
+  return viewForMuscle(muscle)
+}
+function boneView(id: string): string {
+  const bone = AXIAL_BONES.find((row) => row.id === id)
+  if (!bone) return 'missing'
+  return viewForBone(bone)
+}
 
-const medial = anatomicalViewCandidates({ x: -0.22, y: -0.7, z: 0.18 }, half).find(
-  (c) => c.id === 'anterior-medial',
-)
-assert(medial != null && medial.dir.x > 0.3 && medial.dir.z > 0.3, 'left medial camera sits toward the midline and in front')
+assert(muscleView('deltoid') === 'posterior-lateral', 'deltoid is posterior-lateral')
+assert(muscleView('gluteus_maximus') === 'posterior', 'gluteus maximus is posterior')
+assert(muscleView('gluteus_medius') === 'posterior-lateral', 'gluteus medius is posterior-lateral')
+assert(muscleView('biceps_femoris') === 'posterior', 'a hamstring is posterior')
+assert(muscleView('longissimus') === 'posterior', 'longissimus is posterior')
+assert(muscleView('vastus_medialis') === 'anterior-medial', 'vastus medialis is anterior-medial')
+assert(muscleView('adductor_longus') === 'anterior-medial', 'adductor longus is anterior-medial')
+assert(muscleView('flexor_carpi_radialis') === 'anterior-lateral', 'flexor carpi radialis is anterior-lateral')
+assert(muscleView('trapezius') === 'posterior', 'trapezius is posterior')
+assert(muscleView('latissimus_dorsi') === 'posterior', 'latissimus dorsi is posterior')
+assert(boneView('scaphoid') === 'anterior-lateral', 'scaphoid is anterior-lateral')
+assert(boneView('rib11') === 'anterior-medial', '11th rib is anterior-medial')
+assert(boneView('femur') === 'anterior-medial', 'femur is anterior-medial')
 
-const back = anatomicalViewCandidates({ x: -0.3, y: -0.2, z: -0.36 }, half).find((c) => c.id === 'posterior')
-assert(back != null && back.dir.z < -0.5, 'posterior camera sits behind the body')
+const sequence = ['deltoid', 'flexor_carpi_radialis', 'deltoid', 'femur', 'deltoid']
+const sequenceViews = sequence.map((id) => (id === 'femur' ? boneView(id) : muscleView(id)))
+assert(
+  sequenceViews[0] === 'posterior-lateral' && sequenceViews[2] === 'posterior-lateral' && sequenceViews[4] === 'posterior-lateral',
+  `deltoid view does not depend on the previous target (got ${sequenceViews.join(', ')})`,
+)
+assert(muscleView('gluteus_maximus') === 'posterior', 'glute face stays posterior when its centre moves')
+
+const deltoidPlus = directionFor('posterior-lateral', sideFromBox(0.204, 0.559))
+assert(deltoidPlus.x > 0 && deltoidPlus.z < 0, 'deltoid on +x is seen from that side and from behind')
+const deltoidMinus = directionFor('posterior-lateral', -1)
+assert(deltoidMinus.x < 0 && deltoidMinus.z < 0, 'the same deltoid view mirrors onto -x')
+const gluteOnNegative = directionFor('posterior', sideFromBox(-0.36, -0.05))
+assert(
+  gluteOnNegative.z < -0.5 && gluteOnNegative.x < 0,
+  'a glute whose outer edge is -x is still behind the body, on that side',
+)
+assert(sideFromBox(-0.36, -0.05) === -1, 'side is the outer-edge x, not a left/right name')
+assert(sideFromBox(0.204, 0.559) === 1, 'a +x shoulder is the positive side')
+assert(sideFromBox(-0.02, 0.03) === 0, 'a midline box has no side')
+
+const fcrDir = directionFor('anterior-lateral', 1)
+assert(fcrDir.z > fcrDir.x && fcrDir.x > 0, 'flexor carpi radialis is seen from the front of its own side')
+const medial = directionFor('anterior-medial', 1)
+assert(medial.x < -0.3 && medial.z > 0.3, 'anterior-medial on +x sits toward the midline and in front')
+const medialOther = directionFor('anterior-medial', -1)
+assert(medialOther.x > 0.3 && medialOther.z > 0.3, 'anterior-medial on -x sits toward the midline and in front')
+const back = directionFor('posterior', 1)
+assert(back.z < -0.5, 'posterior camera sits behind the body')
+const backMid = directionFor('posterior', 0)
+assert(backMid.z < -0.5, 'a midline posterior view stays behind the body')
 
 assert(
   namesForOneSide(['vastus_med_l', 'vastus_med_r']).join() === 'vastus_med_l',

@@ -27,6 +27,7 @@ import {
   type MuscleRegion,
   type MuscleLayerFilter,
 } from './data/muscles'
+import { viewForBoneId, viewForMuscleId, type AnatomicalView } from './data/anatomicalViews'
 import { CARTILAGE, type CartilageRegion } from './data/cartilage'
 import { ThoraxScene, type FramingReport, type MaterialLook, type ViewSubjectFilter } from './scene/ThoraxScene'
 import { insetsChanged, type FramingInsets } from './scene/framing'
@@ -672,11 +673,18 @@ function updateHud(): void {
   scheduleFramingSync()
 }
 
+function catalogViewFor(kind: 'bone' | 'muscle' | 'cartilage', id: string): AnatomicalView {
+  if (kind === 'muscle') return viewForMuscleId(id)
+  if (kind === 'bone') return viewForBoneId(id)
+  return 'anterior'
+}
+
 function applyTarget(): void {
   const bone = current()
   if (!bone) return
   syncFramingInsetsNow()
-  scene.setTarget(bone.meshNames)
+  const kind = state.subject === 'muscles' ? 'muscle' : 'bone'
+  scene.setTarget(bone.meshNames, catalogViewFor(kind, bone.id))
 }
 
 function quizInputShouldFocus(): boolean {
@@ -1157,7 +1165,7 @@ function commitViewSelection(stack: ViewSelection[], index: number, clientX?: nu
     viewPanelToggle.setAttribute('aria-expanded', 'true')
   }
   syncFramingInsetsNow()
-  scene.frameViewSelection(meshesToFrame(sel))
+  scene.frameViewSelection(meshesToFrame(sel), catalogViewFor(sel.kind, sel.id))
   renderPickStack(stack, index)
   scheduleFramingSync()
 }
@@ -2233,7 +2241,7 @@ async function qaShowQuiz(
   state.index = 0
   updateHud()
   syncFramingInsetsNow()
-  scene.setTarget(sel.meshNames)
+  scene.setTarget(sel.meshNames, catalogViewFor(sel.kind, sel.id))
   await scene.whenPoseSettled()
   syncFramingInsetsNow()
   await scene.whenPoseSettled()
@@ -2252,7 +2260,7 @@ async function qaShowView(subject: 'bones' | 'muscles', id: string): Promise<Fra
   viewPanelToggle.setAttribute('aria-expanded', 'true')
   applyViewSelection(sel)
   syncFramingInsetsNow()
-  scene.frameViewSelection(meshesToFrame(sel))
+  scene.frameViewSelection(meshesToFrame(sel), catalogViewFor(sel.kind, sel.id))
   await scene.whenPoseSettled()
   syncFramingInsetsNow()
   await scene.whenPoseSettled()
@@ -2298,7 +2306,7 @@ async function runQaMode(mode: string): Promise<void> {
         'rib_l5','rib_r5','rib_l6','rib_r6','rib_l7','rib_r7','rib_l8','rib_r8',
         'rib_l9','rib_r9','rib_l10','rib_r10','rib_l11','rib_r11','rib_l12','rib_r12',
         'sternum_body','sternum_manubrium','sternum_xiphoid',
-      ])
+      ], 'anterior-medial')
       await wait(300)
       scene.freezeUprightProof()
       // Pull camera back a bit for full cage

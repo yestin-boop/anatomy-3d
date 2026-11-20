@@ -198,6 +198,16 @@ async function main() {
       return
     }
 
+    if (process.env.QA_ASSERT_VIEWS === '1') {
+      const viewShow = (subject, id) =>
+        cdp.evaluate(
+          `window.__anatomyQA.showView(${JSON.stringify(subject)}, ${JSON.stringify(id)})`,
+          true,
+        )
+      await assertCatalogViews(cdp, quiz, viewShow)
+      return
+    }
+
     const targets = [
       ['muscles', 'vastus_medialis', 'vastus-medialis'],
       ['muscles', 'adductor_longus', 'adductor-longus'],
@@ -358,6 +368,168 @@ async function assertDeltoidScene(cdp, quiz) {
       )
     }
     console.log(`ok ${id} ${report.viewId} camera.x ${report.camera.x} camera.z ${report.camera.z}`)
+  }
+}
+
+const CATALOG_TARGETS = [
+  { subject: 'muscles', id: 'deltoid', view: 'posterior-lateral', lateral: true, mode: 'quiz' },
+  { subject: 'muscles', id: 'gluteus_maximus', view: 'posterior', lateral: false, mode: 'quiz' },
+  { subject: 'muscles', id: 'gluteus_maximus', view: 'posterior', lateral: false, mode: 'view' },
+  { subject: 'muscles', id: 'gluteus_medius', view: 'posterior-lateral', lateral: true, mode: 'quiz' },
+  { subject: 'muscles', id: 'biceps_femoris', view: 'posterior', lateral: false, mode: 'quiz' },
+  { subject: 'muscles', id: 'longissimus', view: 'posterior', lateral: false, mode: 'quiz' },
+  { subject: 'muscles', id: 'vastus_medialis', view: 'anterior-medial', lateral: false, mode: 'quiz' },
+  { subject: 'muscles', id: 'adductor_longus', view: 'anterior-medial', lateral: false, mode: 'quiz' },
+  { subject: 'muscles', id: 'flexor_carpi_radialis', view: 'anterior-lateral', lateral: true, mode: 'quiz' },
+  { subject: 'muscles', id: 'trapezius', view: 'posterior', lateral: false, mode: 'quiz' },
+  { subject: 'muscles', id: 'latissimus_dorsi', view: 'posterior', lateral: false, mode: 'quiz' },
+  { subject: 'bones', id: 'scaphoid', view: 'anterior-lateral', lateral: true, mode: 'quiz' },
+  { subject: 'bones', id: 'rib11', view: 'anterior-medial', lateral: false, mode: 'quiz' },
+  { subject: 'bones', id: 'femur', view: 'anterior-medial', lateral: false, mode: 'quiz' },
+]
+
+const CATALOG_VIEWPORTS = [
+  ['390x844', 390, 844, true],
+  ['390x544', 390, 544, true],
+  ['844x390', 844, 390, true],
+  ['820x1180', 820, 1180, true],
+  ['1440x900', 1440, 900, false],
+]
+
+function catalogProblem(report, spec) {
+  if (!report || report.viewId !== spec.view) {
+    return `view ${report?.viewId ?? 'missing'} expected ${spec.view}`
+  }
+  const cam = report.camera
+  const tgt = report.target
+  if (!cam || !tgt) return 'missing camera'
+  if (spec.view.startsWith('posterior') && !(cam.z < tgt.z)) {
+    return `camera is not behind the target (${cam.z} vs ${tgt.z})`
+  }
+  if (spec.view.startsWith('anterior') && !(cam.z > tgt.z)) {
+    return `camera is not in front of the target (${cam.z} vs ${tgt.z})`
+  }
+  if (spec.lateral && Math.abs(tgt.x) > 0.05 && (cam.x - tgt.x) * tgt.x <= 0) {
+    return `camera is not on the target's side (${cam.x} vs ${tgt.x})`
+  }
+  return null
+}
+
+function catalogLabel(spec) {
+  return spec.mode === 'view' ? `${spec.id} view` : spec.id
+}
+
+async function showCatalogTarget(quiz, viewShow, spec) {
+  if (spec.mode === 'view') return viewShow(spec.subject, spec.id)
+  return quiz(spec.subject, spec.id, 0)
+}
+
+async function pinOverlap(cdp) {
+  return cdp.evaluate(`(() => {
+    const pins = [...document.querySelectorAll('.view-pin')].map((el) => {
+      const r = el.getBoundingClientRect()
+      return { text: (el.textContent || '').trim(), x: r.x, y: r.y, w: r.width, h: r.height }
+    })
+    let overlap = false
+    for (let i = 0; i < pins.length; i++) {
+      for (let j = i + 1; j < pins.length; j++) {
+        const a = pins[i]
+        const b = pins[j]
+        const hit = a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y
+        if (hit) overlap = true
+      }
+    }
+    return { pins, overlap, count: pins.length }
+  })()`)
+}
+
+async function assertCatalogViews(cdp, quiz, viewShow) {
+  const rows = []
+  const failures = []
+  const shotsWanted = new Set([
+    'first 390x844 deltoid',
+    'first 390x844 gluteus_maximus',
+    'first 390x844 gluteus_maximus view',
+    'mid 390x844 gluteus_maximus view',
+    'first 820x1180 flexor_carpi_radialis',
+    'first 844x390 flexor_carpi_radialis',
+    'first 1440x900 gluteus_maximus',
+    'mid 390x844 vastus_medialis',
+    'mid 390x844 scaphoid',
+    'mid 390x844 rib11',
+  ])
+
+  async function record(when, viewport, spec, report) {
+    const name = catalogLabel(spec)
+    const problem = catalogProblem(report, spec)
+    let labels = null
+    if (spec.mode === 'view') {
+      labels = await pinOverlap(cdp)
+      if (labels.count < 2 || labels.overlap) {
+        const extra = labels.count < 2 ? 'origin/insertion pins missing' : 'origin/insertion labels overlap'
+        failures.push(`${when} ${viewport} ${name}: ${extra}`)
+      }
+    }
+    if (problem) failures.push(`${when} ${viewport} ${name}: ${problem}`)
+    const row = {
+      when,
+      viewport,
+      target: name,
+      view: report?.viewId ?? '',
+      camera: report?.camera ?? null,
+      targetPoint: report?.target ?? null,
+      distance: report?.distance ?? null,
+      ok: !problem && !(labels && (labels.count < 2 || labels.overlap)),
+    }
+    rows.push(row)
+    const shotKey = `${when} ${viewport} ${name}`
+    if (shotsWanted.has(shotKey) || problem) {
+      const png = await cdp.send('Page.captureScreenshot', { format: 'png' })
+      const file = `${OUT}/view-${when}-${viewport}-${name.replace(/ /g, '-')}.png`
+      await writeFile(file, Buffer.from(png.data, 'base64'))
+    }
+    console.log(
+      `${row.ok ? 'ok' : 'FAIL'} ${when.padEnd(5)} ${viewport.padEnd(9)} ${name.padEnd(24)} ${row.view.padEnd(18)} cam (${report?.camera?.x}, ${report?.camera?.y}, ${report?.camera?.z}) tgt (${report?.target?.x}, ${report?.target?.y}, ${report?.target?.z})`,
+    )
+  }
+
+  for (const [viewport, width, height, mobile] of CATALOG_VIEWPORTS) {
+    await setViewport(cdp, width, height, mobile)
+    await delay(200)
+    for (const spec of CATALOG_TARGETS) {
+      await openApp(cdp, mobile)
+      const report = await showCatalogTarget(quiz, viewShow, spec)
+      await record('first', viewport, spec, report)
+    }
+    await openApp(cdp, mobile)
+    await showCatalogTarget(quiz, viewShow, CATALOG_TARGETS[0])
+    for (const spec of CATALOG_TARGETS) {
+      const report = await showCatalogTarget(quiz, viewShow, spec)
+      await record('mid', viewport, spec, report)
+    }
+  }
+
+  console.log('\ntarget × viewport')
+  const header = ['target', 'when', ...CATALOG_VIEWPORTS.map((row) => row[0])]
+  console.log(header.join('\t'))
+  for (const spec of CATALOG_TARGETS) {
+    for (const when of ['first', 'mid']) {
+      const cells = [catalogLabel(spec), when]
+      for (const [viewport] of CATALOG_VIEWPORTS) {
+        const row = rows.find((item) => item.when === when && item.viewport === viewport && item.target === catalogLabel(spec))
+        if (!row) cells.push('missing')
+        else {
+          const cam = row.camera
+          const tgt = row.targetPoint
+          cells.push(`${row.view} cam(${cam?.x},${cam?.y},${cam?.z}) tgt(${tgt?.x},${tgt?.y},${tgt?.z})`)
+        }
+      }
+      console.log(cells.join('\t'))
+    }
+  }
+  await writeFile(`${OUT}/catalog-views.json`, JSON.stringify(rows, null, 2))
+  if (failures.length) {
+    throw new Error(`${failures.length} catalog view failures\n${failures.join('\n')}`)
   }
 }
 

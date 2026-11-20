@@ -5,15 +5,12 @@ import { CSS2DObject, CSS2DRenderer } from 'three/addons/renderers/CSS2DRenderer
 import { assetUrl } from '../assetUrl'
 import { forEachGlb, glbConcurrency, releaseGlbSessionCache } from './glbLoad'
 import type { ViewAttachmentSite, ViewPrefer } from '../data/viewInfo'
+import { directionFor, sideFromBox, type AnatomicalView } from '../data/anatomicalViews'
 import { muscleVisibleAtLayer, type MuscleLayerFilter } from '../data/muscles'
 import {
-  anatomicalViewCandidates,
   boxViewExtents,
-  cameraOnSameSide,
-  type ViewSpan,
   fitDistanceToExtents,
   insetsChanged,
-  namesForOneSide,
   viewOffsetForBand,
   visibleBand,
   type FramingInsets,
@@ -313,8 +310,11 @@ export class ThoraxScene {
   private framedExtents: ViewExtents | null = null
   private occluderIds = new Set<string>()
   private lastViewId = 'anterior'
-  private lastScore = 0
-  private lastPrior = 0
+  /** Catalog face for the current target. Distance refits do not change it. */
+  private catalogView: AnatomicalView = 'anterior'
+  /** A newer target cancels a framing retry that is still waiting on matrices. */
+  private frameToken = 0
+  private framePending = false
   private userOrbiting = false
   private holdUserOrbit = false
   private pendingRefit = false
@@ -752,19 +752,18 @@ export class ThoraxScene {
     }
   }
 
-  setTarget(meshNames: string[]): void {
-    const present = meshNames.filter((n) => this.meshByName.has(n))
-    const framed = namesForOneSide(present)
-    this.targetIds = new Set(framed.length > 0 ? framed : meshNames)
-    // Hold yaw at 0 so anterior / medial directions stay anatomical.
+  setTarget(meshNames: string[], view: AnatomicalView = 'anterior'): void {
+    // Hold yaw at 0 so the catalog direction stays anatomical.
     // Spin stays off for the question so it cannot walk off that angle.
+    this.catalogView = view
+    this.targetIds = new Set(meshNames)
     this.spinning = false
     this.spin.rotation.y = 0
     this.holdUserOrbit = false
-    this.body.updateMatrixWorld(true)
     this.controls.minDistance = VIEW_MIN_DISTANCE
-    this.frameMeshes([...this.targetIds])
-    this.applySubjectVisibility()
+    const token = ++this.frameToken
+    this.framePending = true
+    this.frameWhenReady(meshNames, view, token, 0, 'quiz')
   }
 
   /** Drop the quiz highlight without changing the camera. */
@@ -773,27 +772,113 @@ export class ThoraxScene {
     if (!this.viewMode) this.applySubjectVisibility()
   }
 
-  private frameMeshes(meshNames: string[]): void {
+  /**
+   * Frame only after every named mesh has a world box in body scale.
+   * An early box is still in millimetres, or is missing a part, and would
+   * aim the camera at the wrong place. The face itself comes from `view`.
+   */
+  private frameWhenReady(
+    meshNames: string[],
+    view: AnatomicalView,
+    token: number,
+    attempt: number,
+    mode: 'quiz' | 'view',
+  ): void {
+    if (token !== this.frameToken || this.disposed) return
+    if (mode === 'view' && !this.viewMode) {
+      this.framePending = false
+      return
+    }
+    this.spin.rotation.y = 0
+    this.body.updateMatrixWorld(true)
+    const placed = this.placedMeshes(meshNames)
+    const missing = meshNames.length - placed.length
+    const unscaled = placed.some((row) => !row.sane)
+    if ((missing > 0 || unscaled || placed.length === 0) && attempt < 24) {
+      requestAnimationFrame(() => this.frameWhenReady(meshNames, view, token, attempt + 1, mode))
+      return
+    }
+    const usable = placed.filter((row) => row.sane)
+    const names = this.oneSideNames(usable.length > 0 ? usable : placed)
+    this.frameOnto(names, view, mode, token)
+  }
+
+  private placedMeshes(names: string[]): Array<{ name: string; outer: number; sane: boolean }> {
+    const out: Array<{ name: string; outer: number; sane: boolean }> = []
+    for (const name of names) {
+      const mesh = this.meshByName.get(name)
+      if (!mesh) continue
+      mesh.updateWorldMatrix(true, false)
+      if (!mesh.geometry.boundingBox) mesh.geometry.computeBoundingBox()
+      const local = mesh.geometry.boundingBox
+      if (!local) continue
+      const world = local.clone().applyMatrix4(mesh.matrixWorld)
+      const size = world.getSize(this._scratchA)
+      const span = size.length()
+      const sane = span > 1e-5 && span < 12 && size.x < 8 && size.y < 8 && size.z < 8
+      const outer = Math.abs(world.max.x) >= Math.abs(world.min.x) ? world.max.x : world.min.x
+      out.push({ name, outer, sane })
+    }
+    return out
+  }
+
+  /**
+   * When both sides of a bilateral muscle are loaded, frame the positive-x
+   * side plus anything on the midline. The sign comes from the world box,
+   * not from the mesh name.
+   */
+  private oneSideNames(placed: Array<{ name: string; outer: number }>): string[] {
+    const positive = placed.filter((row) => row.outer > 0.05)
+    const negative = placed.filter((row) => row.outer < -0.05)
+    if (positive.length > 0 && negative.length > 0) {
+      const mid = placed.filter((row) => Math.abs(row.outer) <= 0.05)
+      return [...positive, ...mid].map((row) => row.name)
+    }
+    return placed.map((row) => row.name)
+  }
+
+  private frameOnto(
+    meshNames: string[],
+    view: AnatomicalView,
+    mode: 'quiz' | 'view',
+    token: number,
+    confirmsLeft = 2,
+  ): void {
+    this.catalogView = view
     this.body.updateMatrixWorld(true)
     const box = new THREE.Box3()
     const present: string[] = []
     for (const name of meshNames) {
       const mesh = this.meshByName.get(name)
       if (!mesh) continue
+      mesh.updateWorldMatrix(true, false)
       box.expandByObject(mesh)
       present.push(name)
     }
-    if (present.length === 0) {
+    if (present.length === 0 || box.isEmpty()) {
       this.framedBox = null
       this.framedExtents = null
-      this.frameFullBody()
-      this.updateSideCameras()
+      this.occluderIds = new Set()
+      this.lastViewId = view
+      this.framePending = false
+      if (mode === 'quiz') {
+        this.targetIds = new Set(meshNames)
+        this.frameFullBody()
+        this.updateSideCameras()
+        this.applySubjectVisibility()
+      }
       return
     }
+    if (mode === 'quiz') this.targetIds = new Set(present)
     const size = box.getSize(new THREE.Vector3())
     const center = box.getCenter(new THREE.Vector3())
+    const side = sideFromBox(box.min.x, box.max.x)
+    const toward = directionFor(view, side)
+    const dir = new THREE.Vector3(toward.x, toward.y, toward.z)
     const viewRadius = Math.max(size.x, size.y, size.z, VIEW_PICK_MIN_SPAN) * 0.5
-    const dir = this.chooseViewDirection(center, viewRadius, present, box)
+    const scored = this.scoreDirection(center, viewRadius, dir, present)
+    this.occluderIds = new Set(scored.occluders)
+    this.lastViewId = view
     const dist = this.distanceForBox(box, dir)
     const endPos = center.clone().addScaledVector(dir, dist)
     this.focusTarget.copy(center)
@@ -801,8 +886,46 @@ export class ThoraxScene {
     this.framedBox = box.clone()
     this.camera.up.set(0, 1, 0)
     this.controls.minDistance = VIEW_MIN_DISTANCE
-    this.startViewPose(center, endPos, 0.46)
-    this.updateSideCamerasAround(center, dist)
+    this.startViewPose(center, endPos, mode === 'view' ? 0.5 : 0.46)
+    if (mode === 'quiz') this.updateSideCamerasAround(center, dist)
+    this.framePending = false
+    if (mode === 'quiz') this.applySubjectVisibility()
+    else this.applyViewPresentation()
+    if (confirmsLeft > 0) this.confirmBox(present, view, mode, token, box, confirmsLeft)
+  }
+
+  /** If the world box moves on the next frame, the first one was not final. */
+  private confirmBox(
+    meshNames: string[],
+    view: AnatomicalView,
+    mode: 'quiz' | 'view',
+    token: number,
+    snapshot: THREE.Box3,
+    confirmsLeft: number,
+  ): void {
+    const before = snapshot.clone()
+    requestAnimationFrame(() => {
+      if (token !== this.frameToken || this.disposed) return
+      if (mode === 'view' && !this.viewMode) return
+      this.body.updateMatrixWorld(true)
+      const again = new THREE.Box3()
+      let count = 0
+      for (const name of meshNames) {
+        const mesh = this.meshByName.get(name)
+        if (!mesh) continue
+        mesh.updateWorldMatrix(true, false)
+        again.expandByObject(mesh)
+        count += 1
+      }
+      if (count === 0 || again.isEmpty()) return
+      const a = before.getCenter(new THREE.Vector3())
+      const b = again.getCenter(new THREE.Vector3())
+      const as = before.getSize(new THREE.Vector3())
+      const bs = again.getSize(new THREE.Vector3())
+      const moved = a.distanceTo(b) > 0.02 || as.distanceTo(bs) > 0.02
+      if (!moved) return
+      this.frameOnto(meshNames, view, mode, token, confirmsLeft - 1)
+    })
   }
 
   private updateSideCameras(): void {
@@ -1002,37 +1125,16 @@ export class ThoraxScene {
   }
 
   /**
-   * Ease onto the selected meshes in View. Keeps the current direction when
-   * the part is already readable, otherwise swings to the clearer angle.
+   * Ease onto the selected meshes in View, from the catalog face.
    * Distance fits the band above or beside the study panel.
    */
-  frameViewSelection(meshNames: string[]): void {
+  frameViewSelection(meshNames: string[], view: AnatomicalView = 'anterior'): void {
     if (!this.viewMode || meshNames.length === 0) return
-    this.body.updateMatrixWorld(true)
-    const box = new THREE.Box3()
-    const present: string[] = []
-    for (const name of meshNames) {
-      const mesh = this.meshByName.get(name)
-      if (!mesh) continue
-      box.expandByObject(mesh)
-      present.push(name)
-    }
-    if (present.length === 0) return
-
+    this.catalogView = view
     this.holdUserOrbit = false
-    const center = box.getCenter(new THREE.Vector3())
-    const size = box.getSize(new THREE.Vector3())
-    const viewRadius = Math.max(size.x, size.y, size.z, VIEW_PICK_MIN_SPAN) * 0.5
-    const dir = this.directionOrBest(center, viewRadius, present, box)
-    const dist = this.distanceForBox(box, dir)
-    const endPos = center.clone().addScaledVector(dir, dist)
-
-    this.focusTarget.copy(center)
-    this.focusDist = dist
-    this.framedBox = box.clone()
-    this.camera.up.set(0, 1, 0)
-    this.startViewPose(center, endPos, 0.5)
-    this.applyViewPresentation()
+    const token = ++this.frameToken
+    this.framePending = true
+    this.frameWhenReady(meshNames, view, token, 0, 'view')
   }
 
   private cancelViewFrame(): void {
@@ -1494,7 +1596,7 @@ export class ThoraxScene {
           Math.abs(c.bottom - t.bottom) < 0.6 &&
           Math.abs(c.left - t.left) < 0.6 &&
           Math.abs(c.right - t.right) < 0.6
-        if ((!this.viewFrame && insetsDone) || performance.now() - start > 1800) {
+        if ((!this.framePending && !this.viewFrame && insetsDone) || performance.now() - start > 3500) {
           resolve()
           return
         }
@@ -1513,7 +1615,7 @@ export class ThoraxScene {
       z: Number(v.z.toFixed(3)),
     })
     return {
-      viewId: this.lastViewId,
+      viewId: this.catalogView || this.lastViewId,
       distance: Number(offset.length().toFixed(3)),
       offsetX: view?.enabled ? Math.round(view.offsetX) : 0,
       offsetY: view?.enabled ? Math.round(view.offsetY) : 0,
@@ -1679,97 +1781,6 @@ export class ThoraxScene {
     const band = visibleBand(w, h, c)
     const off = viewOffsetForBand(w, h, band)
     this.camera.setViewOffset(off.fullWidth, off.fullHeight, off.offsetX, off.offsetY, off.width, off.height)
-  }
-
-  private viewSpan(box: THREE.Box3, names: string[]): ViewSpan {
-    let left = 0
-    let right = 0
-    for (const name of names) {
-      const side = meshPickSide(name)
-      if (side === 'l') left += 1
-      else if (side === 'r') right += 1
-    }
-    return {
-      minX: box.min.x,
-      maxX: box.max.x,
-      side: left > 0 && right === 0 ? 'l' : right > 0 && left === 0 ? 'r' : null,
-    }
-  }
-
-  private chooseViewDirection(
-    center: THREE.Vector3,
-    radius: number,
-    names: string[],
-    box: THREE.Box3,
-  ): THREE.Vector3 {
-    const half = Math.max(this.lastBboxSize.x * 0.5, 0.35)
-    const at = { x: center.x, y: center.y, z: center.z }
-    const span = this.viewSpan(box, names)
-    // Priors and the same-side rule decide the shortlist. Occlusion only
-    // breaks ties among those. The current camera and the previous question's
-    // fade are not inputs. Side comes from the mesh names and the outer edge
-    // of the box, not from a centre that can sit on the clavicle.
-    const ranked = anatomicalViewCandidates(at, half, span)
-      .sort((a, b) => b.prior - a.prior || a.id.localeCompare(b.id))
-      .slice(0, 4)
-    let bestDir = new THREE.Vector3(0, 0.16, 1).normalize()
-    let bestScore = -Infinity
-    let bestOcc: string[] = []
-    let bestId = 'anterior'
-    let bestRatio = 0
-    let bestPrior = 0
-    for (const candidate of ranked) {
-      const dir = new THREE.Vector3(candidate.dir.x, candidate.dir.y, candidate.dir.z)
-      const scored = this.scoreDirection(center, radius, dir, names)
-      // A clearly better prior (medial thigh, posterior hip, same-side shoulder)
-      // is not lost to an occlusion gap. The ray ratio only breaks a close call.
-      const score = candidate.prior + scored.ratio * 0.12
-      if (score > bestScore || (score === bestScore && candidate.id.localeCompare(bestId) < 0)) {
-        bestScore = score
-        bestDir = dir
-        bestOcc = scored.occluders
-        bestId = candidate.id
-        bestRatio = scored.ratio
-        bestPrior = candidate.prior
-      }
-    }
-    this.occluderIds = new Set(bestOcc)
-    this.lastViewId = bestId
-    this.lastScore = bestRatio
-    this.lastPrior = bestPrior
-    return bestDir
-  }
-
-  /**
-   * View mode may keep an orbit the user already has, but not a front view
-   * of a posterior muscle, a look through the torso, or the previous target's
-   * angle when that angle is blocked.
-   */
-  private directionOrBest(
-    center: THREE.Vector3,
-    radius: number,
-    names: string[],
-    box: THREE.Box3,
-  ): THREE.Vector3 {
-    const best = this.chooseViewDirection(center, radius, names, box)
-    const half = Math.max(this.lastBboxSize.x * 0.5, 0.35)
-    const at = { x: center.x, y: center.y, z: center.z }
-    const span = this.viewSpan(box, names)
-    const strongPosterior = this.lastViewId.startsWith('posterior') && this.lastPrior >= 0.34
-    if (strongPosterior) return best
-    const current = this.camera.position.clone().sub(this.controls.target)
-    if (current.lengthSq() < 1e-6) return best
-    current.normalize()
-    const currentDir = { x: current.x, y: current.y, z: current.z }
-    if (!cameraOnSameSide(at, currentDir, half, span)) return best
-    const currentScore = this.scoreDirection(center, radius, current, names)
-    if (currentScore.occluded >= 0.45) return best
-    if (currentScore.ratio >= 0.72 && currentScore.ratio + 0.05 >= this.lastScore) {
-      this.occluderIds = new Set(currentScore.occluders)
-      this.lastViewId = 'kept'
-      return current
-    }
-    return best
   }
 
   private scoreDirection(

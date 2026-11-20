@@ -253,11 +253,11 @@ export function fitDistanceToExtents(opts: {
 }
 
 /**
- * Candidate camera directions in the upright body frame
- * (cranial +Y, anterior +Z, the body's right +X).
- * Priors favour an anterior-medial view for a medial limb muscle, a
- * posterior view for a posterior muscle, and an outside view for a
- * far-lateral part. Occlusion scoring adds to these priors.
+ * Historical direction priors. The scene does not call these.
+ * Quiz and View faces come from `anatomicalViews.ts`. Side comes from the
+ * mesh box. These helpers remain only so an old experiment can be compared.
+ *
+ * Upright body frame: cranial +Y, anterior +Z.
  */
 export function anatomicalViewCandidates(
   center: Vec3,
