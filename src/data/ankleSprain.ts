@@ -82,17 +82,12 @@ export const ANKLE_LIGAMENT_MESHES: readonly string[] = [
   'deltoid_l',
 ]
 
-/** Meshes framed with the right ankle. Full tibia/fibula would pull the camera up the shin. */
+/** Meshes framed with the right ankle. Hindfoot only — the forefoot pulled the camera too far to read the bands. Full tibia/fibula would pull it up the shin. */
 export const ANKLE_FRAME_MESHES: readonly string[] = [
   'talus_r',
   'calcaneus_r',
   'navicular_r',
   'cuboid_r',
-  'cuneiform_med_r',
-  'cuneiform_int_r',
-  'cuneiform_lat_r',
-  'metatarsal1_r',
-  'metatarsal5_r',
   'atfl_r',
   'cfl_r',
   'deltoid_r',

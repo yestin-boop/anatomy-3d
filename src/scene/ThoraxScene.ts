@@ -18,6 +18,17 @@ import {
 } from './framing'
 import { anklePoseAt, type AnklePose } from './anklePose'
 import {
+  ANKLE_FRAME_FILL,
+  LIGAMENT_BASE,
+  LIGAMENT_DIM,
+  LIGAMENT_INFLATE_WORLD,
+  LIGAMENT_LOOK,
+  inflateGeometryAlongNormals,
+  ligamentLabel,
+  ligamentRole,
+  ankleLigamentLabelsVisible,
+} from './ligamentLook'
+import {
   ANKLE_CONTEXT_BONES,
   ANKLE_FRAME_MESHES,
   ANKLE_LIGAMENT_MESHES,
@@ -266,15 +277,6 @@ export type ThoraxSceneOptions = {
 
 export type MeshKind = 'bone' | 'muscle' | 'cartilage' | 'ligament'
 
-const LIGAMENT_BASE = {
-  color: 0xf2d7a2,
-  emissive: 0x6a4a16,
-  emissiveIntensity: 0.28,
-  opacity: 1,
-  metalness: 0.02,
-  roughness: 0.46,
-}
-
 export type ViewPickHit = {
   meshName: string
   kind: MeshKind
@@ -323,6 +325,9 @@ export class ThoraxScene {
   private ankleLigamentsVisible = true
   private ligamentsLoaded = false
   private ligamentsLoading: Promise<void> | null = null
+  private ligamentsInflated = false
+  private ankleLabelsWanted = false
+  private ankleLabelGroup = new THREE.Group()
   private targetIds = new Set<string>()
   private subject: 'bones' | 'muscles' = 'bones'
   private spinning = true
@@ -457,6 +462,8 @@ export class ThoraxScene {
     this.scene.add(this.spin)
     this.markerGroup.name = 'viewMarkers'
     this.scene.add(this.markerGroup)
+    this.ankleLabelGroup.name = 'ankleLigamentLabels'
+    this.scene.add(this.ankleLabelGroup)
 
     this.labelRenderer = new CSS2DRenderer()
     this.labelRenderer.domElement.className = 'label-layer'
@@ -1792,7 +1799,7 @@ export class ThoraxScene {
       canvasHeight: h,
       bandWidth: band.width,
       bandHeight: band.height,
-      fill: 0.66,
+      fill: this.ankleCase ? ANKLE_FRAME_FILL : 0.66,
       marginPx: 12,
       minBandPx,
       // A carpal-sized part stays far enough to keep the neighbouring bones in frame.
@@ -1979,6 +1986,8 @@ export class ThoraxScene {
     }
     this.ankleCase = false
     this.ankleEmphasis = 'none'
+    this.ankleLabelsWanted = false
+    this.clearAnkleLabels()
     this.targetIds = new Set()
     this.framedBox = null
     this.framedExtents = null
@@ -1993,6 +2002,13 @@ export class ThoraxScene {
   setAnkleEmphasis(emphasis: AnkleEmphasis): void {
     this.ankleEmphasis = emphasis
     if (this.ankleCase) this.applyAnkleLook()
+  }
+
+  /** Short ATFL / CFL tags on the Learn ligaments step. Hidden with the unrigged meshes. */
+  setAnkleLigamentLabels(visible: boolean): void {
+    this.ankleLabelsWanted = visible
+    if (this.ankleCase) this.syncAnkleLabels()
+    else this.clearAnkleLabels()
   }
 
   /** Play the inversion + plantarflexion motion once, from neutral back to neutral. */
@@ -2103,6 +2119,8 @@ export class ThoraxScene {
     roll: { lateralY: number; medialY: number } | null
     /** World Y of the patient's lateral direction. Negative means that side points down. */
     lateralAxisY: number | null
+    labels: { atfl: boolean; cfl: boolean }
+    inflate: number
   } {
     const round = (v: THREE.Vector3) => ({
       x: +v.x.toFixed(4),
@@ -2149,6 +2167,8 @@ export class ThoraxScene {
       picks,
       roll: this.calcaneusRoll(),
       lateralAxisY: this.anklePivot ? +(-this.anklePivot.matrixWorld.elements[1]).toFixed(4) : null,
+      labels: this.ankleLabelState(),
+      inflate: LIGAMENT_INFLATE_WORLD,
     }
   }
 
@@ -2198,7 +2218,25 @@ export class ThoraxScene {
     }
     const loader = new GLTFLoader()
     await this.loadGroup(loader, urls, 'ligament', 'ligaments', 'bones')
+    this.inflateLoadedLigaments()
     this.ligamentsLoaded = true
+  }
+
+  /**
+   * Fatten the licensed ligaments in place after they are parented to the
+   * scaled body. The packed GLBs are not rewritten.
+   */
+  private inflateLoadedLigaments(): void {
+    if (this.ligamentsInflated) return
+    const worldScale = Math.max(this.body.scale.x, 1e-8)
+    const local = LIGAMENT_INFLATE_WORLD / worldScale
+    for (const name of ANKLE_LIGAMENT_MESHES) {
+      const mesh = this.meshByName.get(name)
+      if (!mesh || mesh.userData.ligamentInflated) continue
+      mesh.geometry = inflateGeometryAlongNormals(mesh.geometry, local)
+      mesh.userData.ligamentInflated = true
+    }
+    this.ligamentsInflated = true
   }
 
   private buildAnklePivot(): void {
@@ -2270,15 +2308,27 @@ export class ThoraxScene {
         const right = name.endsWith('_r')
         mesh.visible = right && this.ankleLigamentsVisible
         const hot = emphasized.size === 0 || emphasized.has(name)
-        mat.color.setHex(hot ? 0xffe6b0 : 0x8d7348)
-        mat.emissive.setHex(hot ? 0xc47a12 : 0x000000)
-        mat.emissiveIntensity = hot ? 0.72 : 0
-        mat.opacity = hot ? 1 : 0.55
+        const role = ligamentRole(name)
+        const pal = role === 'other' ? LIGAMENT_LOOK.atfl : LIGAMENT_LOOK[role]
+        if (hot) {
+          mat.color.setHex(pal.color)
+          mat.emissive.setHex(pal.emissive)
+          mat.emissiveIntensity = pal.emissiveIntensity
+          mat.opacity = 1
+        } else {
+          mat.color.setHex(LIGAMENT_DIM.color)
+          mat.emissive.setHex(LIGAMENT_DIM.emissive)
+          mat.emissiveIntensity = LIGAMENT_DIM.emissiveIntensity
+          mat.opacity = LIGAMENT_DIM.opacity
+        }
         mat.transparent = !hot
         mat.depthWrite = hot
         mat.roughness = 0.42
         mat.metalness = 0.02
         mat.side = THREE.DoubleSide
+        mat.polygonOffset = true
+        mat.polygonOffsetFactor = -2
+        mat.polygonOffsetUnits = -2
         mesh.renderOrder = 12
         mat.needsUpdate = true
         continue
@@ -2293,6 +2343,66 @@ export class ThoraxScene {
         mesh.renderOrder = 0
       }
     }
+    this.syncAnkleLabels()
+  }
+
+  private ankleLabelState(): { atfl: boolean; cfl: boolean } {
+    const show = ankleLigamentLabelsVisible(this.ankleLigamentsVisible, this.ankleLabelsWanted)
+    const visible = (name: string) => {
+      if (!show) return false
+      const el = this.ankleLabelGroup.getObjectByName(`label-${name}`)
+      return !!(el && el.visible)
+    }
+    return { atfl: visible('atfl_r'), cfl: visible('cfl_r') }
+  }
+
+  private clearAnkleLabels(): void {
+    const remove: CSS2DObject[] = []
+    this.ankleLabelGroup.traverse((o) => {
+      if (o instanceof CSS2DObject) remove.push(o)
+    })
+    for (const o of remove) {
+      o.parent?.remove(o)
+      o.element.remove()
+    }
+    while (this.ankleLabelGroup.children.length > 0) {
+      this.ankleLabelGroup.remove(this.ankleLabelGroup.children[0]!)
+    }
+  }
+
+  private syncAnkleLabels(): void {
+    const show = this.ankleCase && ankleLigamentLabelsVisible(this.ankleLigamentsVisible, this.ankleLabelsWanted)
+    if (!show) {
+      this.clearAnkleLabels()
+      return
+    }
+    if (this.ankleLabelGroup.children.length === 0) this.placeAnkleLabels()
+    this.ankleLabelGroup.visible = true
+    for (const child of this.ankleLabelGroup.children) child.visible = true
+  }
+
+  private placeAnkleLabels(): void {
+    this.clearAnkleLabels()
+    this.body.updateMatrixWorld(true)
+    for (const name of ['atfl_r', 'cfl_r'] as const) {
+      const mesh = this.meshByName.get(name)
+      const text = ligamentLabel(name)
+      if (!mesh || !text) continue
+      mesh.updateWorldMatrix(true, false)
+      const center = new THREE.Box3().setFromObject(mesh).getCenter(new THREE.Vector3())
+      // Sit the tag just off the band: further lateral (−X on the right ankle),
+      // ATFL a little anterior/cranial, CFL a little plantar/posterior.
+      if (name === 'atfl_r') center.set(center.x - 0.028, center.y + 0.018, center.z + 0.022)
+      else center.set(center.x - 0.028, center.y - 0.022, center.z - 0.012)
+      const el = document.createElement('div')
+      el.className = `view-pin view-pin--ligament view-pin--${text.toLowerCase()}`
+      el.textContent = text
+      el.style.pointerEvents = 'none'
+      const tag = new CSS2DObject(el)
+      tag.name = `label-${name}`
+      tag.position.copy(center)
+      this.ankleLabelGroup.add(tag)
+    }
   }
 
   dispose(): void {
@@ -2300,6 +2410,8 @@ export class ThoraxScene {
     this.cancelViewFrame()
     window.removeEventListener('resize', this.resize)
     this.clearViewMarkers()
+    this.clearAnkleLabels()
+    this.ankleLabelGroup.removeFromParent()
     this.controls.dispose()
     this.renderer.dispose()
     this.labelRenderer.domElement.remove()

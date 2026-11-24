@@ -859,6 +859,23 @@ html.touch-quiz.phone-landscape.keyboard-open .view-filters.is-quiz {
   color: #06221f;
   transform: translate(-15%, 70%);
 }
+.view-pin--ligament {
+  font: 700 0.58rem/1.1 var(--font);
+  letter-spacing: 0.06em;
+  padding: 2px 6px;
+  transform: translate(-50%, -130%);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.45);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+}
+.view-pin--atfl {
+  background: #e0b03a;
+  color: #2a1a00;
+}
+.view-pin--cfl {
+  background: #c45a28;
+  color: #1f0a00;
+  transform: translate(-50%, 40%);
+}
 
 .chrome--top.is-view .chrome-center,
 .chrome--top.is-view #pill-round {

@@ -4,6 +4,7 @@
  */
 import { ANKLE_INJURY_U, ANKLE_PLANTARFLEXION_RAD, anklePoseAt } from '../src/scene/anklePose.ts'
 import {
+  ANKLE_FRAME_MESHES,
   ANKLE_LEARN,
   ANKLE_QUIZ,
   RIGHT_FOOT_BONES,
@@ -13,6 +14,18 @@ import {
   type AnkleTapStep,
   type AnkleTypeStep,
 } from '../src/data/ankleSprain.ts'
+import * as THREE from 'three'
+import {
+  ANKLE_BONE_COLOR,
+  ANKLE_FRAME_FILL,
+  LIGAMENT_DIM,
+  LIGAMENT_INFLATE_WORLD,
+  LIGAMENT_LOOK,
+  ankleLigamentLabelsVisible,
+  inflateGeometryAlongNormals,
+  ligamentLabel,
+  ligamentRole,
+} from '../src/scene/ligamentLook.ts'
 
 let passed = 0
 let failed = 0
@@ -101,6 +114,41 @@ assert(end.plantarRad === 0 && end.inversionRad === 0, 'motion ends neutral')
 assert(Math.abs(injury.plantarRad - ANKLE_PLANTARFLEXION_RAD) < 1e-9, 'injury pose uses the notes 40° plantarflexion')
 assert(injury.inversionRad > 0.2, 'injury pose also inverts')
 assert(!injury.ligamentsVisible, 'unrigged ligaments hide while the foot is off neutral')
+
+
+assert(LIGAMENT_LOOK.atfl.color !== LIGAMENT_LOOK.cfl.color, 'ATFL and CFL use distinct hues')
+assert(LIGAMENT_LOOK.atfl.color !== LIGAMENT_LOOK.deltoid.color, 'ATFL and deltoid use distinct hues')
+assert(LIGAMENT_LOOK.cfl.color !== LIGAMENT_LOOK.deltoid.color, 'CFL and deltoid use distinct hues')
+assert(LIGAMENT_LOOK.atfl.color !== ANKLE_BONE_COLOR, 'ATFL is not cream bone')
+assert(LIGAMENT_LOOK.cfl.color !== ANKLE_BONE_COLOR, 'CFL is not cream bone')
+assert(LIGAMENT_LOOK.deltoid.color !== ANKLE_BONE_COLOR, 'deltoid is not cream bone')
+assert(LIGAMENT_LOOK.atfl.color !== 0xffe6b0, 'ATFL is no longer the washed pale gold')
+assert(LIGAMENT_LOOK.cfl.color !== 0xffe6b0, 'CFL is no longer the washed pale gold')
+assert(LIGAMENT_DIM.color !== LIGAMENT_LOOK.atfl.color, 'dim ligaments are darker than the hot ATFL')
+assert(LIGAMENT_INFLATE_WORLD === 0.008, 'inflate stays at the chosen 0.008 scene units')
+assert(LIGAMENT_INFLATE_WORLD > 0.004 && LIGAMENT_INFLATE_WORLD < 0.016, 'inflate is a band, not a fleck or a sausage')
+assert(ANKLE_FRAME_FILL > 0.66 && ANKLE_FRAME_FILL <= 0.88, 'ankle frame is tighter than the general quiz fill')
+assert(ligamentRole('atfl_r') === 'atfl' && ligamentRole('cfl_r') === 'cfl', 'mesh names map to ligament roles')
+assert(ligamentLabel('atfl_r') === 'ATFL' && ligamentLabel('cfl_r') === 'CFL', 'right lateral bands have short labels')
+assert(ligamentLabel('deltoid_r') === null, 'deltoid stays unlabeled so the lateral tags stay clear')
+assert(ankleLigamentLabelsVisible(true, true), 'labels show on the Learn ligaments step at rest')
+assert(!ankleLigamentLabelsVisible(false, true), 'labels hide when unrigged ligaments hide off neutral')
+assert(!ankleLigamentLabelsVisible(true, false), 'labels stay off outside the ligaments step')
+
+const box = new THREE.BoxGeometry(1, 1, 0.1)
+box.computeBoundingBox()
+const before = box.boundingBox!.getSize(new THREE.Vector3())
+const fat = inflateGeometryAlongNormals(box, 0.05)
+fat.computeBoundingBox()
+const after = fat.boundingBox!.getSize(new THREE.Vector3())
+assert(Math.abs(after.z - (before.z + 0.1)) < 1e-6, 'inflate thickens a slab by twice the offset')
+assert(Math.abs(after.x - (before.x + 0.1)) < 1e-6, 'inflate also moves the other faces out')
+assert(box.boundingBox!.getSize(new THREE.Vector3()).z === before.z, 'inflate clones the geometry and leaves the source alone')
+
+assert(!ANKLE_FRAME_MESHES.includes('metatarsal1_r'), 'forefoot metatarsals no longer pull the ankle frame out')
+assert(!ANKLE_FRAME_MESHES.includes('metatarsal5_r'), 'fifth metatarsal is not in the tight ankle frame')
+assert(ANKLE_FRAME_MESHES.includes('talus_r') && ANKLE_FRAME_MESHES.includes('calcaneus_r'), 'hindfoot bones still frame the ankle')
+assert(ANKLE_FRAME_MESHES.includes('atfl_r') && ANKLE_FRAME_MESHES.includes('cfl_r'), 'lateral ligaments are in the frame')
 
 if (failed) {
   console.error(`\n${passed} passed, ${failed} failed`)
