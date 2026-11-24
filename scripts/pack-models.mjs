@@ -23,6 +23,7 @@ const GROUPS = [
   { name: 'bones', manifest: 'models/extra/manifest.json' },
   { name: 'muscles', manifest: 'models/extra/muscles/manifest.json' },
   { name: 'cartilage', manifest: 'models/extra/cartilage/manifest.json' },
+  { name: 'ligaments', manifest: 'models/extra/ligaments/manifest.json' },
 ]
 
 function readPack(buf) {

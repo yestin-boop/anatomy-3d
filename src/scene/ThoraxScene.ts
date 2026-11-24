@@ -27,6 +27,46 @@ import {
   type AnkleHit,
 } from '../data/ankleSprain'
 
+const _segV = new THREE.Vector3()
+const _segW = new THREE.Vector3()
+const _segOnRay = new THREE.Vector3()
+const _segOnEdge = new THREE.Vector3()
+
+/** Closest gap between a ray and a segment. `along` is negative when that point is behind the camera. */
+function raySegmentGap(ray: THREE.Ray, p: THREE.Vector3, q: THREE.Vector3): { radial: number; along: number } {
+  const dir = ray.direction
+  const edge = _segV.subVectors(q, p)
+  const w0 = _segW.subVectors(ray.origin, p)
+  const b = dir.dot(edge)
+  const c = edge.dot(edge)
+  const d = dir.dot(w0)
+  const e = edge.dot(w0)
+  const denom = c - b * b
+  let along: number
+  let t: number
+  if (denom < 1e-8) {
+    along = 0
+    t = c > 1e-8 ? e / c : 0
+  } else {
+    along = (b * e - c * d) / denom
+    t = (e - b * d) / denom
+    if (along < 0) {
+      along = 0
+      t = c > 1e-8 ? e / c : 0
+    }
+  }
+  if (t < 0) {
+    t = 0
+    along = -d
+  } else if (t > 1) {
+    t = 1
+    along = b - d
+  }
+  _segOnRay.copy(ray.origin).addScaledVector(dir, Math.max(along, 0))
+  _segOnEdge.copy(p).addScaledVector(edge, t)
+  return { radial: _segOnRay.distanceTo(_segOnEdge), along }
+}
+
 export type ViewSubjectFilter = 'both' | 'bones' | 'muscles'
 export type MaterialLook = 'xray' | 'solid'
 
@@ -1992,38 +2032,63 @@ export class ThoraxScene {
       first = { hit: classifyAnkleMesh(obj.name), meshName: obj.name, distance: hit.distance }
       break
     }
-    // The licensed ribbons are only a few millimetres thick, so a ray through
-    // the middle of one often hits the bone just in front of it. Prefer that
-    // ligament when a vertex sits on the ray. The fibular shaft is far enough
-    // away that it still reads as bone.
-    const near = this.nearestRightLigament(0.016)
-    if (near && (first == null || near.distance <= first.distance + 0.025)) {
+    // The licensed ribbons are only a few millimetres thick. A ray through the
+    // middle of one often misses every vertex and hits the fibula behind it.
+    // Measure distance to the triangles, and prefer that ligament when the ray
+    // is on the ribbon. The fibular shaft stays far enough away to read as bone.
+    const near = this.nearestRightLigament(0.014)
+    if (near && (first == null || near.distance <= first.distance + 0.03)) {
       return { hit: classifyAnkleMesh(near.name), meshName: near.name }
     }
     return first ? { hit: first.hit, meshName: first.meshName } : null
   }
 
-  /** Closest right-ankle ligament to the current ray, in world units. */
+  /** Closest right-ankle ligament surface to the current ray, in world units. */
   private nearestRightLigament(maxRadial: number): { name: string; distance: number } | null {
     const ray = this.raycaster.ray
-    const point = new THREE.Vector3()
-    let best: { name: string; radial: number; distance: number } | null = null
+    const a = new THREE.Vector3()
+    const b = new THREE.Vector3()
+    const c = new THREE.Vector3()
+    const hit = new THREE.Vector3()
+    let bestName = ''
+    let bestRadial = Infinity
+    let bestAlong = 0
+    const consider = (name: string, radial: number, along: number) => {
+      if (along < 0 || radial > maxRadial || radial >= bestRadial) return
+      bestName = name
+      bestRadial = radial
+      bestAlong = along
+    }
     for (const name of ['atfl_r', 'cfl_r', 'deltoid_r']) {
       const mesh = this.meshByName.get(name)
       if (!mesh?.visible) continue
       const pos = mesh.geometry.getAttribute('position')
+      const index = mesh.geometry.getIndex()
       if (!pos) continue
       mesh.updateWorldMatrix(true, false)
-      for (let i = 0; i < pos.count; i++) {
-        point.fromBufferAttribute(pos as THREE.BufferAttribute, i).applyMatrix4(mesh.matrixWorld)
-        const along = point.clone().sub(ray.origin).dot(ray.direction)
-        if (along < 0) continue
-        const radial = ray.distanceToPoint(point)
-        if (radial > maxRadial) continue
-        if (!best || radial < best.radial) best = { name, radial, distance: along }
+      const triCount = index ? index.count / 3 : Math.floor(pos.count / 3)
+      for (let t = 0; t < triCount; t++) {
+        const ia = index ? index.getX(t * 3) : t * 3
+        const ib = index ? index.getX(t * 3 + 1) : t * 3 + 1
+        const ic = index ? index.getX(t * 3 + 2) : t * 3 + 2
+        a.fromBufferAttribute(pos as THREE.BufferAttribute, ia).applyMatrix4(mesh.matrixWorld)
+        b.fromBufferAttribute(pos as THREE.BufferAttribute, ib).applyMatrix4(mesh.matrixWorld)
+        c.fromBufferAttribute(pos as THREE.BufferAttribute, ic).applyMatrix4(mesh.matrixWorld)
+        if (ray.intersectTriangle(a, b, c, false, hit)) {
+          consider(name, 0, hit.sub(ray.origin).dot(ray.direction))
+          continue
+        }
+        for (const [p0, p1] of [
+          [a, b],
+          [b, c],
+          [c, a],
+        ] as const) {
+          const gap = raySegmentGap(ray, p0, p1)
+          consider(name, gap.radial, gap.along)
+        }
       }
     }
-    return best ? { name: best.name, distance: best.distance } : null
+    return bestName ? { name: bestName, distance: bestAlong } : null
   }
 
   getAnkleReport(): {

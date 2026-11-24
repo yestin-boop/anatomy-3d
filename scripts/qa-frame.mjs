@@ -333,7 +333,7 @@ function assertAnkle(report, label, expect) {
     if (!report.pose || report.pose.plantar < 0.5) fail(`injury pose did not plantarflex, got ${JSON.stringify(report.pose)}`)
     if (!report.pose || report.pose.invert < 0.2) fail(`injury pose did not invert, got ${JSON.stringify(report.pose)}`)
   }
-  if (expect === 'neutral' && report.picks) {
+  if ((expect === 'neutral' || expect === 'type') && report.picks) {
     if (report.picks.atfl_r !== 'atfl') fail(`tap on the ATFL center returned ${report.picks.atfl_r}`)
     if (report.picks.cfl_r !== 'cfl') fail(`tap on the CFL center returned ${report.picks.cfl_r}`)
     if (report.picks.fibula_r !== 'fibula') fail(`tap on the fibular shaft returned ${report.picks.fibula_r}`)
