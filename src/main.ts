@@ -2325,6 +2325,7 @@ function renderLearnCard(): void {
   caseBack.hidden = state.caseLearnIndex === 0
   caseNext.textContent = state.caseLearnIndex === ANKLE_LEARN.length - 1 ? 'Start quiz' : 'Next'
   scene.setAnkleEmphasis(card.emphasis)
+  scene.setAnkleLigamentLabels(card.id === 'ligaments')
   if (card.motion) scene.replayAnkleMotion()
   else scene.holdAnklePose(0)
 }
@@ -2396,6 +2397,7 @@ function startAnkleQuiz(): void {
   playHud.hidden = false
   scene.holdAnklePose(0)
   scene.setAnkleEmphasis('none')
+  scene.setAnkleLigamentLabels(false)
   renderCaseHud()
   syncFramingInsetsNow()
   if (state.caseTyping) focusInput()
@@ -2742,7 +2744,7 @@ function qaShowCommonBones(): { count: number; total: number; label: string } {
 }
 
 async function qaShowAnkle(
-  mode: 'menu' | 'learn' | 'motion' | 'injury' | 'type' | 'tap' | 'palpation',
+  mode: 'menu' | 'learn' | 'motion' | 'injury' | 'ligaments' | 'type' | 'tap' | 'palpation',
   keyboardPx = 0,
 ): Promise<Record<string, unknown>> {
   forcedKeyboardInset = keyboardPx
@@ -2758,16 +2760,17 @@ async function qaShowAnkle(
     }
   }
   if (!state.caseActive) await startAnkleCase()
-  if (mode === 'learn' || mode === 'motion' || mode === 'injury') {
+  if (mode === 'learn' || mode === 'motion' || mode === 'injury' || mode === 'ligaments') {
     state.casePhase = 'learn'
-    state.caseLearnIndex = 1
+    state.caseLearnIndex = mode === 'ligaments' ? 2 : 1
     casePanel.hidden = false
     playHud.hidden = true
     pillSubject.textContent = 'Rehab'
     pillMode.textContent = 'Learn'
-    pillRound.textContent = `2 / ${ANKLE_LEARN.length}`
+    const cardNo = state.caseLearnIndex + 1
+    pillRound.textContent = `${cardNo} / ${ANKLE_LEARN.length}`
     renderLearnCard()
-    scene.holdAnklePose(mode === 'learn' ? 0 : ANKLE_INJURY_U)
+    scene.holdAnklePose(mode === 'injury' ? ANKLE_INJURY_U : 0)
   } else {
     const index = mode === 'type' ? 0 : mode === 'tap' ? 2 : 4
     state.casePhase = 'quiz'
@@ -2779,6 +2782,7 @@ async function qaShowAnkle(
     playHud.hidden = false
     scene.holdAnklePose(0)
     scene.setAnkleEmphasis('none')
+    scene.setAnkleLigamentLabels(false)
     renderCaseHud()
   }
   syncFramingInsetsNow()
