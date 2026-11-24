@@ -30,6 +30,15 @@ import {
 import { viewForBoneId, viewForMuscleId, type AnatomicalView } from './data/anatomicalViews'
 import { CARTILAGE, type CartilageRegion } from './data/cartilage'
 import { ThoraxScene, type FramingReport, type MaterialLook, type ViewSubjectFilter } from './scene/ThoraxScene'
+import { ANKLE_INJURY_U } from './scene/anklePose'
+import {
+  ANKLE_LEARN,
+  ANKLE_QUIZ,
+  ankleTypeMatch,
+  gradeAnkleTap,
+  type AnkleQuizStep,
+  type AnkleTypeStep,
+} from './data/ankleSprain'
 import { insetsChanged, type FramingInsets } from './scene/framing'
 import { playCorrectChime, playKeyTap, playWrongTick, unlockAudio } from './audio/chime'
 import { getBoneView, getCartilageView, getMuscleView, type ViewAttachmentSite, type ViewSide } from './data/viewInfo'
@@ -154,6 +163,17 @@ app.innerHTML = `
       </section>
 
       <section class="menu-section">
+        <h2>Rehab</h2>
+        <button type="button" class="mode-card mode-card--wide" id="btn-ankle-case">
+          <span class="mode-key">R</span>
+          <div>
+            <span class="mode-title">Lateral ankle sprain</span>
+            <span class="mode-sub">soccer cut · inversion and plantarflexion · learn, then tap and type</span>
+          </div>
+        </button>
+      </section>
+
+      <section class="menu-section">
         <h2>Subject</h2>
         <div class="mode-grid mode-grid--subjects">
           <button type="button" class="mode-card mode-card--on" data-subject="bones" id="subject-bones">
@@ -268,6 +288,17 @@ app.innerHTML = `
     </div>
   </aside>
 
+  <aside class="case-panel" id="case-panel" hidden>
+    <p class="case-kicker" id="case-kicker"></p>
+    <h2 id="case-title"></h2>
+    <div class="case-body" id="case-body"></div>
+    <div class="case-actions">
+      <button type="button" class="case-btn case-btn--ghost" id="case-back">Back</button>
+      <button type="button" class="case-btn case-btn--ghost" id="case-replay" hidden>Replay the roll</button>
+      <button type="button" class="case-btn" id="case-next">Next</button>
+    </div>
+  </aside>
+
   <!-- In-play typing HUD -->
   <div class="hud" id="play-hud" hidden>
     <div class="prompt-block" id="prompt-block">
@@ -305,6 +336,8 @@ app.innerHTML = `
     <span>BodyParts3D, © The Database Center for Life Science / CC BY 4.0</span>
     <span class="footer-attr-sep"> · </span>
     <span>Some trunk muscles from Z-Anatomy / Écorché, CC BY-SA 4.0</span>
+    <span class="footer-attr-sep"> · </span>
+    <span>Ankle ligaments from Z-Anatomy, CC BY-SA 4.0</span>
   </div>
 `
 
@@ -341,6 +374,14 @@ const sessionCountsEl = document.querySelector<HTMLDivElement>('#session-counts'
 const startBtn = document.querySelector<HTMLButtonElement>('#start-btn')!
 const pillSubject = document.querySelector<HTMLElement>('#pill-subject')!
 const btnView = document.querySelector<HTMLButtonElement>('#btn-view')!
+const btnAnkleCase = document.querySelector<HTMLButtonElement>('#btn-ankle-case')!
+const casePanel = document.querySelector<HTMLElement>('#case-panel')!
+const caseKicker = document.querySelector<HTMLElement>('#case-kicker')!
+const caseTitle = document.querySelector<HTMLElement>('#case-title')!
+const caseBody = document.querySelector<HTMLElement>('#case-body')!
+const caseBack = document.querySelector<HTMLButtonElement>('#case-back')!
+const caseReplay = document.querySelector<HTMLButtonElement>('#case-replay')!
+const caseNext = document.querySelector<HTMLButtonElement>('#case-next')!
 const viewPanel = document.querySelector<HTMLElement>('#view-panel')!
 const viewPanelToggle = document.querySelector<HTMLButtonElement>('#view-panel-toggle')!
 const viewPanelHandleLabel = document.querySelector<HTMLElement>('#view-panel-handle-label')!
@@ -418,6 +459,11 @@ const scene = new ThoraxScene({
 type QuizState = {
   playing: boolean
   viewing: boolean
+  caseActive: boolean
+  casePhase: 'learn' | 'quiz'
+  caseLearnIndex: number
+  caseQuizIndex: number
+  caseTyping: boolean
   mode: PlayMode
   levels: Level[]
   levelIndex: number
@@ -445,6 +491,11 @@ let moreFiltersOpen = false
 const state: QuizState = {
   playing: false,
   viewing: false,
+  caseActive: false,
+  casePhase: 'learn',
+  caseLearnIndex: 0,
+  caseQuizIndex: 0,
+  caseTyping: false,
   mode: 'memory',
   levels: ['memory'],
   levelIndex: 0,
@@ -635,6 +686,10 @@ function updateGloss(bone: QuizEntry | null): void {
 }
 
 function updateHud(): void {
+  if (state.caseActive) {
+    renderCaseHud()
+    return
+  }
   const bone = current()
   const total = state.queue.length
   const acc =
@@ -688,6 +743,7 @@ function applyTarget(): void {
 }
 
 function quizInputShouldFocus(): boolean {
+  if (state.caseActive) return state.caseTyping && !state.finished && !playHud.hidden
   return state.playing && !state.finished && !playHud.hidden
 }
 
@@ -736,12 +792,19 @@ function wait(ms: number): Promise<void> {
 }
 
 function showMenu(): void {
+  if (state.caseActive || scene.isAnkleCase()) {
+    scene.exitAnkleCase()
+    state.caseActive = false
+    state.caseTyping = false
+    document.documentElement.classList.remove('ankle-case')
+  }
   if (state.viewing) {
     scene.exitView()
     state.viewing = false
   }
   state.playing = false
   state.revealing = false
+  casePanel.hidden = true
   menuOverlay.hidden = false
   playHud.hidden = true
   viewPanel.hidden = true
@@ -1330,6 +1393,10 @@ async function onCorrect(): Promise<void> {
 
 function onChar(ch: string): void {
   void unlockAudio()
+  if (state.caseActive) {
+    onCaseChar(ch)
+    return
+  }
   if (!state.playing) return
   if (state.finished) {
     showMenu()
@@ -1347,6 +1414,10 @@ function onChar(ch: string): void {
 
 function onConfirmAnswer(): void {
   void unlockAudio()
+  if (state.caseActive) {
+    onCaseConfirm()
+    return
+  }
   if (!state.playing) return
   if (state.finished) {
     showMenu()
@@ -1359,6 +1430,12 @@ function onConfirmAnswer(): void {
 }
 
 function onBackspace(): void {
+  if (state.caseActive) {
+    if (!state.caseTyping || state.revealing || state.finished) return
+    state.typed = state.typed.slice(0, -1)
+    updateHud()
+    return
+  }
   if (!state.playing || state.revealing || state.finished) return
   state.typed = state.typed.slice(0, -1)
   updateHud()
@@ -1366,12 +1443,21 @@ function onBackspace(): void {
 
 /** Hide Skip while the menu is up, the answer is showing, or the session is over. */
 function syncSkipButton(): void {
-  const show = state.playing && !playHud.hidden && !state.revealing && !state.finished
+  const show =
+    state.playing &&
+    !playHud.hidden &&
+    !state.revealing &&
+    !state.finished &&
+    !(state.caseActive && state.casePhase === 'learn')
   skipBtn.hidden = !show
   skipBtn.disabled = !show
 }
 
 function revealAnswer(): void {
+  if (state.caseActive) {
+    revealCaseAnswer()
+    return
+  }
   if (!state.playing || state.revealing || state.finished) return
   const bone = current()
   if (!bone) return
@@ -1712,6 +1798,11 @@ startBtn.addEventListener('pointerdown', (e) => {
   void startSession()
 })
 
+btnAnkleCase.addEventListener('pointerdown', (e) => {
+  e.preventDefault()
+  void startAnkleCase()
+})
+
 btnView.addEventListener('pointerdown', (e) => {
   e.preventDefault()
   void startView()
@@ -1845,11 +1936,31 @@ window.addEventListener('keydown', (e) => {
     void startView()
     return
   }
+  if (!state.playing && !state.viewing && (e.key === 'r' || e.key === 'R') && document.activeElement !== hiddenInput) {
+    e.preventDefault()
+    void startAnkleCase()
+    return
+  }
   if (e.key === 'Tab' && state.playing) {
     e.preventDefault()
     revealAnswer()
     return
   }
+  if (state.caseActive && state.finished) {
+    if (e.key === 'Enter' || e.key.length === 1) {
+      e.preventDefault()
+      showMenu()
+    }
+    return
+  }
+  if (state.caseActive && state.casePhase === 'learn') {
+    if (e.key === 'Enter') {
+      e.preventDefault()
+      advanceCaseLearn()
+    }
+    return
+  }
+  if (state.caseActive && !state.caseTyping) return
   if (!state.playing) {
     if (state.viewing) return
     if (e.key === 'Enter') {
@@ -1918,6 +2029,10 @@ hiddenInput.addEventListener('blur', () => {
 
 hiddenInput.addEventListener('input', () => {
   void unlockAudio()
+  if (state.caseActive) {
+    onCaseFieldInput()
+    return
+  }
   if (!state.playing) {
     hiddenInput.value = ''
     return
@@ -2018,6 +2133,7 @@ if (window.visualViewport) {
 }
 
 function framingActive(): boolean {
+  if (state.caseActive) return true
   if (state.viewing && !viewPanel.hidden) return true
   return touchQuiz && state.playing && !playHud.hidden
 }
@@ -2063,6 +2179,18 @@ function measureOcclusionInsets(): FramingInsets {
       }
     }
     bottom = Math.max(bottom, keyboard + control)
+  }
+
+  if (state.caseActive && !casePanel.hidden) {
+    const rect = casePanel.getBoundingClientRect()
+    const overlapW = Math.min(rect.right, canvas.right) - Math.max(rect.left, canvas.left)
+    const overlapH = Math.min(rect.bottom, canvas.bottom) - Math.max(rect.top, canvas.top)
+    if (overlapW > 8 && overlapH > 8) {
+      const bottomSheet = rect.top > canvas.top + height * 0.28
+      if (bottomSheet) bottom = Math.max(bottom, canvas.bottom - rect.top)
+      else if (rect.left > canvas.left + width * 0.45) right = Math.max(right, canvas.right - rect.left)
+      else left = Math.max(left, rect.right - canvas.left)
+    }
   }
 
   if (state.viewing && !viewPanel.hidden) {
@@ -2156,15 +2284,345 @@ mainCanvas.addEventListener('pointermove', (e) => {
 mainCanvas.addEventListener('pointerup', (e) => {
   const wasPick = pointerIsPick
   pointerIsPick = false
-  if (!wasPick || !state.viewing) return
+  if (!wasPick) return
   const dx = e.clientX - pointerStartX
   const dy = e.clientY - pointerStartY
   if (dx * dx + dy * dy > PICK_MOVE_PX * PICK_MOVE_PX) return
+  if (state.caseActive && state.casePhase === 'quiz') {
+    onCaseTap(e.clientX, e.clientY)
+    return
+  }
+  if (!state.viewing) return
   onViewPick(e.clientX, e.clientY)
 })
 
 mainCanvas.addEventListener('pointercancel', () => {
   pointerIsPick = false
+})
+
+function currentCaseStep(): AnkleQuizStep | null {
+  return ANKLE_QUIZ[state.caseQuizIndex] ?? null
+}
+
+function caseTypeStep(): AnkleTypeStep | null {
+  const step = currentCaseStep()
+  return step && step.kind === 'type' ? step : null
+}
+
+function renderLearnCard(): void {
+  const card = ANKLE_LEARN[state.caseLearnIndex]
+  if (!card) return
+  caseKicker.textContent = card.kicker
+  caseTitle.textContent = card.title
+  caseBody.replaceChildren(
+    ...card.paragraphs.map((text) => {
+      const p = document.createElement('p')
+      p.textContent = text
+      return p
+    }),
+  )
+  caseReplay.hidden = !card.motion
+  caseBack.hidden = state.caseLearnIndex === 0
+  caseNext.textContent = state.caseLearnIndex === ANKLE_LEARN.length - 1 ? 'Start quiz' : 'Next'
+  scene.setAnkleEmphasis(card.emphasis)
+  if (card.motion) scene.replayAnkleMotion()
+  else scene.holdAnklePose(0)
+}
+
+async function startAnkleCase(): Promise<void> {
+  void unlockAudio()
+  if (state.viewing) {
+    scene.exitView()
+    state.viewing = false
+  }
+  state.caseActive = true
+  state.casePhase = 'learn'
+  state.caseLearnIndex = 0
+  state.caseQuizIndex = 0
+  state.caseTyping = false
+  state.playing = true
+  state.finished = false
+  state.revealing = false
+  state.typed = ''
+  state.correct = 0
+  state.attempts = 0
+  hiddenInput.value = ''
+  document.documentElement.classList.add('ankle-case')
+  menuOverlay.hidden = true
+  playHud.hidden = true
+  viewPanel.hidden = true
+  chromeTop.hidden = false
+  chromeTop.classList.remove('is-view')
+  viewFilters.hidden = true
+  viewFilters.classList.remove('is-quiz')
+  sideViews.hidden = true
+  casePanel.hidden = false
+  pillSubject.textContent = 'Rehab'
+  pillMode.textContent = 'Learn'
+  pillRound.textContent = `1 / ${ANKLE_LEARN.length}`
+  statusEl.style.display = ''
+  statusEl.textContent = 'Loading ankle…'
+  scene.setLook('solid')
+  await scene.enterAnkleCase()
+  if (!state.caseActive) return
+  statusEl.style.display = 'none'
+  renderLearnCard()
+  syncFramingInsetsNow()
+  scheduleFramingSync()
+}
+
+function advanceCaseLearn(): void {
+  if (!state.caseActive || state.casePhase !== 'learn') return
+  if (state.caseLearnIndex < ANKLE_LEARN.length - 1) {
+    state.caseLearnIndex += 1
+    pillRound.textContent = `${state.caseLearnIndex + 1} / ${ANKLE_LEARN.length}`
+    renderLearnCard()
+    scheduleFramingSync()
+    return
+  }
+  startAnkleQuiz()
+}
+
+function startAnkleQuiz(): void {
+  state.casePhase = 'quiz'
+  state.caseQuizIndex = 0
+  state.finished = false
+  state.revealing = false
+  state.typed = ''
+  state.correct = 0
+  state.attempts = 0
+  hiddenInput.value = ''
+  casePanel.hidden = true
+  playHud.hidden = false
+  scene.holdAnklePose(0)
+  scene.setAnkleEmphasis('none')
+  renderCaseHud()
+  syncFramingInsetsNow()
+  if (state.caseTyping) focusInput()
+}
+
+function renderCaseHud(): void {
+  document.documentElement.classList.toggle('ankle-case', state.caseActive)
+  playHud.classList.toggle('case-quiz', state.caseActive && state.casePhase === 'quiz')
+  const total = ANKLE_QUIZ.length
+  const acc = state.attempts === 0 ? 100 : Math.round((state.correct / state.attempts) * 100)
+  statAcc.textContent = `${acc}%`
+  statProgress.textContent = state.finished ? `${total} / ${total}` : `${Math.min(state.caseQuizIndex + 1, total)} / ${total}`
+  pillSubject.textContent = 'Rehab'
+  pillMode.textContent = state.casePhase === 'learn' ? 'Learn' : 'Quiz'
+  if (state.casePhase === 'learn') {
+    pillRound.textContent = `${state.caseLearnIndex + 1} / ${ANKLE_LEARN.length}`
+  } else {
+    const shown = state.finished ? total : Math.min(state.caseQuizIndex + 1, total)
+    pillRound.textContent = `${shown} / ${total}`
+  }
+
+  if (state.casePhase === 'learn') {
+    syncSkipButton()
+    scheduleFramingSync()
+    return
+  }
+
+  if (state.finished) {
+    state.caseTyping = false
+    typeLabel.textContent = 'CASE COMPLETE · TAP OR ESC FOR MENU'
+    targetWord.classList.add('reveal')
+    targetWord.innerHTML = `<span class="tw-done">case complete</span>`
+    glossLine.textContent = 'Right ankle: likely ATFL, CFL also under tension in inversion. Immediate care is POLICE.'
+    glossLine.classList.add('show')
+    syncSkipButton()
+    scheduleFramingSync()
+    return
+  }
+
+  const step = currentCaseStep()
+  if (!step) return
+  state.caseTyping = step.kind === 'type' && !state.revealing
+  typeLabel.textContent = `${step.kind === 'type' ? 'TYPE IT' : 'TAP IT'} · ${step.region}`
+  glossLine.textContent =
+    state.revealing && step.kind === 'type'
+      ? step.reveal
+      : state.revealing && step.kind === 'tap'
+        ? step.correct
+        : step.prompt
+  glossLine.classList.add('show')
+  if (step.kind === 'type') renderCaseTypeWord(step)
+  else {
+    targetWord.classList.toggle('reveal', state.revealing)
+    targetWord.innerHTML = state.revealing
+      ? `<span class="tw-done">${escapeHtml(step.accept[0] === 'atfl' && step.id === 'palpate' ? 'ATFL region' : step.accept[0] === 'cfl' ? 'CFL' : 'ATFL')}</span>`
+      : `<span class="tw-on">tap</span>`
+  }
+  syncSkipButton()
+  syncTapHint()
+  scheduleFramingSync()
+}
+
+function renderCaseTypeWord(step: AnkleTypeStep): void {
+  if (state.revealing) {
+    targetWord.classList.add('reveal')
+    targetWord.innerHTML = `<span class="tw-done">${escapeHtml(step.official)}</span>`
+    return
+  }
+  targetWord.classList.remove('reveal')
+  const answer = step.official
+  const compactTyped = compactLetters(state.typed)
+  const names = [step.official, ...step.aliases]
+  const wrongAt = firstWrongIndex(state.typed, names)
+  const chars = [...answer]
+  let html = ''
+  let letterIdx = 0
+  let caretPlaced = false
+  for (const ch of chars) {
+    if (/\s/.test(ch)) {
+      html += `<span class="tw-space">&nbsp;</span>`
+      continue
+    }
+    if (letterIdx < compactTyped.length) {
+      const tch = compactTyped[letterIdx]!
+      const wrong = wrongAt >= 0 && letterIdx >= wrongAt
+      html += `<span class="${wrong ? 'tw-wrong' : 'tw-on'}">${escapeHtml(tch)}</span>`
+    } else {
+      const inner = '_'
+      if (!caretPlaced) {
+        html += `<span class="tw-blank tw-caret">${inner}</span>`
+        caretPlaced = true
+      } else html += `<span class="tw-blank">${inner}</span>`
+    }
+    letterIdx++
+  }
+  if (compactTyped.length > letterIdx) {
+    html += [...compactTyped.slice(letterIdx)]
+      .map((ch) => `<span class="tw-wrong">${escapeHtml(ch)}</span>`)
+      .join('')
+  }
+  if (!caretPlaced) html += `<span class="tw-cursor"></span>`
+  targetWord.innerHTML = html
+}
+
+function onCaseFieldInput(): void {
+  if (!state.caseTyping || state.finished || state.revealing) {
+    hiddenInput.value = ''
+    return
+  }
+  const step = caseTypeStep()
+  const raw = hiddenInput.value
+  const cleaned = sanitizeTypedInput(raw)
+  if (cleaned !== raw) hiddenInput.value = cleaned
+  const prev = state.typed
+  const added = compactLetters(cleaned).length > compactLetters(prev).length
+  state.typed = cleaned
+  if (step && added && firstWrongIndex(cleaned, [step.official, ...step.aliases]) >= 0) playWrongTick()
+  else if (cleaned.length !== prev.length) playKeyTap()
+  updateHud()
+  if (step && ankleTypeMatch(step, cleaned)) void onCaseCorrect()
+}
+
+function onCaseChar(ch: string): void {
+  if (!state.caseTyping || state.finished || state.revealing) return
+  const step = caseTypeStep()
+  if (!step) return
+  state.typed += ch
+  if (firstWrongIndex(state.typed, [step.official, ...step.aliases]) >= 0) playWrongTick()
+  else playKeyTap()
+  updateHud()
+  if (ankleTypeMatch(step, state.typed)) void onCaseCorrect()
+}
+
+function onCaseConfirm(): void {
+  if (state.finished) {
+    showMenu()
+    return
+  }
+  if (state.casePhase !== 'quiz' || state.revealing) return
+  const step = caseTypeStep()
+  if (!step) return
+  if (ankleTypeMatch(step, state.typed, 'confirm')) void onCaseCorrect()
+}
+
+function onCaseTap(clientX: number, clientY: number): void {
+  if (state.casePhase !== 'quiz' || state.revealing || state.finished || state.caseTyping) return
+  const step = currentCaseStep()
+  if (!step || step.kind !== 'tap') return
+  const picked = scene.pickAnkle(clientX, clientY)
+  const graded = gradeAnkleTap(step, picked?.hit ?? null)
+  if (!graded.ok) {
+    playWrongTick()
+    glossLine.textContent = graded.message
+    glossLine.classList.add('show')
+    return
+  }
+  void onCaseCorrect(graded.message)
+}
+
+async function onCaseCorrect(message?: string): Promise<void> {
+  const step = currentCaseStep()
+  if (!step || state.revealing) return
+  state.revealing = true
+  state.correct += 1
+  state.attempts += 1
+  state.caseTyping = false
+  playCorrectChime()
+  hiddenInput.value = ''
+  if (message) glossLine.textContent = message
+  updateHud()
+  if (step.kind === 'tap' && message) {
+    glossLine.textContent = message
+    glossLine.classList.add('show')
+  }
+  await wait(1100)
+  advanceCaseQuiz()
+}
+
+function revealCaseAnswer(): void {
+  if (!state.caseActive || state.casePhase !== 'quiz' || state.revealing || state.finished) return
+  const step = currentCaseStep()
+  if (!step) return
+  state.attempts += 1
+  state.revealing = true
+  state.caseTyping = false
+  state.typed = ''
+  hiddenInput.value = ''
+  if (step.kind === 'tap') scene.setAnkleEmphasis(step.accept[0] === 'cfl' ? 'cfl' : 'atfl')
+  updateHud()
+  if (state.caseTyping) focusInputNow()
+  void (async () => {
+    await wait(1400)
+    scene.setAnkleEmphasis('none')
+    advanceCaseQuiz()
+  })()
+}
+
+function advanceCaseQuiz(): void {
+  if (!state.caseActive) return
+  state.revealing = false
+  state.typed = ''
+  hiddenInput.value = ''
+  state.caseQuizIndex += 1
+  if (state.caseQuizIndex >= ANKLE_QUIZ.length) {
+    state.finished = true
+    state.caseTyping = false
+    updateHud()
+    return
+  }
+  updateHud()
+  if (state.caseTyping) focusInput()
+}
+
+caseBack.addEventListener('click', () => {
+  if (!state.caseActive || state.casePhase !== 'learn' || state.caseLearnIndex === 0) return
+  state.caseLearnIndex -= 1
+  pillRound.textContent = `${state.caseLearnIndex + 1} / ${ANKLE_LEARN.length}`
+  renderLearnCard()
+  scheduleFramingSync()
+})
+
+caseNext.addEventListener('click', () => {
+  advanceCaseLearn()
+})
+
+caseReplay.addEventListener('click', () => {
+  scene.replayAnkleMotion()
 })
 
 function qaEntry(subject: 'bones' | 'muscles', id: string): ViewSelection {
@@ -2283,11 +2741,75 @@ function qaShowCommonBones(): { count: number; total: number; label: string } {
   }
 }
 
+async function qaShowAnkle(
+  mode: 'menu' | 'learn' | 'motion' | 'injury' | 'type' | 'tap' | 'palpation',
+  keyboardPx = 0,
+): Promise<Record<string, unknown>> {
+  forcedKeyboardInset = keyboardPx
+  syncKeyboardInset()
+  if (mode === 'menu') {
+    showMenu()
+    const btn = btnAnkleCase
+    const rect = btn.getBoundingClientRect()
+    return {
+      title: btn.querySelector('.mode-title')?.textContent ?? '',
+      sub: btn.querySelector('.mode-sub')?.textContent ?? '',
+      visible: rect.width > 8 && rect.height > 8,
+    }
+  }
+  if (!state.caseActive) await startAnkleCase()
+  if (mode === 'learn' || mode === 'motion' || mode === 'injury') {
+    state.casePhase = 'learn'
+    state.caseLearnIndex = 1
+    casePanel.hidden = false
+    playHud.hidden = true
+    pillSubject.textContent = 'Rehab'
+    pillMode.textContent = 'Learn'
+    pillRound.textContent = `2 / ${ANKLE_LEARN.length}`
+    renderLearnCard()
+    scene.holdAnklePose(mode === 'learn' ? 0 : ANKLE_INJURY_U)
+  } else {
+    const index = mode === 'type' ? 0 : mode === 'tap' ? 2 : 4
+    state.casePhase = 'quiz'
+    state.caseQuizIndex = index
+    state.finished = false
+    state.revealing = false
+    state.typed = mode === 'type' ? 'at' : ''
+    casePanel.hidden = true
+    playHud.hidden = false
+    scene.holdAnklePose(0)
+    scene.setAnkleEmphasis('none')
+    renderCaseHud()
+  }
+  syncFramingInsetsNow()
+  await scene.whenPoseSettled()
+  syncFramingInsetsNow()
+  await scene.whenPoseSettled()
+  const prompt = promptBlock.getBoundingClientRect()
+  const skip = skipBtn.getBoundingClientRect()
+  const panel = casePanel.getBoundingClientRect()
+  return {
+    ...scene.getAnkleReport(),
+    mode,
+    keyboard: currentKeyboardInset(),
+    promptBottom: Math.round(prompt.bottom),
+    skipBottom: Math.round(skip.bottom),
+    skipHidden: skipBtn.hidden,
+    panelHidden: casePanel.hidden,
+    panelTop: Math.round(panel.top),
+    title: caseTitle.textContent,
+    prompt: glossLine.textContent,
+    label: typeLabel.textContent,
+    innerHeight: window.innerHeight,
+  }
+}
+
 function installQaHooks(): void {
   const api = {
     showQuiz: qaShowQuiz,
     showView: qaShowView,
     showCommonBones: qaShowCommonBones,
+    showAnkle: qaShowAnkle,
     report: () => scene.getFramingReport(),
   }
   ;(window as unknown as { __anatomyQA: typeof api }).__anatomyQA = api

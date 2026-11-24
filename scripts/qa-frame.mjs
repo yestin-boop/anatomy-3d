@@ -198,6 +198,11 @@ async function main() {
       return
     }
 
+    if (process.env.QA_ASSERT_ANKLE === '1') {
+      await assertAnkleScene(cdp)
+      return
+    }
+
     if (process.env.QA_ASSERT_VIEWS === '1') {
       const viewShow = (subject, id) =>
         cdp.evaluate(
@@ -283,6 +288,125 @@ async function main() {
   } finally {
     chrome.kill('SIGKILL')
   }
+}
+
+function assertAnkle(report, label, expect) {
+  const fail = (msg) => {
+    throw new Error(`${label}: ${msg}\n${JSON.stringify(report)}`)
+  }
+  if (expect === 'menu') {
+    if (!report.visible) fail('Rehab menu card is not on screen')
+    if (report.title !== 'Lateral ankle sprain') fail(`menu title ${report.title}`)
+    console.log(`ok ${label} menu "${report.title}"`)
+    return
+  }
+  if (!report.active) fail('ankle case is not active')
+  if (!report.ligaments) fail('ligament meshes did not load')
+  const cam = report.camera
+  const tgt = report.target
+  if (!(cam.x < tgt.x)) fail(`camera should sit lateral of the right ankle, camera.x ${cam.x} target.x ${tgt.x}`)
+  const pts = report.points
+  for (const name of ['atfl_r', 'cfl_r', 'deltoid_r', 'talus_r', 'fibula_r', 'metatarsal5_r']) {
+    if (!pts[name]) fail(`missing point ${name}`)
+  }
+  if (!(pts.deltoid_r.x > pts.atfl_r.x && pts.deltoid_r.x > pts.talus_r.x)) {
+    fail(`deltoid should sit medial of the ATFL and the talus, deltoid.x ${pts.deltoid_r.x} atfl.x ${pts.atfl_r.x} talus.x ${pts.talus_r.x}`)
+  }
+  if (!(pts.atfl_r.x < pts.talus_r.x && pts.cfl_r.x < pts.talus_r.x)) {
+    fail(`ATFL and CFL should sit lateral of the talus, atfl.x ${pts.atfl_r.x} cfl.x ${pts.cfl_r.x} talus.x ${pts.talus_r.x}`)
+  }
+  if (!(pts.atfl_r.z > pts.cfl_r.z)) {
+    fail(`ATFL should sit anterior of the CFL, atfl.z ${pts.atfl_r.z} cfl.z ${pts.cfl_r.z}`)
+  }
+  if (expect === 'type') {
+    const limit = report.innerHeight - report.keyboard + 8
+    if (report.keyboard > 0 && report.promptBottom > limit) {
+      fail(`prompt sits under the keyboard, bottom ${report.promptBottom} limit ${limit}`)
+    }
+    if (report.keyboard > 0 && report.skipBottom > limit) {
+      fail(`Skip sits under the keyboard, bottom ${report.skipBottom} limit ${limit}`)
+    }
+    if (report.skipHidden) fail('Skip is hidden on a type step')
+    if (!String(report.prompt || '').toLowerCase().includes('ligament')) fail(`type prompt missing: ${report.prompt}`)
+  }
+  if (expect === 'injury') {
+    if (!report.pose || report.pose.plantar < 0.5) fail(`injury pose did not plantarflex, got ${JSON.stringify(report.pose)}`)
+    if (!report.pose || report.pose.invert < 0.2) fail(`injury pose did not invert, got ${JSON.stringify(report.pose)}`)
+  }
+  if (expect === 'neutral' && report.picks) {
+    if (report.picks.atfl_r !== 'atfl') fail(`tap on the ATFL center returned ${report.picks.atfl_r}`)
+    if (report.picks.cfl_r !== 'cfl') fail(`tap on the CFL center returned ${report.picks.cfl_r}`)
+    if (report.picks.fibula_r !== 'fibula') fail(`tap on the fibular shaft returned ${report.picks.fibula_r}`)
+  }
+  if (expect === 'neutral') {
+    if (!report.pose || Math.abs(report.pose.plantar) > 0.02 || Math.abs(report.pose.invert) > 0.02) {
+      fail(`expected a resting foot, got ${JSON.stringify(report.pose)}`)
+    }
+  }
+  console.log(
+    `ok ${label} view ${report.viewId} cam (${cam.x}, ${cam.y}, ${cam.z}) pose ${JSON.stringify(report.pose)} roll ${JSON.stringify(report.roll)}`,
+  )
+}
+
+async function assertAnkleScene(cdp) {
+  let touchPage = null
+  const show = async (mode, keyboard, width, height, mobile) => {
+    await setViewport(cdp, width, height, mobile)
+    await delay(250)
+    if (touchPage !== mobile) {
+      await openApp(cdp, mobile)
+      touchPage = mobile
+    }
+    return cdp.evaluate(
+      `window.__anatomyQA.showAnkle(${JSON.stringify(mode)}, ${keyboard})`,
+      true,
+    )
+  }
+  const layouts = [
+    ['iphone-menu', 'menu', 0, 390, 844, true],
+    ['iphone-learn', 'learn', 0, 390, 844, true],
+    ['iphone-injury', 'injury', 0, 390, 844, true],
+    ['iphone-type', 'type', 0, 390, 844, true],
+    ['iphone-type-kb', 'type', 300, 390, 844, true],
+    ['iphone-tap', 'tap', 0, 390, 844, true],
+    ['iphone-palpation', 'palpation', 0, 390, 844, true],
+    ['ipad-learn', 'learn', 0, 820, 1180, true],
+    ['land-learn', 'learn', 0, 844, 390, true],
+    ['land-type-kb', 'type', 300, 844, 390, true],
+    ['desktop-learn', 'learn', 0, 1440, 900, false],
+    ['desktop-type', 'type', 0, 1440, 900, false],
+    ['desktop-injury', 'injury', 0, 1440, 900, false],
+  ]
+  const saved = {}
+  for (const [label, mode, keyboard, width, height, mobile] of layouts) {
+    const report = await show(mode, keyboard, width, height, mobile)
+    const expect =
+      mode === 'menu' ? 'menu' : mode === 'injury' ? 'injury' : mode === 'type' ? 'type' : 'neutral'
+    assertAnkle(report, label, expect)
+    saved[label] = report
+    const png = await cdp.send('Page.captureScreenshot', { format: 'png' })
+    await writeFile(`${OUT}/ankle-${label}.png`, Buffer.from(png.data, 'base64'))
+  }
+  const rest = saved['iphone-learn']
+  const hurt = saved['iphone-injury']
+  const restToe = rest.points.phal_foot_dist_1_r
+  const hurtToe = hurt.points.phal_foot_dist_1_r
+  if (!restToe || !hurtToe) throw new Error('missing hallux point')
+  if (!(hurtToe.y < restToe.y - 0.04)) {
+    throw new Error(`plantarflexion should drop the hallux, rest ${JSON.stringify(restToe)} injury ${JSON.stringify(hurtToe)}`)
+  }
+  if (!(typeof hurt.lateralAxisY === 'number' && hurt.lateralAxisY < -0.05)) {
+    throw new Error(`inversion should point the lateral side downward, lateralAxisY ${hurt.lateralAxisY}`)
+  }
+  if (!rest.roll || !hurt.roll) throw new Error('missing calcaneus roll')
+  const restRoll = rest.roll.lateralY - rest.roll.medialY
+  const hurtRoll = hurt.roll.lateralY - hurt.roll.medialY
+  if (!(hurtRoll < restRoll - 0.008)) {
+    throw new Error(`inversion should lower the lateral calcaneus more than the medial, rest ${restRoll} injury ${hurtRoll}`)
+  }
+  console.log(
+    `ok motion hallux y ${restToe.y} -> ${hurtToe.y}, lateral axis ${hurt.lateralAxisY}, roll ${restRoll.toFixed(4)} -> ${hurtRoll.toFixed(4)}`,
+  )
 }
 
 function assertDeltoid(report, label) {
