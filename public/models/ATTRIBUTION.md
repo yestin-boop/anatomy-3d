@@ -329,3 +329,48 @@ against psoas, iliacus, iliocostalis, and the lumbar/cervical vertebrae.
   in Écorché; out of scope for this trunk-muscle fill (fascia is not a
   muscle; face/jaw were not part of the missing-trunk brief).
 - **nqwrc/3d-anatomy** and other CC BY-NC packs were not used.
+
+## Ankle ligaments (2026-11-24)
+
+The BodyParts3D `isa_BP3D_4.0_obj_99` pack used for the skeleton has bones,
+muscles, and cartilage only. Anterior talofibular (ATFL), calcaneofibular
+(CFL), and deltoid ligaments were added from Z-Anatomy (CC BY-SA 4.0), derived
+from BodyParts3D (CC BY-SA 2.1 Japan). Share-alike applies to these meshes.
+
+Source file: the joints GLB published by learnanatomy.org, converted from the
+Z-Anatomy atlas (`anterior-talofibular-ligament`, `calcaneofibular-ligament`,
+`tibionavicular-ligament`, `tibiocalcaneal-ligament`,
+`posterior-tibiotalar-ligament`, each left and right). That file also contains
+other structures, including some CC BY-NC parts (inner ear, kidney). Only the
+six ankle-ligament names above were extracted. Posterior talofibular ligament
+was left out on purpose: the course notes for this inversion sprain name ATFL
+and CFL, and the deltoid is the medial distractor.
+
+The deltoid mesh is those three medial parts merged. It is not a new surface.
+On this skeleton the tibionavicular part sits nearer the talar neck than the
+navicular tuberosity; the tibiocalcaneal and posterior tibiotalar parts meet
+the tibia, talus, and calcaneus. Together they stay on the medial side.
+
+Fit, into this pack’s millimetre Z-up frame (runtime still only applies
+`rotation.x = −π/2`):
+
+    (x, y, z)_mm = (x_m, −z_m, y_m) × 1000
+    then scale 0.97622 and translate (−0.21, −110.32, −80.37) mm
+
+The scale and shift were solved on distal tibia, distal fibula, talus,
+calcaneus, and navicular centroids (both sides). Largest landmark error was
+6.4 mm (navicular). After the fit, the right ATFL ends sit about 4 mm from
+the fibula and 2 mm from the talus; the right CFL ends sit about 1 mm from
+the fibula and 4 mm from the calcaneus. They are the real meshes, not
+landmark stand-ins.
+
+| GLB | Structure |
+| --- | --- |
+| `extra/ligaments/atfl_l` / `atfl_r` | anterior talofibular ligament |
+| `extra/ligaments/cfl_l` / `cfl_r` | calcaneofibular ligament |
+| `extra/ligaments/deltoid_l` / `deltoid_r` | deltoid (tibionavicular + tibiocalcaneal + posterior tibiotalar) |
+
+Licence: CC BY-SA 4.0. Credit: Z-Anatomy by Gauthier Kervyn, CC BY-SA 4.0;
+BodyParts3D © The Database Center for Life Science, CC BY-SA 2.1 Japan; this
+derivative CC BY-SA 4.0. The rest of the skeleton remains the BodyParts3D
+CC BY 4.0 pack described above.

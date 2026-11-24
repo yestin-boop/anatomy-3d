@@ -16,6 +16,56 @@ import {
   type FramingInsets,
   type ViewExtents,
 } from './framing'
+import { anklePoseAt, type AnklePose } from './anklePose'
+import {
+  ANKLE_CONTEXT_BONES,
+  ANKLE_FRAME_MESHES,
+  ANKLE_LIGAMENT_MESHES,
+  RIGHT_FOOT_BONES,
+  classifyAnkleMesh,
+  type AnkleEmphasis,
+  type AnkleHit,
+} from '../data/ankleSprain'
+
+const _segV = new THREE.Vector3()
+const _segW = new THREE.Vector3()
+const _segOnRay = new THREE.Vector3()
+const _segOnEdge = new THREE.Vector3()
+
+/** Closest gap between a ray and a segment. `along` is negative when that point is behind the camera. */
+function raySegmentGap(ray: THREE.Ray, p: THREE.Vector3, q: THREE.Vector3): { radial: number; along: number } {
+  const dir = ray.direction
+  const edge = _segV.subVectors(q, p)
+  const w0 = _segW.subVectors(ray.origin, p)
+  const b = dir.dot(edge)
+  const c = edge.dot(edge)
+  const d = dir.dot(w0)
+  const e = edge.dot(w0)
+  const denom = c - b * b
+  let along: number
+  let t: number
+  if (denom < 1e-8) {
+    along = 0
+    t = c > 1e-8 ? e / c : 0
+  } else {
+    along = (b * e - c * d) / denom
+    t = (e - b * d) / denom
+    if (along < 0) {
+      along = 0
+      t = c > 1e-8 ? e / c : 0
+    }
+  }
+  if (t < 0) {
+    t = 0
+    along = -d
+  } else if (t > 1) {
+    t = 1
+    along = b - d
+  }
+  _segOnRay.copy(ray.origin).addScaledVector(dir, Math.max(along, 0))
+  _segOnEdge.copy(p).addScaledVector(edge, t)
+  return { radial: _segOnRay.distanceTo(_segOnEdge), along }
+}
 
 export type ViewSubjectFilter = 'both' | 'bones' | 'muscles'
 export type MaterialLook = 'xray' | 'solid'
@@ -214,7 +264,16 @@ export type ThoraxSceneOptions = {
   sideCanvases?: HTMLCanvasElement[]
 }
 
-export type MeshKind = 'bone' | 'muscle' | 'cartilage'
+export type MeshKind = 'bone' | 'muscle' | 'cartilage' | 'ligament'
+
+const LIGAMENT_BASE = {
+  color: 0xf2d7a2,
+  emissive: 0x6a4a16,
+  emissiveIntensity: 0.28,
+  opacity: 1,
+  metalness: 0.02,
+  roughness: 0.46,
+}
 
 export type ViewPickHit = {
   meshName: string
@@ -254,8 +313,16 @@ export class ThoraxScene {
   private body = new THREE.Group()
   private meshByName = new Map<string, THREE.Mesh>()
   private materials = new Map<string, THREE.MeshStandardMaterial>()
-  /** 'bone' | 'muscle' | 'cartilage' per mesh name */
+  /** 'bone' | 'muscle' | 'cartilage' | 'ligament' per mesh name */
   private kindByName = new Map<string, MeshKind>()
+  private ankleCase = false
+  private anklePivot: THREE.Group | null = null
+  private ankleHomes: Array<{ mesh: THREE.Mesh; parent: THREE.Object3D }> = []
+  private ankleMotion: { t: number; duration: number; playing: boolean } | null = null
+  private ankleEmphasis: AnkleEmphasis = 'none'
+  private ankleLigamentsVisible = true
+  private ligamentsLoaded = false
+  private ligamentsLoading: Promise<void> | null = null
   private targetIds = new Set<string>()
   private subject: 'bones' | 'muscles' = 'bones'
   private spinning = true
@@ -552,21 +619,22 @@ export class ThoraxScene {
       obj.geometry.computeVertexNormals()
 
       const isDiaphragm = name === 'diaphragm'
+      const tagged = (obj.userData as { kind?: MeshKind }).kind
       const meshKind: MeshKind =
-        kind === 'muscle' || kind === 'cartilage'
+        kind === 'muscle' || kind === 'cartilage' || kind === 'ligament'
           ? kind
-          : (obj.userData as { kind?: MeshKind }).kind === 'muscle'
-            ? 'muscle'
-            : (obj.userData as { kind?: MeshKind }).kind === 'cartilage'
-              ? 'cartilage'
-              : 'bone'
+          : tagged === 'muscle' || tagged === 'cartilage' || tagged === 'ligament'
+            ? tagged
+            : 'bone'
       const base =
         meshKind === 'muscle'
           ? MUSCLE_GHOST
-          : meshKind === 'cartilage' || isDiaphragm
-            ? CARTILAGE
-            : GHOST
-      const muscleOpaque = meshKind === 'muscle'
+          : meshKind === 'ligament'
+            ? LIGAMENT_BASE
+            : meshKind === 'cartilage' || isDiaphragm
+              ? CARTILAGE
+              : GHOST
+      const muscleOpaque = meshKind === 'muscle' || meshKind === 'ligament'
       const mat = new THREE.MeshStandardMaterial({
         color: base.color,
         emissive: base.emissive,
@@ -588,6 +656,12 @@ export class ThoraxScene {
         this.meshByName.set(name, obj)
         this.materials.set(name, mat)
         this.kindByName.set(name, meshKind)
+        if (meshKind === 'ligament') {
+          obj.visible = false
+          mat.polygonOffset = true
+          mat.polygonOffsetFactor = -2
+          mat.polygonOffsetUnits = -2
+        }
       }
     })
   }
@@ -683,6 +757,10 @@ export class ThoraxScene {
   }
 
   private applySubjectVisibility(): void {
+    if (this.ankleCase) {
+      this.applyAnkleLook()
+      return
+    }
     if (this.viewMode) {
       this.applyViewPresentation()
       return
@@ -693,6 +771,10 @@ export class ThoraxScene {
       const kind = this.kindByName.get(name) ?? 'bone'
       const mesh = this.meshByName.get(name)
       if (!mesh) continue
+      if (kind === 'ligament') {
+        mesh.visible = false
+        continue
+      }
       if (this.subject === 'bones') {
         // Hide muscles entirely in bone mode; keep cartilage as faint rib/disc context
         mesh.visible = kind === 'bone' || kind === 'cartilage'
@@ -862,14 +944,14 @@ export class ThoraxScene {
       this.lastViewId = view
       this.framePending = false
       if (mode === 'quiz') {
-        this.targetIds = new Set(meshNames)
+        if (!this.ankleCase) this.targetIds = new Set(meshNames)
         this.frameFullBody()
         this.updateSideCameras()
         this.applySubjectVisibility()
       }
       return
     }
-    if (mode === 'quiz') this.targetIds = new Set(present)
+    if (mode === 'quiz' && !this.ankleCase) this.targetIds = new Set(present)
     const size = box.getSize(new THREE.Vector3())
     const center = box.getCenter(new THREE.Vector3())
     const side = sideFromBox(box.min.x, box.max.x)
@@ -979,6 +1061,7 @@ export class ThoraxScene {
     }
     this.lerpFramingInsets(dt)
     this.tickViewFrame(dt)
+    this.tickAnkleMotion(dt)
     this.controls.update()
     this.applyFramingOffset()
     this.renderer.render(this.scene, this.camera)
@@ -1243,6 +1326,10 @@ export class ThoraxScene {
   }
 
   private applyViewPresentation(): void {
+    if (this.ankleCase) {
+      this.applyAnkleLook()
+      return
+    }
     const hasSel = this.viewSelected.size > 0
     for (const [name, mat] of this.materials) {
       const kind = this.kindByName.get(name) ?? 'bone'
@@ -1251,6 +1338,11 @@ export class ThoraxScene {
       const isCartilage = kind === 'cartilage'
       const isDiaphragm = name === 'diaphragm'
       const selected = hasSel && this.viewSelected.has(name)
+
+      if (kind === 'ligament') {
+        mesh.visible = false
+        continue
+      }
 
       if (isDiaphragm) {
         const shown = this.viewSubjectFilter !== 'muscles'
@@ -1852,6 +1944,354 @@ export class ThoraxScene {
       ratio: weight > 0 ? visible / weight : 0,
       occluded: weight > 0 ? occluded / weight : 0,
       occluders: [...blocked.keys()].sort(),
+    }
+  }
+
+  async enterAnkleCase(): Promise<void> {
+    await this.ensureLigamentsLoaded()
+    if (this.disposed) return
+    this.ankleCase = true
+    this.spinning = false
+    this.spin.rotation.y = 0
+    this.viewMode = false
+    this.targetIds = new Set()
+    this.controls.enablePan = false
+    this.controls.minDistance = VIEW_MIN_DISTANCE
+    this.buildAnklePivot()
+    this.ankleEmphasis = 'both'
+    this.ankleLigamentsVisible = true
+    this.applyAnklePose(anklePoseAt(0))
+    this.frameAnkle()
+  }
+
+  exitAnkleCase(): void {
+    if (!this.ankleCase && !this.anklePivot) return
+    this.ankleMotion = null
+    if (this.anklePivot) this.anklePivot.rotation.set(0, 0, 0)
+    this.anklePivot?.updateMatrixWorld(true)
+    for (const home of this.ankleHomes) {
+      home.parent.attach(home.mesh)
+    }
+    this.ankleHomes = []
+    if (this.anklePivot) {
+      this.anklePivot.removeFromParent()
+      this.anklePivot = null
+    }
+    this.ankleCase = false
+    this.ankleEmphasis = 'none'
+    this.targetIds = new Set()
+    this.framedBox = null
+    this.framedExtents = null
+    this.cancelViewFrame()
+    this.applySubjectVisibility()
+  }
+
+  isAnkleCase(): boolean {
+    return this.ankleCase
+  }
+
+  setAnkleEmphasis(emphasis: AnkleEmphasis): void {
+    this.ankleEmphasis = emphasis
+    if (this.ankleCase) this.applyAnkleLook()
+  }
+
+  /** Play the inversion + plantarflexion motion once, from neutral back to neutral. */
+  replayAnkleMotion(): void {
+    if (!this.ankleCase) return
+    this.ankleMotion = { t: 0, duration: 5.2, playing: true }
+    this.applyAnklePose(anklePoseAt(0))
+  }
+
+  /** Hold a pose without playing. `u` is 0–1 on the same curve as replay. */
+  holdAnklePose(u: number): void {
+    if (!this.ankleCase) return
+    this.ankleMotion = null
+    this.applyAnklePose(anklePoseAt(u))
+  }
+
+  pickAnkle(clientX: number, clientY: number): { hit: AnkleHit; meshName: string } | null {
+    if (!this.ankleCase) return null
+    const rect = this.mainCanvas.getBoundingClientRect()
+    if (rect.width <= 0 || rect.height <= 0) return null
+    this.pointerNdc.set(
+      ((clientX - rect.left) / rect.width) * 2 - 1,
+      -((clientY - rect.top) / rect.height) * 2 + 1,
+    )
+    this.raycaster.setFromCamera(this.pointerNdc, this.camera)
+    const targets: THREE.Object3D[] = []
+    for (const mesh of this.meshByName.values()) {
+      if (mesh.visible) targets.push(mesh)
+    }
+    const hits = this.raycaster.intersectObjects(targets, false)
+    let first: { hit: AnkleHit; meshName: string; distance: number } | null = null
+    for (const hit of hits) {
+      const obj = hit.object
+      if (!(obj instanceof THREE.Mesh) || !obj.name) continue
+      const kind = this.kindByName.get(obj.name)
+      if (kind !== 'ligament' && kind !== 'bone') continue
+      first = { hit: classifyAnkleMesh(obj.name), meshName: obj.name, distance: hit.distance }
+      break
+    }
+    // The licensed ribbons are only a few millimetres thick. A ray through the
+    // middle of one often misses every vertex and hits the fibula behind it.
+    // Measure distance to the triangles, and prefer that ligament when the ray
+    // is on the ribbon. The fibular shaft stays far enough away to read as bone.
+    const near = this.nearestRightLigament(0.014)
+    if (near && (first == null || near.distance <= first.distance + 0.03)) {
+      return { hit: classifyAnkleMesh(near.name), meshName: near.name }
+    }
+    return first ? { hit: first.hit, meshName: first.meshName } : null
+  }
+
+  /** Closest right-ankle ligament surface to the current ray, in world units. */
+  private nearestRightLigament(maxRadial: number): { name: string; distance: number } | null {
+    const ray = this.raycaster.ray
+    const a = new THREE.Vector3()
+    const b = new THREE.Vector3()
+    const c = new THREE.Vector3()
+    const hit = new THREE.Vector3()
+    let bestName = ''
+    let bestRadial = Infinity
+    let bestAlong = 0
+    const consider = (name: string, radial: number, along: number) => {
+      if (along < 0 || radial > maxRadial || radial >= bestRadial) return
+      bestName = name
+      bestRadial = radial
+      bestAlong = along
+    }
+    for (const name of ['atfl_r', 'cfl_r', 'deltoid_r']) {
+      const mesh = this.meshByName.get(name)
+      if (!mesh?.visible) continue
+      const pos = mesh.geometry.getAttribute('position')
+      const index = mesh.geometry.getIndex()
+      if (!pos) continue
+      mesh.updateWorldMatrix(true, false)
+      const triCount = index ? index.count / 3 : Math.floor(pos.count / 3)
+      for (let t = 0; t < triCount; t++) {
+        const ia = index ? index.getX(t * 3) : t * 3
+        const ib = index ? index.getX(t * 3 + 1) : t * 3 + 1
+        const ic = index ? index.getX(t * 3 + 2) : t * 3 + 2
+        a.fromBufferAttribute(pos as THREE.BufferAttribute, ia).applyMatrix4(mesh.matrixWorld)
+        b.fromBufferAttribute(pos as THREE.BufferAttribute, ib).applyMatrix4(mesh.matrixWorld)
+        c.fromBufferAttribute(pos as THREE.BufferAttribute, ic).applyMatrix4(mesh.matrixWorld)
+        if (ray.intersectTriangle(a, b, c, false, hit)) {
+          consider(name, 0, hit.sub(ray.origin).dot(ray.direction))
+          continue
+        }
+        for (const [p0, p1] of [
+          [a, b],
+          [b, c],
+          [c, a],
+        ] as const) {
+          const gap = raySegmentGap(ray, p0, p1)
+          consider(name, gap.radial, gap.along)
+        }
+      }
+    }
+    return bestName ? { name: bestName, distance: bestAlong } : null
+  }
+
+  getAnkleReport(): {
+    active: boolean
+    ligaments: boolean
+    pose: { plantar: number; invert: number } | null
+    camera: { x: number; y: number; z: number }
+    target: { x: number; y: number; z: number }
+    viewId: string
+    points: Record<string, { x: number; y: number; z: number } | null>
+    picks: Record<string, string | null>
+    roll: { lateralY: number; medialY: number } | null
+    /** World Y of the patient's lateral direction. Negative means that side points down. */
+    lateralAxisY: number | null
+  } {
+    const round = (v: THREE.Vector3) => ({
+      x: +v.x.toFixed(4),
+      y: +v.y.toFixed(4),
+      z: +v.z.toFixed(4),
+    })
+    const centerOf = (name: string) => {
+      const mesh = this.meshByName.get(name)
+      if (!mesh) return null
+      mesh.updateWorldMatrix(true, false)
+      const box = new THREE.Box3().setFromObject(mesh)
+      if (box.isEmpty()) return null
+      return round(box.getCenter(new THREE.Vector3()))
+    }
+    const points: Record<string, { x: number; y: number; z: number } | null> = {}
+    const picks: Record<string, string | null> = {}
+    for (const name of ['atfl_r', 'cfl_r', 'deltoid_r', 'talus_r', 'fibula_r', 'metatarsal5_r', 'metatarsal1_r', 'phal_foot_dist_1_r']) {
+      points[name] = centerOf(name)
+    }
+    const canvas = this.mainCanvas.getBoundingClientRect()
+    for (const name of ['atfl_r', 'cfl_r', 'fibula_r']) {
+      const mesh = this.meshByName.get(name)
+      if (!mesh || canvas.width <= 0) {
+        picks[name] = null
+        continue
+      }
+      mesh.updateWorldMatrix(true, false)
+      const center = new THREE.Box3().setFromObject(mesh).getCenter(new THREE.Vector3())
+      center.project(this.camera)
+      const sx = canvas.left + (center.x * 0.5 + 0.5) * canvas.width
+      const sy = canvas.top + (-center.y * 0.5 + 0.5) * canvas.height
+      picks[name] = this.pickAnkle(sx, sy)?.hit ?? null
+    }
+    return {
+      active: this.ankleCase,
+      ligaments: ANKLE_LIGAMENT_MESHES.every((name) => this.meshByName.has(name)),
+      pose: this.anklePivot
+        ? { plantar: this.anklePivot.rotation.x, invert: Math.abs(this.anklePivot.rotation.z) }
+        : null,
+      camera: round(this.camera.position),
+      target: round(this.controls.target),
+      viewId: this.lastViewId,
+      points,
+      picks,
+      roll: this.calcaneusRoll(),
+      lateralAxisY: this.anklePivot ? +(-this.anklePivot.matrixWorld.elements[1]).toFixed(4) : null,
+    }
+  }
+
+  /**
+   * Lowest point on the lateral half of the calcaneus versus the medial half.
+   * Patient right is −X, so the lateral half is the smaller local X.
+   */
+  private calcaneusRoll(): { lateralY: number; medialY: number } | null {
+    const mesh = this.meshByName.get('calcaneus_r')
+    const pos = mesh?.geometry.getAttribute('position')
+    if (!mesh || !pos) return null
+    mesh.updateWorldMatrix(true, false)
+    let minX = Infinity
+    let maxX = -Infinity
+    for (let i = 0; i < pos.count; i++) {
+      const x = pos.getX(i)
+      if (x < minX) minX = x
+      if (x > maxX) maxX = x
+    }
+    const mid = (minX + maxX) / 2
+    const p = new THREE.Vector3()
+    let lateralY = Infinity
+    let medialY = Infinity
+    for (let i = 0; i < pos.count; i++) {
+      p.fromBufferAttribute(pos as THREE.BufferAttribute, i)
+      const side = p.x < mid ? 'lateral' : 'medial'
+      p.applyMatrix4(mesh.matrixWorld)
+      if (side === 'lateral') lateralY = Math.min(lateralY, p.y)
+      else medialY = Math.min(medialY, p.y)
+    }
+    if (!Number.isFinite(lateralY) || !Number.isFinite(medialY)) return null
+    return { lateralY: +lateralY.toFixed(4), medialY: +medialY.toFixed(4) }
+  }
+
+  private async ensureLigamentsLoaded(): Promise<void> {
+    if (this.ligamentsLoaded) return
+    if (this.ligamentsLoading) return this.ligamentsLoading
+    this.ligamentsLoading = this.loadLigamentsInternal()
+    await this.ligamentsLoading
+  }
+
+  private async loadLigamentsInternal(): Promise<void> {
+    const urls = await fetchManifest('models/extra/ligaments/manifest.json')
+    if (urls.length === 0) {
+      this.ligamentsLoaded = true
+      return
+    }
+    const loader = new GLTFLoader()
+    await this.loadGroup(loader, urls, 'ligament', 'ligaments', 'bones')
+    this.ligamentsLoaded = true
+  }
+
+  private buildAnklePivot(): void {
+    if (this.anklePivot) return
+    const talus = this.meshByName.get('talus_r')
+    if (!talus) return
+    const pivot = new THREE.Group()
+    pivot.name = 'right-ankle-pivot'
+    pivot.rotation.order = 'XYZ'
+    this.spin.add(pivot)
+    this.spin.updateMatrixWorld(true)
+    talus.updateWorldMatrix(true, false)
+    const center = new THREE.Box3().setFromObject(talus).getCenter(new THREE.Vector3())
+    pivot.position.copy(center)
+    pivot.updateMatrixWorld(true)
+    for (const name of RIGHT_FOOT_BONES) {
+      const mesh = this.meshByName.get(name)
+      const parent = mesh?.parent
+      if (!mesh || !parent) continue
+      this.ankleHomes.push({ mesh, parent })
+      pivot.attach(mesh)
+    }
+    this.anklePivot = pivot
+  }
+
+  private frameAnkle(): void {
+    this.holdUserOrbit = false
+    this.spinning = false
+    this.spin.rotation.y = 0
+    const token = ++this.frameToken
+    this.framePending = true
+    const names = ANKLE_FRAME_MESHES.filter((name) => this.meshByName.has(name))
+    this.frameWhenReady(names, 'lateral', token, 0, 'quiz')
+  }
+
+  private applyAnklePose(pose: AnklePose): void {
+    if (!this.anklePivot) return
+    // +X drops the forefoot (plantarflexion). +Z rolls the right foot so the
+    // lateral border goes down (inversion). Checked against the pivot axes.
+    this.anklePivot.rotation.set(pose.plantarRad, 0, pose.inversionRad)
+    this.ankleLigamentsVisible = pose.ligamentsVisible
+    this.applyAnkleLook()
+  }
+
+  private tickAnkleMotion(dt: number): void {
+    const motion = this.ankleMotion
+    if (!motion?.playing || !this.ankleCase) return
+    motion.t += dt
+    const u = Math.min(1, motion.t / motion.duration)
+    this.applyAnklePose(anklePoseAt(u))
+    if (u >= 1) motion.playing = false
+  }
+
+  private applyAnkleLook(): void {
+    const context = new Set<string>(ANKLE_CONTEXT_BONES)
+    const emphasized = new Set<string>()
+    if (this.ankleEmphasis === 'atfl' || this.ankleEmphasis === 'both') emphasized.add('atfl_r')
+    if (this.ankleEmphasis === 'cfl' || this.ankleEmphasis === 'both') emphasized.add('cfl_r')
+    if (this.ankleEmphasis === 'deltoid') emphasized.add('deltoid_r')
+    for (const [name, mat] of this.materials) {
+      const mesh = this.meshByName.get(name)
+      if (!mesh) continue
+      const kind = this.kindByName.get(name) ?? 'bone'
+      if (kind === 'muscle' || kind === 'cartilage' || name === 'diaphragm') {
+        mesh.visible = false
+        continue
+      }
+      if (kind === 'ligament') {
+        const right = name.endsWith('_r')
+        mesh.visible = right && this.ankleLigamentsVisible
+        const hot = emphasized.size === 0 || emphasized.has(name)
+        mat.color.setHex(hot ? 0xffe6b0 : 0x8d7348)
+        mat.emissive.setHex(hot ? 0xc47a12 : 0x000000)
+        mat.emissiveIntensity = hot ? 0.72 : 0
+        mat.opacity = hot ? 1 : 0.55
+        mat.transparent = !hot
+        mat.depthWrite = hot
+        mat.roughness = 0.42
+        mat.metalness = 0.02
+        mat.side = THREE.DoubleSide
+        mesh.renderOrder = 12
+        mat.needsUpdate = true
+        continue
+      }
+      mesh.visible = true
+      if (context.has(name)) {
+        this.applyPalette(mat, VIEW_BONE, { transparent: false, depthWrite: true })
+        mesh.renderOrder = 2
+      } else {
+        this.applyPalette(mat, BONE_CONTEXT_FADE, { transparent: true, depthWrite: false })
+        mat.opacity = 0.07
+        mesh.renderOrder = 0
+      }
     }
   }
 
