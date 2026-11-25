@@ -208,6 +208,11 @@ async function main() {
       return
     }
 
+    if (process.env.QA_ASSERT_P2 === '1') {
+      await assertP2(cdp)
+      return
+    }
+
     if (process.env.QA_ASSERT_VIEWS === '1') {
       const viewShow = (subject, id) =>
         cdp.evaluate(
@@ -660,6 +665,316 @@ async function assertCatalogViews(cdp, quiz, viewShow) {
   if (failures.length) {
     throw new Error(`${failures.length} catalog view failures\n${failures.join('\n')}`)
   }
+}
+
+async function assertPack() {
+  const revRes = await fetch(`${BASE}/models/packs/revision.json`)
+  if (!revRes.ok) throw new Error(`revision.json HTTP ${revRes.status}`)
+  const rev = await revRes.json()
+  if (rev.id !== '3cce4d704e476d61c1a9') {
+    throw new Error(`pack revision ${rev.id}, expected 3cce4d704e476d61c1a9`)
+  }
+  const packRes = await fetch(`${BASE}/models/packs/ligaments.pack`)
+  if (!packRes.ok) throw new Error(`ligaments.pack HTTP ${packRes.status}`)
+  const buf = Buffer.from(await packRes.arrayBuffer())
+  if (buf.length !== 53668) throw new Error(`ligaments.pack is ${buf.length} bytes, expected 53668`)
+  if (buf.toString('latin1', 0, 4) !== 'ANPK') throw new Error('ligaments.pack is not ANPK')
+  console.log(`ok ligaments.pack ${buf.length} ANPK revision ${rev.id}`)
+}
+
+function failP2(label, msg, extra) {
+  throw new Error(`${label}: ${msg}${extra ? `\n${JSON.stringify(extra)}` : ''}`)
+}
+
+function accentish(color) {
+  return /124,\s*196,\s*255/.test(String(color || ''))
+}
+
+async function readMenu(cdp) {
+  return cdp.evaluate(`(() => {
+    const menu = document.querySelector('#menu-overlay')
+    const start = document.querySelector('#start-btn')
+    const panel = document.querySelector('#menu-panel')
+    const scroll = document.querySelector('#menu-scroll')
+    const memory = document.querySelector('#mode-memory')
+    const combined = document.querySelector('#mode-combined')
+    const levels = document.querySelector('.mode-grid--levels')
+    const sr = start.getBoundingClientRect()
+    const pr = panel.getBoundingClientRect()
+    const before = sr.top
+    const overflow = scroll.scrollHeight > scroll.clientHeight + 2
+    scroll.scrollTop = scroll.scrollHeight
+    const after = start.getBoundingClientRect().top
+    scroll.scrollTop = 0
+    return {
+      hidden: menu.hidden,
+      tagline: (document.querySelector('.menu-tag')?.textContent || '').trim(),
+      menuLook: !!menu.querySelector('[data-look]'),
+      lookHeading: [...menu.querySelectorAll('h2')].some((el) => (el.textContent || '').trim() === 'Look'),
+      memoryOn: memory.classList.contains('mode-card--on'),
+      combinedOn: combined.classList.contains('mode-card--on'),
+      combinedDim: combined.classList.contains('mode-card--dim'),
+      levelsDimmed: levels.classList.contains('is-dimmed'),
+      memoryBorder: getComputedStyle(memory).borderTopColor,
+      memoryCheck: getComputedStyle(memory, '::after').content,
+      combinedOpacity: getComputedStyle(combined).opacity,
+      startText: (start.textContent || '').trim(),
+      startDisabled: start.disabled,
+      reasonHidden: document.querySelector('#start-reason').hidden,
+      startInScroll: scroll.contains(start),
+      startTop: Math.round(before),
+      startAfterScroll: Math.round(after),
+      startBottom: Math.round(start.getBoundingClientRect().bottom),
+      panelBottom: Math.round(pr.bottom),
+      innerHeight: window.innerHeight,
+      overflow,
+      pool: (document.querySelector('#pool-count')?.textContent || '').trim(),
+    }
+  })()`)
+}
+
+async function assertMenu(report, label) {
+  if (report.hidden) failP2(label, 'start menu is hidden', report)
+  if (report.tagline !== 'Learn anatomy by seeing it, then typing it.') {
+    failP2(label, `tagline "${report.tagline}"`, report)
+  }
+  if (report.menuLook || report.lookHeading) failP2(label, 'Look is still on the start menu', report)
+  if (!report.memoryOn || report.combinedOn) failP2(label, 'Memory and Combined are not exclusive', report)
+  if (!report.combinedDim) failP2(label, 'Combined is not dimmed while a level is selected', report)
+  if (report.levelsDimmed) failP2(label, 'single levels are dimmed while one of them is selected', report)
+  if (!accentish(report.memoryBorder)) failP2(label, `selected chip border is ${report.memoryBorder}`, report)
+  if (!String(report.memoryCheck || '').includes('✓')) failP2(label, 'selected chip has no check', report)
+  if (!(Number(report.combinedOpacity) < 0.75)) failP2(label, `Combined opacity ${report.combinedOpacity}`, report)
+  if (!/^Start · \d+ items$/.test(report.startText)) failP2(label, `Start label "${report.startText}"`, report)
+  if (report.startDisabled) failP2(label, 'Start is disabled while the pool has items', report)
+  if (!report.reasonHidden) failP2(label, 'empty-pool reason is showing for a live count', report)
+  if (report.startInScroll) failP2(label, 'Start is inside the scrolling column', report)
+  if (report.startTop < 0 || report.startBottom > report.innerHeight + 1) {
+    failP2(label, 'Start is not in the viewport', report)
+  }
+  if (Math.abs(report.startTop - report.startAfterScroll) > 1) {
+    failP2(label, 'scrolling the menu moved Start', report)
+  }
+  if (report.panelBottom - report.startBottom > 36) {
+    failP2(label, 'Start is not pinned to the bottom of the menu column', report)
+  }
+  console.log(`ok ${label} "${report.tagline}" ${report.startText} pool "${report.pool}" overflow ${report.overflow}`)
+}
+
+async function assertP2(cdp) {
+  await assertPack()
+  const save = async (name) => {
+    const png = await cdp.send('Page.captureScreenshot', { format: 'png' })
+    const file = `${OUT}/p2-${name}.png`
+    await writeFile(file, Buffer.from(png.data, 'base64'))
+    console.log('shot', name)
+  }
+
+  await setViewport(cdp, 390, 844, true)
+  await openApp(cdp, true)
+  await delay(250)
+  const phoneMenu = await readMenu(cdp)
+  assertMenu(phoneMenu, 'iphone menu')
+  await save('iphone-menu')
+
+  const exclusive = await cdp.evaluate(`(() => {
+    document.querySelector('#mode-combined').dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, cancelable: true }))
+    const levels = document.querySelector('.mode-grid--levels')
+    const combined = document.querySelector('#mode-combined')
+    const memory = document.querySelector('#mode-memory')
+    const picked = {
+      combinedOn: combined.classList.contains('mode-card--on'),
+      memoryOn: memory.classList.contains('mode-card--on'),
+      seeOn: !!document.querySelector('[data-mode="see"].mode-card--on'),
+      hintOn: !!document.querySelector('[data-mode="hint"].mode-card--on'),
+      levelsDimmed: levels.classList.contains('is-dimmed'),
+      combinedDim: combined.classList.contains('mode-card--dim'),
+    }
+    document.querySelector('#mode-memory').dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, cancelable: true }))
+    picked.restored = document.querySelector('#mode-memory').classList.contains('mode-card--on')
+      && !document.querySelector('#mode-combined').classList.contains('mode-card--on')
+      && document.querySelector('#mode-combined').classList.contains('mode-card--dim')
+    return picked
+  })()`)
+  if (!exclusive.combinedOn || exclusive.memoryOn || exclusive.seeOn || exclusive.hintOn || !exclusive.levelsDimmed || exclusive.combinedDim) {
+    failP2('iphone combined', 'Combined and a single level both read as selected', exclusive)
+  }
+  if (!exclusive.restored) failP2('iphone level', 'choosing a level did not clear Combined', exclusive)
+  console.log('ok combined vs level are exclusive')
+  await cdp.evaluate(`(() => {
+    document.querySelector('#mode-combined').dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, cancelable: true }))
+    document.querySelector('#mode-combined').scrollIntoView({ block: 'center' })
+  })()`)
+  await save('iphone-combined')
+  await cdp.evaluate(`document.querySelector('#mode-memory').dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, cancelable: true }))`)
+
+  await cdp.evaluate(`window.__anatomyQA.showAnkle('learn', 0)`, true)
+  const lesson = await cdp.evaluate(`(() => {
+    const next = document.querySelector('#case-next')
+    let guard = 0
+    while ((next.textContent || '').trim() !== 'Start quiz' && guard < 6) {
+      next.click()
+      guard += 1
+    }
+    const body = document.querySelector('#case-body')
+    body.scrollTop = body.scrollHeight
+    const last = body.lastElementChild.getBoundingClientRect()
+    const actions = document.querySelector('.case-actions').getBoundingClientRect()
+    const bodyRect = body.getBoundingClientRect()
+    return {
+      title: (document.querySelector('#case-title')?.textContent || '').trim(),
+      next: (next.textContent || '').trim(),
+      lastText: (body.lastElementChild?.textContent || '').slice(-40),
+      lastBottom: Math.round(last.bottom),
+      actionsTop: Math.round(actions.top),
+      bodyBottom: Math.round(bodyRect.bottom),
+      scrolled: body.scrollTop > 0,
+      clear: last.bottom <= actions.top + 1 && last.bottom <= bodyRect.bottom + 1,
+    }
+  })()`)
+  if (lesson.title !== 'Grade II · POLICE') failP2('iphone lesson', `expected the long POLICE card, got "${lesson.title}"`, lesson)
+  if (!lesson.scrolled) failP2('iphone lesson', 'the lesson body did not scroll', lesson)
+  if (!lesson.clear) failP2('iphone lesson', 'the last line is not fully above Back / Start quiz', lesson)
+  console.log(`ok lesson "${lesson.title}" last line ${lesson.lastBottom} above actions ${lesson.actionsTop}`)
+  await save('iphone-lesson')
+
+  await cdp.evaluate(`window.__anatomyQA.showAnkle('type', 0)`, true)
+  await delay(200)
+  const rehab = await cdp.evaluate(`(() => {
+    const look = document.querySelector('#quiz-look')
+    const lookStyle = getComputedStyle(look)
+    const fill = document.querySelector('#quiz-progress-fill').getBoundingClientRect()
+    const track = document.querySelector('#quiz-progress').getBoundingClientRect()
+    return {
+      context: (document.querySelector('#quiz-context')?.textContent || '').trim(),
+      progress: (document.querySelector('#pill-round')?.textContent || '').trim(),
+      fill: Math.round(fill.width),
+      track: Math.round(track.width),
+      trackHeight: Math.round(track.height),
+      lookDisplay: lookStyle.display,
+      looks: [...look.querySelectorAll('[data-look]')].map((el) => el.dataset.look),
+      pills: document.querySelectorAll('#pill-subject, #pill-mode').length,
+      bar: window.__anatomyQA.typeBar(),
+    }
+  })()`)
+  if (rehab.context !== 'Rehab · type it') failP2('iphone quiz', `context "${rehab.context}"`, rehab)
+  if (rehab.pills !== 0) failP2('iphone quiz', 'two context pills are still in the bar', rehab)
+  if (rehab.progress !== '1 / 5') failP2('iphone quiz', `count "${rehab.progress}"`, rehab)
+  if (!(rehab.trackHeight > 0 && rehab.trackHeight <= 6)) failP2('iphone quiz', `progress bar is ${rehab.trackHeight}px`, rehab)
+  if (!(rehab.fill > 0 && rehab.fill < rehab.track)) failP2('iphone quiz', 'progress fill does not match 1 / 5', rehab)
+  if (rehab.lookDisplay === 'none' || rehab.looks.join(',') !== 'xray,solid') {
+    failP2('iphone quiz', 'Look is missing from the top bar', rehab)
+  }
+  if (!rehab.bar.promptPanel) failP2('iphone quiz', 'prompt is not on a panel', rehab)
+  if (rehab.bar.skipText !== 'Skip · show answer') failP2('iphone quiz', `Skip is "${rehab.bar.skipText}"`, rehab)
+  if (!rehab.bar.checkHidden) failP2('iphone quiz', 'iPhone is showing a Check button', rehab)
+  console.log(`ok quiz bar "${rehab.context}" ${rehab.progress} look ${rehab.looks.join('/')}`)
+  await save('iphone-quiz')
+
+  await cdp.evaluate(`document.querySelector('#btn-menu-top').dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, cancelable: true }))`)
+  const sheet = await cdp.evaluate(`(() => {
+    const restart = document.querySelector('#menu-restart')
+    const change = document.querySelector('#menu-change')
+    const rr = restart.getBoundingClientRect()
+    const cr = change.getBoundingClientRect()
+    const context = document.querySelector('#quiz-context').getBoundingClientRect()
+    const menu = document.querySelector('#menu-sheet').getBoundingClientRect()
+    return {
+      hidden: document.querySelector('#menu-sheet').hidden,
+      restart: (restart.textContent || '').trim(),
+      change: (change.textContent || '').trim(),
+      restartH: Math.round(rr.height),
+      changeH: Math.round(cr.height),
+      contextBottom: Math.round(context.bottom),
+      sheetTop: Math.round(menu.top),
+    }
+  })()`)
+  if (sheet.hidden || sheet.restart !== 'Restart' || sheet.change !== 'Change set') {
+    failP2('iphone menu sheet', 'Menu did not open Restart / Change set', sheet)
+  }
+  if (sheet.restartH < 44 || sheet.changeH < 44) failP2('iphone menu sheet', 'sheet actions are under 44px', sheet)
+  if (sheet.sheetTop < sheet.contextBottom - 2) {
+    failP2('iphone menu sheet', 'Restart / Change set covers the context label', sheet)
+  }
+  await save('iphone-menu-sheet')
+  await cdp.evaluate(`document.querySelector('#menu-change').dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, cancelable: true }))`)
+  const back = await cdp.evaluate(`(() => ({
+    menuHidden: document.querySelector('#menu-overlay').hidden,
+    sheetHidden: document.querySelector('#menu-sheet').hidden,
+    tagline: (document.querySelector('.menu-tag')?.textContent || '').trim(),
+  }))()`)
+  if (back.menuHidden || !back.sheetHidden || back.tagline !== 'Learn anatomy by seeing it, then typing it.') {
+    failP2('iphone change set', 'Change set did not return to the start menu', back)
+  }
+  console.log('ok Menu opens Restart / Change set')
+
+  await openApp(cdp, true)
+  await cdp.evaluate(`window.__anatomyQA.showQuiz('bones', 'frontal', 300, 'see')`, true)
+  await delay(200)
+  const open = await cdp.evaluate(`window.__anatomyQA.typeBar()`)
+  assertLifted(open, 'iphone type 300', 300)
+  assertBigWord(open, 'iphone type 300')
+  if (!open.promptPanel) failType('iphone type 300', 'prompt is not on a panel', open)
+  if (!open.tapVisible || !/tap to type/i.test(open.tapText)) {
+    failType('iphone type 300', `expected TAP TO TYPE, got "${open.tapText}"`, open)
+  }
+  if (open.skipText !== 'Skip · show answer') failType('iphone type 300', `Skip is "${open.skipText}"`, open)
+  if (!open.checkHidden) failType('iphone type 300', 'iPhone type-it is showing Check', open)
+  if (open.context !== 'Bones · see it') failType('iphone type 300', `context "${open.context}"`, open)
+  console.log(`ok type-it panel lifted, skip ${open.skipBottom}, word ${open.wordBottom}`)
+  await save('iphone-type-kb')
+
+  const down = await cdp.evaluate(`window.__anatomyQA.showQuiz('bones', 'frontal', 0, 'see').then(() => window.__anatomyQA.typeBar())`, true)
+  if (down.inset > 40) failType('iphone dismiss', `inset still ${down.inset}`, down)
+  if (!(down.skipBottom > open.skipBottom + 80)) {
+    failType('iphone dismiss', `layout did not return, skip ${down.skipBottom} vs ${open.skipBottom}`, down)
+  }
+  const again = await cdp.evaluate(`window.__anatomyQA.showQuiz('bones', 'frontal', 300, 'see').then(() => window.__anatomyQA.typeBar())`, true)
+  assertLifted(again, 'iphone reopen', 300)
+  assertBigWord(again, 'iphone reopen')
+  if (Math.abs(again.skipBottom - open.skipBottom) > 12) {
+    failType('iphone reopen', `lift changed, skip ${again.skipBottom} vs ${open.skipBottom}`, again)
+  }
+  console.log('ok dismiss then reopen still lifts')
+  await save('iphone-type-reopen')
+
+  await cdp.evaluate(`window.__anatomyQA.showAnkle('tap', 0)`, true)
+  const tap = await cdp.evaluate(`window.__anatomyQA.typeBar()`)
+  if (!tap.tapVisible || !/tap the model/i.test(tap.tapText)) {
+    failType('iphone tap', `expected TAP THE MODEL, got "${tap.tapText}" visible ${tap.tapVisible}`, tap)
+  }
+  if (/tap to type/i.test(tap.tapText)) failType('iphone tap', 'tap step still says TAP TO TYPE', tap)
+  if (tap.context !== 'Rehab · tap it') failType('iphone tap', `context "${tap.context}"`, tap)
+  console.log(`ok tap step "${tap.tapText}"`)
+  await save('iphone-tap')
+
+  await setViewport(cdp, 1440, 900, false)
+  await delay(250)
+  await openApp(cdp, false)
+  const deskMenu = await readMenu(cdp)
+  assertMenu(deskMenu, 'desktop menu')
+  await save('desktop-menu')
+
+  await cdp.evaluate(`window.__anatomyQA.showQuiz('bones', 'frontal', 0, 'memory')`, true)
+  await delay(200)
+  const desk = await cdp.evaluate(`window.__anatomyQA.typeBar()`)
+  assertBigWord(desk, 'desktop type')
+  if (desk.hudHidden || desk.skipHidden) failType('desktop type', 'typing bar missing', desk)
+  if (desk.tapVisible) failType('desktop type', 'desktop is showing TAP TO TYPE', desk)
+  const deskCue = await cdp.evaluate(`getComputedStyle(document.querySelector('#tap-hint')).display`)
+  if (deskCue !== 'none') failType('desktop type', `TAP TO TYPE is painted (${deskCue})`, desk)
+  if (desk.checkHidden) failType('desktop type', 'desktop Check is hidden', desk)
+  if (desk.checkText !== 'Check') failType('desktop type', `Check label "${desk.checkText}"`, desk)
+  if (!accentish(desk.checkBg)) failType('desktop type', `Check fill is ${desk.checkBg}`, desk)
+  if (desk.skipText !== 'Skip · show answer') failType('desktop type', `Skip is "${desk.skipText}"`, desk)
+  if (!desk.promptPanel) failType('desktop type', 'prompt is not on a panel', desk)
+  if (!desk.lookVisible) failType('desktop type', 'Look is missing from the desktop quiz bar', desk)
+  if (desk.context !== 'Bones · memory') failType('desktop type', `context "${desk.context}"`, desk)
+  if (desk.inset > 40) failType('desktop type', `desktop lifted by ${desk.inset}`, desk)
+  console.log(`ok desktop Check ${desk.checkBg} context "${desk.context}"`)
+  await save('desktop-type')
+
+  console.log('ok P2')
 }
 
 function failType(label, msg, report) {

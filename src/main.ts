@@ -53,17 +53,23 @@ import {
   type KeyboardViewport,
 } from './input/quizKeyboard'
 import { tapCueFor, untypedLetterClass, wrongMarkHtml } from './ui/wordMarks'
+import {
+  isModeDimmed,
+  isModeSelected,
+  playableCount,
+  progressRatio,
+  quizContextLabel,
+  startButtonLabel,
+  startDisabledReason,
+  type QuizActivity,
+  type QuizSubject,
+} from './ui/quizHud'
 
 /** Bonetype three-level model (+ Combined runs all back-to-back). */
 type Level = 'see' | 'hint' | 'memory'
 type PlayMode = 'combined' | Level
 
 const LEVEL_ORDER: Level[] = ['see', 'hint', 'memory']
-const LEVEL_LABEL: Record<Level, string> = {
-  see: 'See it',
-  hint: 'Hint',
-  memory: 'Memory',
-}
 const REGION_LABEL: Record<BoneRegion, string> = {
   skull: 'SKULL',
   spine: 'SPINE',
@@ -114,16 +120,26 @@ app.innerHTML = `
 
   <div class="chrome chrome--top" id="chrome-top" hidden>
     <div class="chrome-left">
-      <span class="pill pill--solid" id="pill-subject">Bones</span>
-      <span class="pill" id="pill-mode">Learn</span>
+      <button type="button" class="pill pill--btn" id="btn-menu-top" title="Menu" aria-label="Menu" aria-expanded="false" aria-controls="menu-sheet">≡ <span class="menu-word">menu</span></button>
+      <div class="menu-sheet panel" id="menu-sheet" hidden>
+        <button type="button" class="menu-sheet-btn" id="menu-restart">Restart</button>
+        <button type="button" class="menu-sheet-btn" id="menu-change">Change set</button>
+      </div>
+    </div>
+    <div class="chrome-context panel" id="chrome-context">
+      <span class="quiz-context" id="quiz-context">Bones · memory</span>
+      <span class="quiz-meter" id="quiz-meter">
+        <span class="quiz-progress" id="quiz-progress" role="progressbar" aria-valuemin="0" aria-valuemax="0" aria-valuenow="0" aria-label="Progress"><span class="quiz-progress-fill" id="quiz-progress-fill"></span></span>
+        <span class="quiz-count" id="pill-round">0 / 0</span>
+        <span class="quiz-round" id="quiz-round" hidden>round 1/3</span>
+      </span>
     </div>
     <div class="chrome-center">
       <span><strong id="stat-acc">100%</strong> accuracy</span>
-      <span><strong id="stat-progress">0 / 0</strong></span>
     </div>
-    <div class="chrome-right">
-      <button type="button" class="pill pill--btn" id="btn-menu-top" title="Menu">≡ menu</button>
-      <span class="pill" id="pill-round">round 1/3</span>
+    <div class="view-filter-group quiz-look" id="quiz-look" role="radiogroup" aria-label="Model look">
+      <button type="button" class="view-filter-btn" data-look="xray">X-ray</button>
+      <button type="button" class="view-filter-btn view-filter-btn--on" data-look="solid">Solid</button>
     </div>
   </div>
 
@@ -152,9 +168,10 @@ app.innerHTML = `
   <!-- Start menu (bonetype-style glass panel) -->
   <div class="menu-overlay" id="menu-overlay">
     <div class="menu-panel" id="menu-panel">
+      <div class="menu-scroll" id="menu-scroll">
       <header class="menu-header">
         <h1>anatomy 3d</h1>
-        <p class="menu-tag">learn the skeleton by typing it</p>
+        <p class="menu-tag">Learn anatomy by seeing it, then typing it.</p>
       </header>
 
       <section class="menu-section">
@@ -196,16 +213,8 @@ app.innerHTML = `
       </section>
 
       <section class="menu-section">
-        <h2>Look</h2>
-        <div class="filter-bar" id="menu-look">
-          <button type="button" class="filter-chip" data-look="xray">X-ray</button>
-          <button type="button" class="filter-chip filter-chip--on" data-look="solid">Solid</button>
-        </div>
-      </section>
-
-      <section class="menu-section">
         <h2>Mode</h2>
-        <button type="button" class="mode-card mode-card--wide" data-mode="combined" id="mode-combined">
+        <button type="button" class="mode-card mode-card--wide mode-card--dim" data-mode="combined" id="mode-combined" aria-pressed="false">
           <span class="mode-key">L</span>
           <div>
             <span class="mode-title">Combined / Learn</span>
@@ -221,7 +230,7 @@ app.innerHTML = `
             <span class="mode-title">Level 2: Hint</span>
             <span class="mode-sub">first letter + meaning</span>
           </button>
-          <button type="button" class="mode-card mode-card--on" data-mode="memory" id="mode-memory">
+          <button type="button" class="mode-card mode-card--on" data-mode="memory" id="mode-memory" aria-pressed="true">
             <span class="mode-title">Level 3: Memory</span>
             <span class="mode-sub">no hints</span>
           </button>
@@ -246,8 +255,11 @@ app.innerHTML = `
         <h2>Per session</h2>
         <div class="session-row" id="session-counts"></div>
       </section>
-
-      <button type="button" class="start-btn" id="start-btn">Start <kbd>↵</kbd></button>
+      </div>
+      <div class="menu-start">
+        <p class="start-reason" id="start-reason" hidden></p>
+        <button type="button" class="start-btn" id="start-btn">Start</button>
+      </div>
     </div>
   </div>
 
@@ -307,7 +319,7 @@ app.innerHTML = `
 
   <!-- In-play typing HUD -->
   <div class="hud" id="play-hud" hidden>
-    <div class="prompt-block" id="prompt-block">
+    <div class="prompt-block panel" id="prompt-block">
       <div class="type-label" id="type-label">TYPE IT · SPINE</div>
       <div class="type-field" id="type-field">
         <div class="target-word" id="target-word"></div>
@@ -327,10 +339,10 @@ app.innerHTML = `
       </div>
       <div class="gloss-line" id="gloss-line"></div>
       <p class="tap-hint" id="tap-hint">Tap to type</p>
-      <button type="button" class="skip-btn" id="skip-btn">
-        Skip
-        <span class="skip-cue">don't know</span>
-      </button>
+      <div class="answer-actions">
+        <button type="button" class="skip-btn" id="skip-btn">Skip · show answer</button>
+        <button type="button" class="check-btn" id="check-btn">Check</button>
+      </div>
     </div>
   </div>
 
@@ -363,9 +375,16 @@ const skipBtn = document.querySelector<HTMLButtonElement>('#skip-btn')!
 const tapHint = document.querySelector<HTMLParagraphElement>('#tap-hint')!
 const hiddenInput = document.querySelector<HTMLInputElement>('#answer')!
 const statAcc = document.querySelector<HTMLElement>('#stat-acc')!
-const statProgress = document.querySelector<HTMLElement>('#stat-progress')!
-const pillMode = document.querySelector<HTMLElement>('#pill-mode')!
+const quizContext = document.querySelector<HTMLElement>('#quiz-context')!
+const quizMeter = document.querySelector<HTMLElement>('#quiz-meter')!
+const quizProgress = document.querySelector<HTMLElement>('#quiz-progress')!
+const quizProgressFill = document.querySelector<HTMLElement>('#quiz-progress-fill')!
 const pillRound = document.querySelector<HTMLElement>('#pill-round')!
+const quizRound = document.querySelector<HTMLElement>('#quiz-round')!
+const menuSheet = document.querySelector<HTMLElement>('#menu-sheet')!
+const btnMenuTop = document.querySelector<HTMLButtonElement>('#btn-menu-top')!
+const startReason = document.querySelector<HTMLElement>('#start-reason')!
+const checkBtn = document.querySelector<HTMLButtonElement>('#check-btn')!
 const poolCount = document.querySelector<HTMLElement>('#pool-count')!
 const subjectCount = document.querySelector<HTMLElement>('#subject-count')!
 const footerMeta = document.querySelector<HTMLElement>('#footer-meta')!
@@ -378,7 +397,6 @@ const moreFiltersToggle = document.querySelector<HTMLButtonElement>('#more-filte
 const muscleCountEl = document.querySelector<HTMLElement>('#muscle-count')!
 const sessionCountsEl = document.querySelector<HTMLDivElement>('#session-counts')!
 const startBtn = document.querySelector<HTMLButtonElement>('#start-btn')!
-const pillSubject = document.querySelector<HTMLElement>('#pill-subject')!
 const btnView = document.querySelector<HTMLButtonElement>('#btn-view')!
 const btnAnkleCase = document.querySelector<HTMLButtonElement>('#btn-ankle-case')!
 const casePanel = document.querySelector<HTMLElement>('#case-panel')!
@@ -691,37 +709,77 @@ function updateGloss(bone: QuizEntry | null): void {
   }
 }
 
+function quizActivity(): QuizActivity {
+  if (state.viewing && !state.caseActive && !state.playing) return 'view'
+  if (state.caseActive) {
+    if (state.finished) return 'complete'
+    if (state.casePhase === 'learn') return 'learn'
+    return currentCaseStep()?.kind === 'tap' ? 'tap' : 'type'
+  }
+  if (state.finished) return 'complete'
+  if (state.mode === 'combined') return 'learn'
+  return currentLevel()
+}
+
+function quizSubject(): QuizSubject {
+  if (state.caseActive) return 'rehab'
+  return state.subject
+}
+
+/** One context label, a thin bar, and the round count. Not two pills. */
+function syncChromeContext(): void {
+  const viewing = state.viewing && !state.playing && !state.caseActive
+  quizContext.textContent = quizContextLabel({
+    viewing,
+    subject: viewing ? 'bones' : quizSubject(),
+    activity: quizActivity(),
+  })
+
+  let shown = 0
+  let total = 0
+  let roundLabel = ''
+  if (state.caseActive) {
+    if (state.casePhase === 'learn') {
+      total = ANKLE_LEARN.length
+      shown = Math.min(state.caseLearnIndex + 1, total)
+    } else {
+      total = ANKLE_QUIZ.length
+      shown = state.finished ? total : Math.min(state.caseQuizIndex + 1, total)
+    }
+  } else if (!viewing) {
+    total = state.queue.length
+    shown = state.finished ? total : Math.min(state.index + (total > 0 ? 1 : 0), total)
+    if (state.playing && state.mode === 'combined' && state.levels.length > 0) {
+      roundLabel = `round ${state.levelIndex + 1}/${state.levels.length}`
+    }
+  }
+
+  const ratio = progressRatio(shown, total)
+  quizProgressFill.style.width = `${Math.round(ratio * 1000) / 10}%`
+  quizProgress.setAttribute('aria-valuemax', String(total))
+  quizProgress.setAttribute('aria-valuenow', String(shown))
+  pillRound.textContent = `${shown} / ${total}`
+  quizRound.hidden = roundLabel.length === 0
+  quizRound.textContent = roundLabel
+  quizMeter.hidden = viewing
+}
+
 function updateHud(): void {
   if (state.caseActive) {
     renderCaseHud()
     return
   }
   const bone = current()
-  const total = state.queue.length
   const acc =
     state.attempts === 0 ? 100 : Math.round((state.correct / state.attempts) * 100)
   statAcc.textContent = `${acc}%`
-  statProgress.textContent = state.finished
-    ? `${total} / ${total}`
-    : `${Math.min(state.index + 1, total)} / ${total}`
-
-  const modeName =
-    state.mode === 'combined' ? 'Learn' : LEVEL_LABEL[state.mode as Level]
-  pillMode.textContent = modeName
-  // Combined keeps "Learn" + "round 1/3". A single level already names itself
-  // on the left pill, so the right pill is progress (the center stats hide on a phone).
-  const shown = state.finished ? total : Math.min(state.index + (total > 0 ? 1 : 0), total)
-  pillRound.textContent =
-    state.mode === 'combined'
-      ? `round ${state.levelIndex + 1}/${state.levels.length}`
-      : `${shown} / ${total}`
+  syncChromeContext()
 
   if (bone && !state.finished) {
     typeLabel.textContent = `TYPE IT · ${bone.regionLabel}`
   } else if (state.finished) {
     typeLabel.textContent = 'COMPLETE · TAP OR ESC FOR MENU'
   }
-  pillSubject.textContent = state.subject === 'muscles' ? 'Muscles' : 'Bones'
 
   updateGloss(bone)
   renderTargetWord(bone)
@@ -819,8 +877,9 @@ function showMenu(): void {
   viewPanel.classList.remove('is-expanded')
   clearPickStack()
   chromeTop.hidden = true
-  chromeTop.classList.remove('is-view')
+  chromeTop.classList.remove('is-view', 'is-sheet')
   chromeTop.setAttribute('hidden', '')
+  setMenuSheet(false)
   viewFilters.hidden = true
   viewFilters.classList.remove('is-quiz')
   sideViews.hidden = true
@@ -1279,8 +1338,8 @@ async function startView(): Promise<void> {
   chromeTop.hidden = false
   chromeTop.removeAttribute('hidden')
   chromeTop.classList.add('is-view')
-  pillSubject.textContent = 'Study'
-  pillMode.textContent = 'View'
+  setMenuSheet(false)
+  syncChromeContext()
   syncFooterTips()
   viewFilters.hidden = false
   viewFilters.classList.remove('is-quiz')
@@ -1340,8 +1399,9 @@ async function startSession(): Promise<void> {
   playHud.hidden = false
   chromeTop.hidden = false
   chromeTop.classList.remove('is-view')
-  viewFilters.hidden = false
-  viewFilters.classList.add('is-quiz')
+  setMenuSheet(false)
+  viewFilters.hidden = true
+  viewFilters.classList.remove('is-quiz')
   syncLookButtons()
   sideViews.hidden = false
   updateHud()
@@ -1459,6 +1519,10 @@ function syncSkipButton(): void {
     !(state.caseActive && state.casePhase === 'learn')
   skipBtn.hidden = !show
   skipBtn.disabled = !show
+  // Phone Check is the keyboard Go key. Desktop shows the button, except on a tap step.
+  const tapStep = state.caseActive && state.casePhase === 'quiz' && currentCaseStep()?.kind === 'tap'
+  checkBtn.hidden = !show || tapStep
+  checkBtn.disabled = checkBtn.hidden
 }
 
 function revealAnswer(): void {
@@ -1524,6 +1588,14 @@ function updatePoolCount(): void {
     ? `BODY PARTS 3D · ${names.length} MESHES`
     : `MODELS: BODY PARTS 3D · ${names.length} MESHES · ${ribN} RIBS · ${MUSCLES.length} MUSCLES`
   void musN
+  const deal = playableCount(filteredPool().length, state.sessionCount)
+  startBtn.textContent = startButtonLabel(deal)
+  startBtn.disabled = deal <= 0
+  const reason = startDisabledReason(deal)
+  startReason.hidden = reason.length === 0
+  startReason.textContent = reason
+  if (reason) startBtn.setAttribute('aria-describedby', 'start-reason')
+  else startBtn.removeAttribute('aria-describedby')
 }
 
 function setPreset(preset: FilterPreset): void {
@@ -1704,8 +1776,14 @@ function renderMenuFilters(): void {
     sessionCountsEl.appendChild(btn)
   }
 
+  const levelGrid = document.querySelector<HTMLElement>('.mode-grid--levels')
+  levelGrid?.classList.toggle('is-dimmed', state.mode === 'combined')
   document.querySelectorAll<HTMLButtonElement>('[data-mode]').forEach((btn) => {
-    btn.classList.toggle('mode-card--on', btn.dataset.mode === state.mode)
+    const card = btn.dataset.mode as PlayMode
+    const on = isModeSelected(state.mode, card)
+    btn.classList.toggle('mode-card--on', on)
+    btn.classList.toggle('mode-card--dim', isModeDimmed(state.mode, card))
+    btn.setAttribute('aria-pressed', on ? 'true' : 'false')
   })
 }
 
@@ -1803,6 +1881,7 @@ moreFiltersToggle.addEventListener('pointerdown', (e) => {
 
 startBtn.addEventListener('pointerdown', (e) => {
   e.preventDefault()
+  if (startBtn.disabled) return
   void startSession()
 })
 
@@ -1916,9 +1995,73 @@ viewPickChips.addEventListener('pointerdown', (e) => {
   commitViewSelection(pickStack, index)
 })
 
-document.querySelector('#btn-menu-top')!.addEventListener('pointerdown', (e) => {
+function setMenuSheet(open: boolean): void {
+  menuSheet.hidden = !open
+  btnMenuTop.setAttribute('aria-expanded', open ? 'true' : 'false')
+  chromeTop.classList.toggle('is-sheet', open)
+}
+
+function restartCurrent(): void {
+  setMenuSheet(false)
+  if (state.caseActive) {
+    if (state.casePhase === 'learn') {
+      state.caseLearnIndex = 0
+      state.finished = false
+      renderLearnCard()
+      syncChromeContext()
+      return
+    }
+    startAnkleQuiz()
+    return
+  }
+  if (!state.playing || state.queue.length === 0) {
+    showMenu()
+    return
+  }
+  state.levelIndex = 0
+  state.index = 0
+  state.typed = ''
+  state.revealing = false
+  state.correct = 0
+  state.attempts = 0
+  state.finished = false
+  hiddenInput.value = ''
+  applyTarget()
+  updateHud()
+  focusInput()
+}
+
+btnMenuTop.addEventListener('pointerdown', (e) => {
   e.preventDefault()
+  if (state.viewing && !state.playing) {
+    showMenu()
+    return
+  }
+  if (!state.playing && !state.caseActive) {
+    showMenu()
+    return
+  }
+  setMenuSheet(menuSheet.hidden)
+})
+
+document.querySelector('#menu-restart')!.addEventListener('pointerdown', (e) => {
+  e.preventDefault()
+  e.stopPropagation()
+  restartCurrent()
+})
+
+document.querySelector('#menu-change')!.addEventListener('pointerdown', (e) => {
+  e.preventDefault()
+  e.stopPropagation()
+  setMenuSheet(false)
   showMenu()
+})
+
+window.addEventListener('pointerdown', (e) => {
+  if (menuSheet.hidden) return
+  const target = e.target as Node | null
+  if (target && (menuSheet.contains(target) || btnMenuTop.contains(target))) return
+  setMenuSheet(false)
 })
 
 window.addEventListener(
@@ -1973,7 +2116,7 @@ window.addEventListener('keydown', (e) => {
     if (state.viewing) return
     if (e.key === 'Enter') {
       e.preventDefault()
-      void startSession()
+      if (!startBtn.disabled) void startSession()
     }
     return
   }
@@ -2079,7 +2222,7 @@ hiddenInput.addEventListener('keydown', (e) => {
 })
 
 promptBlock.addEventListener('pointerdown', (e) => {
-  if ((e.target as HTMLElement | null)?.closest('#skip-btn')) return
+  if ((e.target as HTMLElement | null)?.closest('#skip-btn, #check-btn')) return
   // Let a direct tap on the field focus it natively. preventDefault on that
   // path can cancel the focus and drop the iOS keyboard.
   if ((e.target as HTMLElement | null)?.closest('#answer')) {
@@ -2110,6 +2253,14 @@ skipBtn.addEventListener('pointerdown', (e) => {
   e.stopPropagation()
   void unlockAudio()
   revealAnswer()
+})
+
+checkBtn.addEventListener('pointerdown', (e) => {
+  e.preventDefault()
+  e.stopPropagation()
+  if (checkBtn.hidden || checkBtn.disabled) return
+  void unlockAudio()
+  onConfirmAnswer()
 })
 
 /** QA can pin a keyboard height. Null measures the visual viewport. */
@@ -2415,6 +2566,7 @@ function renderLearnCard(): void {
   caseNext.textContent = state.caseLearnIndex === ANKLE_LEARN.length - 1 ? 'Start quiz' : 'Next'
   scene.setAnkleEmphasis(card.emphasis)
   scene.setAnkleLigamentLabels(card.id === 'ligaments')
+  syncChromeContext()
   if (card.motion) scene.replayAnkleMotion()
   else scene.holdAnklePose(0)
 }
@@ -2447,9 +2599,8 @@ async function startAnkleCase(): Promise<void> {
   viewFilters.classList.remove('is-quiz')
   sideViews.hidden = true
   casePanel.hidden = false
-  pillSubject.textContent = 'Rehab'
-  pillMode.textContent = 'Learn'
-  pillRound.textContent = `1 / ${ANKLE_LEARN.length}`
+  setMenuSheet(false)
+  syncChromeContext()
   statusEl.style.display = ''
   statusEl.textContent = 'Loading ankle…'
   scene.setLook('solid')
@@ -2465,7 +2616,6 @@ function advanceCaseLearn(): void {
   if (!state.caseActive || state.casePhase !== 'learn') return
   if (state.caseLearnIndex < ANKLE_LEARN.length - 1) {
     state.caseLearnIndex += 1
-    pillRound.textContent = `${state.caseLearnIndex + 1} / ${ANKLE_LEARN.length}`
     renderLearnCard()
     scheduleFramingSync()
     return
@@ -2495,18 +2645,9 @@ function startAnkleQuiz(): void {
 function renderCaseHud(): void {
   document.documentElement.classList.toggle('ankle-case', state.caseActive)
   playHud.classList.toggle('case-quiz', state.caseActive && state.casePhase === 'quiz')
-  const total = ANKLE_QUIZ.length
   const acc = state.attempts === 0 ? 100 : Math.round((state.correct / state.attempts) * 100)
   statAcc.textContent = `${acc}%`
-  statProgress.textContent = state.finished ? `${total} / ${total}` : `${Math.min(state.caseQuizIndex + 1, total)} / ${total}`
-  pillSubject.textContent = 'Rehab'
-  pillMode.textContent = state.casePhase === 'learn' ? 'Learn' : 'Quiz'
-  if (state.casePhase === 'learn') {
-    pillRound.textContent = `${state.caseLearnIndex + 1} / ${ANKLE_LEARN.length}`
-  } else {
-    const shown = state.finished ? total : Math.min(state.caseQuizIndex + 1, total)
-    pillRound.textContent = `${shown} / ${total}`
-  }
+  syncChromeContext()
 
   if (state.casePhase === 'learn') {
     syncSkipButton()
@@ -2789,8 +2930,8 @@ async function qaShowQuiz(
   viewPanel.classList.remove('is-expanded')
   chromeTop.hidden = false
   chromeTop.classList.remove('is-view')
-  viewFilters.hidden = false
-  viewFilters.classList.add('is-quiz')
+  viewFilters.hidden = true
+  viewFilters.classList.remove('is-quiz')
   sideViews.hidden = true
   scene.setLook('solid')
   syncLookButtons()
@@ -2868,10 +3009,6 @@ async function qaShowAnkle(
     state.caseLearnIndex = mode === 'ligaments' ? 2 : 1
     casePanel.hidden = false
     playHud.hidden = true
-    pillSubject.textContent = 'Rehab'
-    pillMode.textContent = 'Learn'
-    const cardNo = state.caseLearnIndex + 1
-    pillRound.textContent = `${cardNo} / ${ANKLE_LEARN.length}`
     renderLearnCard()
     scene.holdAnklePose(mode === 'injury' ? ANKLE_INJURY_U : 0)
   } else {
@@ -2915,9 +3052,14 @@ function qaTypeBar(): Record<string, unknown> {
   const prompt = promptBlock.getBoundingClientRect()
   const skip = skipBtn.getBoundingClientRect()
   const word = targetWord.getBoundingClientRect()
+  const check = checkBtn.getBoundingClientRect()
   const inputStyle = getComputedStyle(hiddenInput)
   const wordStyle = getComputedStyle(targetWord)
   const hintStyle = getComputedStyle(tapHint)
+  const checkStyle = getComputedStyle(checkBtn)
+  const menuLook = document.querySelector('#menu-overlay [data-look]')
+  const quizLook = document.querySelector('#quiz-look')
+  const lookStyle = quizLook ? getComputedStyle(quizLook) : null
   return {
     inset: currentKeyboardInset(),
     innerHeight: window.innerHeight,
@@ -2928,6 +3070,11 @@ function qaTypeBar(): Record<string, unknown> {
     wordHeight: Math.round(word.height),
     hudHidden: playHud.hidden,
     skipHidden: skipBtn.hidden,
+    skipText: (skipBtn.textContent ?? '').replace(/\s+/g, ' ').trim(),
+    checkHidden: checkBtn.hidden || checkStyle.display === 'none',
+    checkText: (checkBtn.textContent ?? '').trim(),
+    checkBg: checkStyle.backgroundColor,
+    checkBottom: Math.round(check.bottom),
     menuHidden: menuOverlay.hidden,
     caseHidden: casePanel.hidden,
     caseTitle: caseTitle.textContent ?? '',
@@ -2935,12 +3082,20 @@ function qaTypeBar(): Record<string, unknown> {
     tapVisible: hintStyle.display !== 'none' && tapHint.classList.contains('is-visible'),
     label: (typeLabel.textContent ?? '').trim(),
     prompt: (glossLine.textContent ?? '').trim(),
+    context: (quizContext.textContent ?? '').trim(),
+    progress: (pillRound.textContent ?? '').trim(),
+    progressWidth: quizProgressFill.style.width,
+    round: quizRound.hidden ? '' : (quizRound.textContent ?? '').trim(),
+    promptPanel: promptBlock.classList.contains('panel'),
+    menuLook: Boolean(menuLook),
+    lookVisible: Boolean(lookStyle && lookStyle.display !== 'none' && !quizLook?.hasAttribute('hidden')),
     wordText: (targetWord.textContent ?? '').replace(/\s+/g, ' ').trim(),
     wordFont: Number.parseFloat(wordStyle.fontSize),
     inputBorder: inputStyle.borderTopWidth,
     inputColor: inputStyle.color,
     inputFill: inputStyle.getPropertyValue('-webkit-text-fill-color') || inputStyle.color,
     focused: document.activeElement === hiddenInput,
+    sheetHidden: menuSheet.hidden,
   }
 }
 
