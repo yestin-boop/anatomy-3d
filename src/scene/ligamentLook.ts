@@ -1,8 +1,8 @@
 /**
  * Display look for the licensed ankle ligaments.
- * Geometry stays the Z-Anatomy / BodyParts3D meshes; only a runtime
- * inflate along vertex normals and a material/label pass change how
- * they read on screen.
+ * Geometry stays the Z-Anatomy / BodyParts3D meshes; only a small
+ * rigid seat, a runtime inflate along vertex normals, and a
+ * material/label pass change how they read on screen.
  */
 import * as THREE from 'three'
 
@@ -10,14 +10,57 @@ import * as THREE from 'three'
 export const ANKLE_BONE_COLOR = 0xe9dcc8
 
 /**
- * Display inflate along vertex normals, in scene units (body height ≈ 4.2).
- * The packed ATFL/CFL/deltoid ribbons are ~0.49 mm thick in BodyParts3D
- * units — about 0.0012 after the body scale, a sub-pixel edge on a
- * 390×844 frame. 0.008 (~3 mm per side) makes a ~7 mm band: obvious as
- * a band, not a sausage, and still short of the lateral malleolus or
- * talar neck.
+ * Display inflate along vertex normals, in millimetres of the packed
+ * geometry (the GLBs are in this pack's millimetre Z-up frame).
+ * 0.008 scene units was ~3.2 mm per side and shoved the thickened
+ * wedges into or off the attachments. 1.1 mm per side still reads as a
+ * band once the right ATFL and CFL are seated, without sinking into bone.
  */
-export const LIGAMENT_INFLATE_WORLD = 0.008
+export const LIGAMENT_INFLATE_MM = 1.1
+
+/**
+ * Small rigid seats for the right lateral ligaments, in the packed
+ * millimetre Z-up frame. Applied at runtime to the licensed meshes;
+ * the packed GLBs are not rewritten. The deltoid is left where the
+ * Z-Anatomy fit put it, including the documented tibionavicular gap.
+ */
+export type LigamentSeat = {
+  position: readonly [number, number, number]
+  /** Local Euler XYZ, in degrees. */
+  rotationDeg?: readonly [number, number, number]
+}
+
+export const LIGAMENT_SEAT: Readonly<Record<string, LigamentSeat>> = {
+  atfl_r: { position: [-1, 4.5, -2.5] },
+  cfl_r: { position: [-2, -1, -3.5], rotationDeg: [-4, -4, 0] },
+}
+
+/** Translate and rotate a licensed ligament into its runtime seat. Idempotent. */
+export function seatLigamentMesh(mesh: THREE.Mesh): void {
+  const seat = LIGAMENT_SEAT[mesh.name]
+  if (!seat || mesh.userData.ligamentSeated) return
+  mesh.position.x += seat.position[0]
+  mesh.position.y += seat.position[1]
+  mesh.position.z += seat.position[2]
+  if (seat.rotationDeg) {
+    const e = new THREE.Euler(
+      (seat.rotationDeg[0] * Math.PI) / 180,
+      (seat.rotationDeg[1] * Math.PI) / 180,
+      (seat.rotationDeg[2] * Math.PI) / 180,
+      'XYZ',
+    )
+    mesh.quaternion.multiply(new THREE.Quaternion().setFromEuler(e))
+  }
+  mesh.userData.ligamentSeated = true
+}
+
+/** Runtime display treatment: seat, then inflate. Does not rewrite packed GLBs. */
+export function applyLigamentDisplayTreatment(mesh: THREE.Mesh): void {
+  seatLigamentMesh(mesh)
+  if (mesh.userData.ligamentInflated) return
+  mesh.geometry = inflateGeometryAlongNormals(mesh.geometry, LIGAMENT_INFLATE_MM)
+  mesh.userData.ligamentInflated = true
+}
 
 /** Slightly tighter than the general quiz fill, ankle case only. */
 export const ANKLE_FRAME_FILL = 0.8
@@ -78,8 +121,8 @@ export function ankleLigamentLabelsVisible(ligamentsVisible: boolean, labelsWant
 
 /**
  * Move vertices along their normals by `localOffset` (same units as the
- * geometry). Callers convert a world-space inflate through the body scale.
- * Returns a cloned geometry; the input is left unchanged.
+ * geometry; packed ligaments are millimetres). Returns a cloned geometry;
+ * the input is left unchanged.
  */
 export function inflateGeometryAlongNormals(
   geometry: THREE.BufferGeometry,

@@ -21,13 +21,17 @@ import {
   ANKLE_FRAME_FILL,
   LIGAMENT_BASE,
   LIGAMENT_DIM,
-  LIGAMENT_INFLATE_WORLD,
+  LIGAMENT_INFLATE_MM,
   LIGAMENT_LOOK,
-  inflateGeometryAlongNormals,
+  applyLigamentDisplayTreatment,
   ligamentLabel,
   ligamentRole,
   ankleLigamentLabelsVisible,
 } from './ligamentLook'
+import {
+  shouldResumeIdleSpinAfterControlsEnd,
+  shouldResumeIdleSpinOnMenuOrExitView,
+} from './idleSpin'
 import {
   ANKLE_CONTEXT_BONES,
   ANKLE_FRAME_MESHES,
@@ -437,7 +441,7 @@ export class ThoraxScene {
         this.refitFramedDistance()
       }
       window.setTimeout(() => {
-        if (!this.disposed && !this.viewMode && this.targetIds.size === 0) this.spinning = true
+        this.resumeIdleSpinAfterControlsEnd()
       }, 1800)
     })
 
@@ -1094,7 +1098,7 @@ export class ThoraxScene {
   showMenuView(): void {
     this.controls.minDistance = DEFAULT_MIN_DISTANCE
     this.frameFullBody()
-    this.spinning = true
+    this.spinning = shouldResumeIdleSpinOnMenuOrExitView({ ankleCase: this.ankleCase })
   }
 
   listMeshNames(): string[] {
@@ -1133,7 +1137,7 @@ export class ThoraxScene {
     this.viewSelected.clear()
     this.clearViewMarkers()
     this.applyViewLighting(this.look === 'solid')
-    this.spinning = true
+    this.spinning = shouldResumeIdleSpinOnMenuOrExitView({ ankleCase: this.ankleCase })
     this.applySubjectVisibility()
   }
 
@@ -2121,6 +2125,7 @@ export class ThoraxScene {
     lateralAxisY: number | null
     labels: { atfl: boolean; cfl: boolean }
     inflate: number
+    spinning: boolean
   } {
     const round = (v: THREE.Vector3) => ({
       x: +v.x.toFixed(4),
@@ -2168,7 +2173,29 @@ export class ThoraxScene {
       roll: this.calcaneusRoll(),
       lateralAxisY: this.anklePivot ? +(-this.anklePivot.matrixWorld.elements[1]).toFixed(4) : null,
       labels: this.ankleLabelState(),
-      inflate: LIGAMENT_INFLATE_WORLD,
+      inflate: LIGAMENT_INFLATE_MM,
+      spinning: this.spinning,
+    }
+  }
+
+  /**
+   * Apply the same resume-spin policy as the OrbitControls `end` timeout.
+   * QA uses this so a hook report does not have to wait 1.8s.
+   */
+  simulateControlsEnd(): void {
+    this.resumeIdleSpinAfterControlsEnd()
+  }
+
+  private resumeIdleSpinAfterControlsEnd(): void {
+    if (
+      shouldResumeIdleSpinAfterControlsEnd({
+        disposed: this.disposed,
+        viewMode: this.viewMode,
+        ankleCase: this.ankleCase,
+        targetCount: this.targetIds.size,
+      })
+    ) {
+      this.spinning = true
     }
   }
 
@@ -2228,13 +2255,10 @@ export class ThoraxScene {
    */
   private inflateLoadedLigaments(): void {
     if (this.ligamentsInflated) return
-    const worldScale = Math.max(this.body.scale.x, 1e-8)
-    const local = LIGAMENT_INFLATE_WORLD / worldScale
     for (const name of ANKLE_LIGAMENT_MESHES) {
       const mesh = this.meshByName.get(name)
       if (!mesh || mesh.userData.ligamentInflated) continue
-      mesh.geometry = inflateGeometryAlongNormals(mesh.geometry, local)
-      mesh.userData.ligamentInflated = true
+      applyLigamentDisplayTreatment(mesh)
     }
     this.ligamentsInflated = true
   }

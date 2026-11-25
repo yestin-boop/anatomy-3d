@@ -19,13 +19,23 @@ import {
   ANKLE_BONE_COLOR,
   ANKLE_FRAME_FILL,
   LIGAMENT_DIM,
-  LIGAMENT_INFLATE_WORLD,
+  LIGAMENT_INFLATE_MM,
   LIGAMENT_LOOK,
+  LIGAMENT_SEAT,
   ankleLigamentLabelsVisible,
+  applyLigamentDisplayTreatment,
   inflateGeometryAlongNormals,
   ligamentLabel,
   ligamentRole,
 } from '../src/scene/ligamentLook.ts'
+import {
+  shouldResumeIdleSpinAfterControlsEnd,
+  shouldResumeIdleSpinOnMenuOrExitView,
+} from '../src/scene/idleSpin.ts'
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js'
+import { readFileSync } from 'node:fs'
+import { dirname, join } from 'node:path'
+import { fileURLToPath } from 'node:url'
 
 let passed = 0
 let failed = 0
@@ -125,8 +135,30 @@ assert(LIGAMENT_LOOK.deltoid.color !== ANKLE_BONE_COLOR, 'deltoid is not cream b
 assert(LIGAMENT_LOOK.atfl.color !== 0xffe6b0, 'ATFL is no longer the washed pale gold')
 assert(LIGAMENT_LOOK.cfl.color !== 0xffe6b0, 'CFL is no longer the washed pale gold')
 assert(LIGAMENT_DIM.color !== LIGAMENT_LOOK.atfl.color, 'dim ligaments are darker than the hot ATFL')
-assert(LIGAMENT_INFLATE_WORLD === 0.008, 'inflate stays at the chosen 0.008 scene units')
-assert(LIGAMENT_INFLATE_WORLD > 0.004 && LIGAMENT_INFLATE_WORLD < 0.016, 'inflate is a band, not a fleck or a sausage')
+assert(LIGAMENT_INFLATE_MM === 1.1, 'inflate is the chosen 1.1 mm')
+assert(LIGAMENT_INFLATE_MM > 0.6 && LIGAMENT_INFLATE_MM < 2, 'inflate is a band, not a fleck or a sausage')
+assert(LIGAMENT_SEAT.atfl_r?.position[0] === -1 && LIGAMENT_SEAT.atfl_r?.position[1] === 4.5 && LIGAMENT_SEAT.atfl_r?.position[2] === -2.5, 'right ATFL has the measured seat')
+assert(LIGAMENT_SEAT.cfl_r?.position[0] === -2 && LIGAMENT_SEAT.cfl_r?.position[1] === -1 && LIGAMENT_SEAT.cfl_r?.position[2] === -3.5, 'right CFL has the measured seat')
+assert(LIGAMENT_SEAT.cfl_r?.rotationDeg?.[0] === -4 && LIGAMENT_SEAT.cfl_r?.rotationDeg?.[1] === -4, 'right CFL has the small tilt')
+assert(LIGAMENT_SEAT.deltoid_r === undefined, 'deltoid is not rigidly reseated')
+assert(LIGAMENT_SEAT.atfl_l === undefined && LIGAMENT_SEAT.cfl_l === undefined, 'left ligaments are not reseated')
+
+const idleBase = { disposed: false, viewMode: false, ankleCase: false, targetCount: 0 }
+assert(shouldResumeIdleSpinAfterControlsEnd(idleBase), 'menu idle spin resumes after controls end')
+assert(
+  !shouldResumeIdleSpinAfterControlsEnd({ ...idleBase, ankleCase: true }),
+  'ankle case does not resume spin after a simulated controls end',
+)
+assert(
+  !shouldResumeIdleSpinAfterControlsEnd({ ...idleBase, ankleCase: true, targetCount: 0 }),
+  'ankle case stays still even though targetIds are empty',
+)
+assert(shouldResumeIdleSpinAfterControlsEnd({ ...idleBase, viewMode: false, targetCount: 0 }), 'empty targets still resume on the menu')
+assert(!shouldResumeIdleSpinAfterControlsEnd({ ...idleBase, viewMode: true }), 'view mode still does not resume spin after controls end')
+assert(!shouldResumeIdleSpinAfterControlsEnd({ ...idleBase, targetCount: 2 }), 'a quiz target still does not resume spin after controls end')
+assert(!shouldResumeIdleSpinAfterControlsEnd({ ...idleBase, disposed: true }), 'a disposed scene does not resume spin')
+assert(shouldResumeIdleSpinOnMenuOrExitView({ ankleCase: false }), 'showMenuView and exitView still resume spin on the menu')
+assert(!shouldResumeIdleSpinOnMenuOrExitView({ ankleCase: true }), 'showMenuView and exitView do not spin while the ankle case is open')
 assert(ANKLE_FRAME_FILL > 0.66 && ANKLE_FRAME_FILL <= 0.88, 'ankle frame is tighter than the general quiz fill')
 assert(ligamentRole('atfl_r') === 'atfl' && ligamentRole('cfl_r') === 'cfl', 'mesh names map to ligament roles')
 assert(ligamentLabel('atfl_r') === 'ATFL' && ligamentLabel('cfl_r') === 'CFL', 'right lateral bands have short labels')
@@ -149,6 +181,120 @@ assert(!ANKLE_FRAME_MESHES.includes('metatarsal1_r'), 'forefoot metatarsals no l
 assert(!ANKLE_FRAME_MESHES.includes('metatarsal5_r'), 'fifth metatarsal is not in the tight ankle frame')
 assert(ANKLE_FRAME_MESHES.includes('talus_r') && ANKLE_FRAME_MESHES.includes('calcaneus_r'), 'hindfoot bones still frame the ankle')
 assert(ANKLE_FRAME_MESHES.includes('atfl_r') && ANKLE_FRAME_MESHES.includes('cfl_r'), 'lateral ligaments are in the frame')
+
+async function loadMesh(rel: string, name: string): Promise<THREE.Mesh> {
+  const root = join(dirname(fileURLToPath(import.meta.url)), '..', 'public', 'models', 'extra')
+  const buf = readFileSync(join(root, rel))
+  const loader = new GLTFLoader()
+  const gltf = await new Promise<THREE.GLTF>((res, rej) => {
+    loader.parse(buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength), '', res, rej)
+  })
+  let mesh: THREE.Mesh | null = null
+  gltf.scene.updateMatrixWorld(true)
+  gltf.scene.traverse((obj) => {
+    if (obj instanceof THREE.Mesh && !mesh) mesh = obj
+  })
+  if (!mesh) throw new Error(`no mesh in ${rel}`)
+  mesh.name = name
+  mesh.updateWorldMatrix(true, false)
+  return mesh
+}
+
+function worldVerts(mesh: THREE.Mesh): THREE.Vector3[] {
+  mesh.updateWorldMatrix(true, false)
+  const pos = mesh.geometry.getAttribute('position')
+  const out: THREE.Vector3[] = []
+  const p = new THREE.Vector3()
+  for (let i = 0; i < pos.count; i++) {
+    p.fromBufferAttribute(pos as THREE.BufferAttribute, i).applyMatrix4(mesh.matrixWorld)
+    out.push(p.clone())
+  }
+  return out
+}
+
+function minSignedDistance(verts: THREE.Vector3[], bone: THREE.Mesh): number {
+  const pos = bone.geometry.getAttribute('position')
+  const index = bone.geometry.getIndex()
+  const a = new THREE.Vector3()
+  const b = new THREE.Vector3()
+  const c = new THREE.Vector3()
+  const tri = new THREE.Triangle()
+  const closest = new THREE.Vector3()
+  const n = new THREE.Vector3()
+  const triCount = index ? index.count / 3 : Math.floor(pos.count / 3)
+  bone.updateWorldMatrix(true, false)
+  const mw = bone.matrixWorld
+  let minSigned = Infinity
+  for (const point of verts) {
+    let best = Infinity
+    let bestPt: THREE.Vector3 | null = null
+    let bestN: THREE.Vector3 | null = null
+    for (let t = 0; t < triCount; t++) {
+      const ia = index ? index.getX(t * 3) : t * 3
+      const ib = index ? index.getX(t * 3 + 1) : t * 3 + 1
+      const ic = index ? index.getX(t * 3 + 2) : t * 3 + 2
+      a.fromBufferAttribute(pos as THREE.BufferAttribute, ia).applyMatrix4(mw)
+      b.fromBufferAttribute(pos as THREE.BufferAttribute, ib).applyMatrix4(mw)
+      c.fromBufferAttribute(pos as THREE.BufferAttribute, ic).applyMatrix4(mw)
+      tri.set(a, b, c)
+      tri.closestPointToPoint(point, closest)
+      const d = closest.distanceTo(point)
+      if (d < best) {
+        best = d
+        bestPt = closest.clone()
+        tri.getNormal(n)
+        bestN = n.clone()
+      }
+    }
+    if (!bestPt || !bestN) continue
+    const signed = bestN.dot(new THREE.Vector3().subVectors(point, bestPt)) >= 0 ? best : -best
+    if (signed < minSigned) minSigned = signed
+  }
+  return minSigned
+}
+
+{
+  const fibula = await loadMesh('fibula_r.glb', 'fibula_r')
+  const talus = await loadMesh('talus_r.glb', 'talus_r')
+  const calcaneus = await loadMesh('calcaneus_r.glb', 'calcaneus_r')
+  const navicular = await loadMesh('navicular_r.glb', 'navicular_r')
+  const atflRaw = await loadMesh('ligaments/atfl_r.glb', 'atfl_r')
+  const cflRaw = await loadMesh('ligaments/cfl_r.glb', 'cfl_r')
+  const deltoidRaw = await loadMesh('ligaments/deltoid_r.glb', 'deltoid_r')
+
+  const atflBeforeF = minSignedDistance(worldVerts(atflRaw), fibula)
+  const atflBeforeT = minSignedDistance(worldVerts(atflRaw), talus)
+  const cflBeforeF = minSignedDistance(worldVerts(cflRaw), fibula)
+  const cflBeforeC = minSignedDistance(worldVerts(cflRaw), calcaneus)
+  const deltoidBeforeN = minSignedDistance(worldVerts(deltoidRaw), navicular)
+
+  assert(atflBeforeF > 3 && atflBeforeF < 5, `raw ATFL–fibula gap is about 4 mm (got ${atflBeforeF.toFixed(2)})`)
+  assert(atflBeforeT > 0.5 && atflBeforeT < 2, `raw ATFL–talus gap is about 1–2 mm (got ${atflBeforeT.toFixed(2)})`)
+  assert(cflBeforeF < 0, `raw CFL already intersects the fibula (signed ${cflBeforeF.toFixed(2)})`)
+  assert(cflBeforeC > 3 && cflBeforeC < 5, `raw CFL–calcaneus gap is about 4 mm (got ${cflBeforeC.toFixed(2)})`)
+
+  const atfl = await loadMesh('ligaments/atfl_r.glb', 'atfl_r')
+  const cfl = await loadMesh('ligaments/cfl_r.glb', 'cfl_r')
+  const deltoid = await loadMesh('ligaments/deltoid_r.glb', 'deltoid_r')
+  applyLigamentDisplayTreatment(atfl)
+  applyLigamentDisplayTreatment(cfl)
+  applyLigamentDisplayTreatment(deltoid)
+
+  const atflF = minSignedDistance(worldVerts(atfl), fibula)
+  const atflT = minSignedDistance(worldVerts(atfl), talus)
+  const cflF = minSignedDistance(worldVerts(cfl), fibula)
+  const cflC = minSignedDistance(worldVerts(cfl), calcaneus)
+  const deltoidN = minSignedDistance(worldVerts(deltoid), navicular)
+
+  assert(atflF > 0 && atflF <= 1, `seated ATFL sits on the fibula without sinking (signed ${atflF.toFixed(2)} mm)`)
+  assert(atflT > 0 && atflT <= 1, `seated ATFL sits on the talus without sinking (signed ${atflT.toFixed(2)} mm)`)
+  assert(atflF < atflBeforeF - 2, 'ATFL moves closer to the fibula than the packed fit')
+  assert(cflF > 0 && cflF <= 1, `seated CFL is out of the fibula and still tight (signed ${cflF.toFixed(2)} mm)`)
+  assert(cflC > 0 && cflC <= 1, `seated CFL sits on the calcaneus without sinking (signed ${cflC.toFixed(2)} mm)`)
+  assert(cflC < cflBeforeC - 2, 'CFL moves closer to the calcaneus than the packed fit')
+  assert(deltoidN > 10, `deltoid–navicular shortfall is not closed with invented mesh (${deltoidN.toFixed(1)} mm)`)
+  assert(Math.abs(deltoid.position.x) < 1e-9 && Math.abs(deltoid.position.y) < 1e-9, 'deltoid mesh was not translated')
+}
 
 if (failed) {
   console.error(`\n${passed} passed, ${failed} failed`)

@@ -2815,6 +2815,11 @@ function installQaHooks(): void {
     showCommonBones: qaShowCommonBones,
     showAnkle: qaShowAnkle,
     report: () => scene.getFramingReport(),
+    ankleReport: () => scene.getAnkleReport(),
+    simulateControlsEnd: () => {
+      scene.simulateControlsEnd()
+      return scene.getAnkleReport()
+    },
   }
   ;(window as unknown as { __anatomyQA: typeof api }).__anatomyQA = api
 }
