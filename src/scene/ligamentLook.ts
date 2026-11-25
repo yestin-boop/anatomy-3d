@@ -1,8 +1,9 @@
 /**
  * Display look for the licensed ankle ligaments.
- * Geometry stays the Z-Anatomy / BodyParts3D meshes; only a small
- * rigid seat, a runtime inflate along vertex normals, and a
- * material/label pass change how they read on screen.
+ * Packed ATFL and CFL are the rigidly seated Open3DModel meshes; the
+ * deltoid is the Z-Anatomy mesh. Only a small rigid seat, a runtime
+ * inflate along vertex normals, and a material/label pass change how
+ * they read on screen. Packed GLBs are not rewritten.
  */
 import * as THREE from 'three'
 
@@ -12,16 +13,23 @@ export const ANKLE_BONE_COLOR = 0xe9dcc8
 /**
  * Display inflate along vertex normals, in millimetres of the packed
  * geometry (the GLBs are in this pack's millimetre Z-up frame).
- * 0.008 scene units was ~3.2 mm per side and shoved the thickened
- * wedges into or off the attachments. 1.1 mm per side still reads as a
- * band once the right ATFL and CFL are seated, without sinking into bone.
+ * The Open3D ATFL is a ~0.2 mm sheet and needs this 1.1 mm band to
+ * stay readable on a phone. The CFL is already a ~2.4 mm cord, so it
+ * is not inflated (see ligamentInflateMm). The deltoid keeps the same
+ * 1.1 mm treatment as before.
  */
 export const LIGAMENT_INFLATE_MM = 1.1
 
+/** Per-mesh inflate. CFL stays at 0 so the cord is not fattened into bone. */
+export function ligamentInflateMm(name: string): number {
+  return ligamentRole(name) === 'cfl' ? 0 : LIGAMENT_INFLATE_MM
+}
+
 /**
- * Small rigid seats for the right lateral ligaments, in the packed
- * millimetre Z-up frame. Applied at runtime to the licensed meshes;
- * the packed GLBs are not rewritten. The deltoid is left where the
+ * Small rigid seats for the packed Open3D ATFL and CFL, in the packed
+ * millimetre Z-up frame. Applied at runtime; the packed GLBs are not
+ * rewritten. Left seats are the sagittal mirrors of the right seats
+ * (x → −x, yz Euler signs flip). The deltoid is left where the
  * Z-Anatomy fit put it, including the documented tibionavicular gap.
  */
 export type LigamentSeat = {
@@ -31,8 +39,10 @@ export type LigamentSeat = {
 }
 
 export const LIGAMENT_SEAT: Readonly<Record<string, LigamentSeat>> = {
-  atfl_r: { position: [-1, 4.5, -2.5] },
-  cfl_r: { position: [-2, -1, -3.5], rotationDeg: [-4, -4, 0] },
+  atfl_r: { position: [-1.6, -1.8, 0.4], rotationDeg: [-2.2, -1.0, -0.3] },
+  atfl_l: { position: [1.6, -1.8, 0.4], rotationDeg: [-2.2, 1.0, 0.3] },
+  cfl_r: { position: [1.1, 1.5, 1.2], rotationDeg: [2.4, 0, 0] },
+  cfl_l: { position: [-1.1, 1.5, 1.2], rotationDeg: [2.4, 0, 0] },
 }
 
 /** Translate and rotate a licensed ligament into its runtime seat. Idempotent. */
@@ -58,7 +68,7 @@ export function seatLigamentMesh(mesh: THREE.Mesh): void {
 export function applyLigamentDisplayTreatment(mesh: THREE.Mesh): void {
   seatLigamentMesh(mesh)
   if (mesh.userData.ligamentInflated) return
-  mesh.geometry = inflateGeometryAlongNormals(mesh.geometry, LIGAMENT_INFLATE_MM)
+  mesh.geometry = inflateGeometryAlongNormals(mesh.geometry, ligamentInflateMm(mesh.name))
   mesh.userData.ligamentInflated = true
 }
 

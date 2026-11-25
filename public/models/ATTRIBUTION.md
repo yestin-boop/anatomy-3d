@@ -330,53 +330,92 @@ against psoas, iliacus, iliocostalis, and the lumbar/cervical vertebrae.
   muscle; face/jaw were not part of the missing-trunk brief).
 - **nqwrc/3d-anatomy** and other CC BY-NC packs were not used.
 
-## Ankle ligaments (2026-11-24)
+## Ankle ligaments (2026-11-25)
 
 The BodyParts3D `isa_BP3D_4.0_obj_99` pack used for the skeleton has bones,
-muscles, and cartilage only. Anterior talofibular (ATFL), calcaneofibular
-(CFL), and deltoid ligaments were added from Z-Anatomy (CC BY-SA 4.0), derived
-from BodyParts3D (CC BY-SA 2.1 Japan). Share-alike applies to these meshes.
+muscles, and cartilage only. Anterior talofibular (ATFL) and calcaneofibular
+(CFL) ligaments were added from the Open3DModel lower-limb mesh (CC BY-SA 4.0).
+The deltoid remains the Z-Anatomy mesh seated on 2026-11-24 (CC BY-SA 4.0,
+derived from BodyParts3D). Share-alike applies to the added Open3D meshes and
+to the remaining Z-Anatomy deltoid.
 
-Source file: the joints GLB published by learnanatomy.org, converted from the
-Z-Anatomy atlas (`anterior-talofibular-ligament`, `calcaneofibular-ligament`,
-`tibionavicular-ligament`, `tibiocalcaneal-ligament`,
-`posterior-tibiotalar-ligament`, each left and right). That file also contains
-other structures, including some CC BY-NC parts (inner ear, kidney). Only the
-six ankle-ligament names above were extracted. Posterior talofibular ligament
-was left out on purpose: the course notes for this inversion sprain name ATFL
-and CFL, and the deltoid is the medial distractor.
+### ATFL and CFL (Open3DModel)
 
-The deltoid mesh is those three medial parts merged. It is not a new surface.
-On this skeleton the tibionavicular part sits nearer the talar neck than the
-navicular tuberosity; the tibiocalcaneal and posterior tibiotalar parts meet
-the tibia, talus, and calcaneus. Together they stay on the medial side.
+Source: the official unmodified lower-limb OBJ, Open3DModel v1.9.0,
+https://github.com/AnatomoOrg/anatomo-models/releases/download/v1.9.0/lower-limb-obj.zip
+(also published on AnatomyTOOL). Only the right anterior talofibular and
+calcaneofibular objects were taken. The left meshes are a sagittal mirror of
+those rigidly seated right meshes about x = 0 in this pack’s millimetre Z-up
+frame (the lower-limb pack is a right limb). Posterior talofibular ligament
+is present in the source but was left out on purpose: the course notes for
+this inversion sprain name ATFL and CFL, and the deltoid is the medial
+distractor.
+
+Credit: Open3D project, Jan Kooloos, RadboudUMC, Eungyeol Lee, LUMC et al.,
+CC BY-SA 4.0.
 
 Fit, into this pack’s millimetre Z-up frame (runtime still only applies
-`rotation.x = −π/2`):
+`rotation.x = −π/2` to stand the skeleton up):
+
+    (x, y, z)_mm = (x_m, −z_m, y_m) × 1000
+    then scale 1 and a rigid rotation + translation
+    Euler XYZ (2.23°, 1.26°, −12.23°), translation (−9.98, −124.88, −87.51) mm
+
+The transform was solved as a scale-locked, malleolus-first rigid
+registration of the Open3D right distal fibula, talus, and calcaneus onto
+the BodyParts3D right foot. After that packed seat, all-vertex signed
+distances on the right ATFL are about 0.3 mm into the fibula and 1.1 mm
+into the talus (the talar *end* is 1.0 mm into the talus; the fibular end
+sits 1.5 mm outside). The right CFL clips the fibula by about 1.9 mm along
+the mid-band, while its closest calcaneal vertex is already 0.8 mm outside;
+the calcaneal *end* stands 3.2 mm off. Band lengths are about 33 mm (ATFL,
+498 vertices) and 26 mm (CFL, 351 vertices). They are the real Open3D
+meshes, not landmark stand-ins or stretched copies.
+
+At runtime the app applies a small rigid display seat to the ATFL and CFL
+(a few millimetres and a 1–2° tilt; the left seat is the sagittal mirror of
+the right) plus a 1.1 mm display inflate on the ATFL only, so those licensed
+ends sit just outside the fibula and talus without rewriting the packed
+GLBs. The ATFL inflate is for phone readability: the licensed sheet is only
+about 0.2 mm thick. The CFL is already a ~2.4 mm cord and is not inflated.
+The CFL calcaneal endpoint is not closed: the mid-band is already ~0.7 mm
+from the calcaneus, and a rigid seat cannot pull the far end in without
+burying that mid-substance. After the display treatment, all-vertex signed
+distances on the right ATFL are about 0.69 mm outside the fibula and 0.63 mm
+outside the talus (ends 2.2 mm / 0.82 mm); on the right CFL, 0.69 mm
+outside the fibula and 0.71 mm outside the calcaneus (ends 2.2 mm / 4.0 mm).
+
+### Deltoid (Z-Anatomy)
+
+Source file: the joints GLB published by learnanatomy.org, converted from the
+Z-Anatomy atlas (`tibionavicular-ligament`, `tibiocalcaneal-ligament`,
+`posterior-tibiotalar-ligament`, each left and right). That file also contains
+other structures, including some CC BY-NC parts (inner ear, kidney). Only
+those three medial names were extracted and merged. It is not a new surface.
+
+Fit, into this pack’s millimetre Z-up frame:
 
     (x, y, z)_mm = (x_m, −z_m, y_m) × 1000
     then scale 0.97622 and translate (−0.21, −110.32, −80.37) mm
 
 The scale and shift were solved on distal tibia, distal fibula, talus,
 calcaneus, and navicular centroids (both sides). Largest landmark error was
-6.4 mm (navicular). After the fit, the right ATFL ends sit about 4 mm from
-the fibula and 2 mm from the talus; the right CFL ends sit about 1 mm from
-the fibula and 4 mm from the calcaneus. They are the real meshes, not
-landmark stand-ins.
+6.4 mm (navicular). On this skeleton the tibionavicular part sits nearer the
+talar neck than the navicular tuberosity; the tibiocalcaneal and posterior
+tibiotalar parts meet the tibia, talus, and calcaneus. Together they stay on
+the medial side.
 
-At runtime the app applies a small rigid seat to the right ATFL and CFL
-(a few millimetres, and a 4° tilt on the CFL) plus a milder 1.1 mm
-display inflate, so those licensed ends sit on the fibula, talus, and
-calcaneus without rewriting the packed GLBs. The deltoid is not moved;
-the tibionavicular shortfall is unchanged.
+The deltoid is not moved at runtime; a 1.1 mm display inflate is applied for
+readability. The tibionavicular shortfall is unchanged (about 12 mm).
 
-| GLB | Structure |
-| --- | --- |
-| `extra/ligaments/atfl_l` / `atfl_r` | anterior talofibular ligament |
-| `extra/ligaments/cfl_l` / `cfl_r` | calcaneofibular ligament |
-| `extra/ligaments/deltoid_l` / `deltoid_r` | deltoid (tibionavicular + tibiocalcaneal + posterior tibiotalar) |
+| GLB | Structure | Source |
+| --- | --- | --- |
+| `extra/ligaments/atfl_l` / `atfl_r` | anterior talofibular ligament | Open3DModel |
+| `extra/ligaments/cfl_l` / `cfl_r` | calcaneofibular ligament | Open3DModel |
+| `extra/ligaments/deltoid_l` / `deltoid_r` | deltoid (tibionavicular + tibiocalcaneal + posterior tibiotalar) | Z-Anatomy |
 
-Licence: CC BY-SA 4.0. Credit: Z-Anatomy by Gauthier Kervyn, CC BY-SA 4.0;
+Licence: ATFL and CFL, CC BY-SA 4.0, Open3D project, Jan Kooloos, RadboudUMC,
+Eungyeol Lee, LUMC et al. Deltoid, CC BY-SA 4.0, Z-Anatomy by Gauthier Kervyn;
 BodyParts3D © The Database Center for Life Science, CC BY-SA 2.1 Japan; this
 derivative CC BY-SA 4.0. The rest of the skeleton remains the BodyParts3D
 CC BY 4.0 pack described above.
