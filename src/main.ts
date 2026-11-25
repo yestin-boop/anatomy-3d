@@ -47,6 +47,7 @@ import {
   sanitizeTypedInput,
   shouldUseNativeSoftKeyboard,
 } from './input/quizKeyboard'
+import { tapCueFor, untypedLetterClass, wrongMarkHtml } from './ui/wordMarks'
 
 /** Bonetype three-level model (+ Combined runs all back-to-back). */
 type Level = 'see' | 'hint' | 'memory'
@@ -633,6 +634,7 @@ function renderTargetWord(bone: QuizEntry | null): void {
   let html = ''
   let letterIdx = 0
   let caretPlaced = false
+  let sawWrong = false
 
   for (const ch of chars) {
     if (/\s/.test(ch)) {
@@ -642,14 +644,11 @@ function renderTargetWord(bone: QuizEntry | null): void {
     if (letterIdx < compactTyped.length) {
       const tch = compactTyped[letterIdx]!
       const wrong = wrongAt >= 0 && letterIdx >= wrongAt
+      if (wrong) sawWrong = true
       html += `<span class="${wrong ? 'tw-wrong' : 'tw-on'}">${escapeHtml(tch)}</span>`
     } else {
-      let cls = 'tw-blank'
-      let inner = '_'
-      if (level === 'see' || (level === 'hint' && letterIdx === 0)) {
-        cls = 'tw-dim'
-        inner = escapeHtml(ch.toLowerCase())
-      }
+      const cls = untypedLetterClass(level, letterIdx)
+      const inner = cls === 'tw-blank' ? '_' : escapeHtml(ch.toLowerCase())
       if (!caretPlaced) {
         html += `<span class="${cls} tw-caret">${inner}</span>`
         caretPlaced = true
@@ -661,21 +660,23 @@ function renderTargetWord(bone: QuizEntry | null): void {
   }
 
   if (compactTyped.length > letterIdx) {
+    sawWrong = true
     html += [...compactTyped.slice(letterIdx)]
       .map((ch) => `<span class="tw-wrong">${escapeHtml(ch)}</span>`)
       .join('')
   }
   if (!caretPlaced) html += `<span class="tw-cursor"></span>`
-  targetWord.innerHTML = html
+  targetWord.innerHTML = (sawWrong ? wrongMarkHtml() : '') + html
 }
 
 function updateGloss(bone: QuizEntry | null): void {
   const level = currentLevel()
   if (!bone || state.finished) {
     glossLine.textContent = ''
-    glossLine.classList.remove('show')
+    glossLine.classList.remove('show', 'is-wrong')
     return
   }
+  glossLine.classList.remove('is-wrong')
   if (state.revealing || level === 'see' || level === 'hint') {
     glossLine.textContent = bone.hint
     glossLine.classList.add('show')
@@ -770,8 +771,10 @@ function focusInput(): void {
   window.setTimeout(() => focusInputNow(), 0)
 }
 
-/** Show "Tap to type" on touch only when the system keyboard is not up. */
+/** Show the tap cue on touch only when the system keyboard is not up. */
 function syncTapHint(): void {
+  const step = state.caseActive && state.casePhase === 'quiz' ? currentCaseStep() : null
+  tapHint.textContent = tapCueFor(step?.kind === 'tap' ? 'tap' : 'type')
   const show =
     touchQuiz &&
     state.playing &&
@@ -2432,6 +2435,7 @@ function renderCaseHud(): void {
     targetWord.innerHTML = `<span class="tw-done">case complete</span>`
     glossLine.textContent = 'Right ankle: likely ATFL, CFL also under tension in inversion. Immediate care is POLICE.'
     glossLine.classList.add('show')
+    glossLine.classList.remove('is-wrong')
     syncSkipButton()
     scheduleFramingSync()
     return
@@ -2448,6 +2452,7 @@ function renderCaseHud(): void {
         ? step.correct
         : step.prompt
   glossLine.classList.add('show')
+  glossLine.classList.remove('is-wrong')
   if (step.kind === 'type') renderCaseTypeWord(step)
   else {
     targetWord.classList.toggle('reveal', state.revealing)
@@ -2456,6 +2461,9 @@ function renderCaseHud(): void {
       : `<span class="tw-on">tap</span>`
   }
   syncSkipButton()
+  /* A tap step is not a typing field. Drop focus so the keyboard does not
+     stay up from the previous type question and hide "Tap the model". */
+  if (step.kind === 'tap') blurQuizInput()
   syncTapHint()
   scheduleFramingSync()
 }
@@ -2475,6 +2483,7 @@ function renderCaseTypeWord(step: AnkleTypeStep): void {
   let html = ''
   let letterIdx = 0
   let caretPlaced = false
+  let sawWrong = false
   for (const ch of chars) {
     if (/\s/.test(ch)) {
       html += `<span class="tw-space">&nbsp;</span>`
@@ -2483,6 +2492,7 @@ function renderCaseTypeWord(step: AnkleTypeStep): void {
     if (letterIdx < compactTyped.length) {
       const tch = compactTyped[letterIdx]!
       const wrong = wrongAt >= 0 && letterIdx >= wrongAt
+      if (wrong) sawWrong = true
       html += `<span class="${wrong ? 'tw-wrong' : 'tw-on'}">${escapeHtml(tch)}</span>`
     } else {
       const inner = '_'
@@ -2494,12 +2504,13 @@ function renderCaseTypeWord(step: AnkleTypeStep): void {
     letterIdx++
   }
   if (compactTyped.length > letterIdx) {
+    sawWrong = true
     html += [...compactTyped.slice(letterIdx)]
       .map((ch) => `<span class="tw-wrong">${escapeHtml(ch)}</span>`)
       .join('')
   }
   if (!caretPlaced) html += `<span class="tw-cursor"></span>`
-  targetWord.innerHTML = html
+  targetWord.innerHTML = (sawWrong ? wrongMarkHtml() : '') + html
 }
 
 function onCaseFieldInput(): void {
@@ -2551,7 +2562,7 @@ function onCaseTap(clientX: number, clientY: number): void {
   if (!graded.ok) {
     playWrongTick()
     glossLine.textContent = graded.message
-    glossLine.classList.add('show')
+    glossLine.classList.add('show', 'is-wrong')
     return
   }
   void onCaseCorrect(graded.message)
@@ -2571,6 +2582,7 @@ async function onCaseCorrect(message?: string): Promise<void> {
   if (step.kind === 'tap' && message) {
     glossLine.textContent = message
     glossLine.classList.add('show')
+    glossLine.classList.remove('is-wrong')
   }
   await wait(1100)
   advanceCaseQuiz()
