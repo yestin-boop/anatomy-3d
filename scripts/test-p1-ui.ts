@@ -63,6 +63,7 @@ const REQUIRED: Record<string, string> = {
   '--space-5': '24px',
   '--space-6': '32px',
   '--type-caption': '13px',
+  '--type-quiet': '11px',
   '--type-label': '14px',
   '--type-body': '17px',
   '--type-title': '22px',
