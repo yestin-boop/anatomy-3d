@@ -158,6 +158,144 @@ async function shot(cdp, name, width, height, mobile, run) {
   console.log(name, JSON.stringify(report))
 }
 
+function assertStudyLayout(report, label, expect, kind) {
+  const fail = (msg) => {
+    throw new Error(`${label}: ${msg}\n${JSON.stringify(report)}`)
+  }
+  if (expect === 'menu') {
+    if (report.sportTitle !== 'Muscle actions') fail(`sport title ${report.sportTitle}`)
+    if (report.hamTitle !== 'Grade II hamstring strain') fail(`ham title ${report.hamTitle}`)
+    if (kind === 'actions' && !report.sportVisible) fail('Muscle actions card is off screen')
+    if (kind === 'hamstring' && !report.hamVisible) fail('hamstring card is off screen')
+    console.log(`ok ${label} menu`)
+    return
+  }
+  if (!report.active) fail('study module is not active')
+  if (report.spinning) fail('study module is auto-spinning')
+  if (Math.abs(report.yaw || 0) > 0.02) fail(`yaw drifted ${report.yaw}`)
+  if (report.contextRight > report.innerWidth + 1 || report.contextLeft < -1) {
+    fail(`context clipped ${report.contextLeft}–${report.contextRight} of ${report.innerWidth}`)
+  }
+  if (report.chromeRight > report.innerWidth + 1 || report.chromeLeft < -1) {
+    fail(`chrome clipped ${report.chromeLeft}–${report.chromeRight}`)
+  }
+  if (!report.contextText) fail('missing quiz context')
+  const highlighted = report.highlighted || []
+  if (highlighted.length === 0) fail('no muscle highlighted')
+  if (expect === 'learn' || expect === 'peak' || expect === 'rest') {
+    if (report.panelHidden) fail('learn copy is hidden')
+    if (!report.title) fail('missing learn title')
+    if (report.panelTop < report.chromeBottom - 2) {
+      fail(`lesson covers the top HUD, panel ${report.panelTop} chrome ${report.chromeBottom}`)
+    }
+    if (report.licenceDisplay === 'none') fail('licence hidden on the learn screen')
+    if (!(report.licenceSize > 0 && report.licenceSize <= 13)) fail(`licence size ${report.licenceSize}`)
+    if (!(report.licenceOpacity <= 0.55)) fail(`licence opacity ${report.licenceOpacity}`)
+    if (!/BodyParts3D/i.test(report.licenceText || '')) fail('BodyParts3D attribution missing')
+    const overlaps =
+      report.licenceTop < report.panelBottom - 4 &&
+      report.licenceBottom > report.panelTop + 4 &&
+      report.licenceRight > report.panelLeft + 8 &&
+      report.licenceLeft < report.panelRight - 8
+    if (overlaps) {
+      fail(
+        `licence covers the lesson, licence ${report.licenceTop}–${report.licenceBottom} panel ${report.panelTop}–${report.panelBottom}`,
+      )
+    }
+  }
+  if (expect === 'type' || expect === 'tap') {
+    if (report.promptRaised) fail(`prompt is a raised panel bg ${report.promptBg} shadow ${report.promptShadow}`)
+    if (!report.prompt) fail('missing prompt')
+    if (report.promptTop < report.chromeBottom - 2) fail(`prompt covers the top HUD ${report.promptTop}`)
+  }
+  if (expect === 'type' && report.keyboard > 0) {
+    const limit = report.innerHeight - report.keyboard + 8
+    if (report.promptBottom > limit) fail(`prompt under the keyboard ${report.promptBottom} > ${limit}`)
+    if (!report.skipHidden && report.skipBottom > limit) fail(`Skip under the keyboard ${report.skipBottom}`)
+  }
+  if (expect === 'peak') {
+    if (!report.pose || Math.abs(report.pose.primary) < 0.15) fail(`bone cue did not pose ${JSON.stringify(report.pose)}`)
+  }
+  if (expect === 'rest') {
+    if (report.pose && (Math.abs(report.pose.primary) > 0.02 || Math.abs(report.pose.knee) > 0.02)) {
+      fail(`rest pose is not neutral ${JSON.stringify(report.pose)}`)
+    }
+  }
+  if (expect === 'tap' || expect === 'type' || expect === 'peak') {
+    const picks = report.picks || {}
+    const hits = Object.values(picks).filter((hit) => hit && hit !== 'bone' && hit !== 'other' && hit !== 'other-side')
+    if (hits.length === 0) fail(`highlight center was not the lit muscle ${JSON.stringify(picks)}`)
+  }
+  console.log(`ok ${label} ${report.contextText || ''} ${report.title || report.label || ''}`)
+}
+
+async function assertStudyScene(cdp) {
+  let touchPage = null
+  const show = async (kind, mode, keyboard, width, height, mobile) => {
+    await setViewport(cdp, width, height, mobile)
+    await delay(280)
+    if (touchPage !== mobile) {
+      await openApp(cdp, mobile)
+      touchPage = mobile
+    }
+    return cdp.evaluate(
+      `window.__anatomyQA.showStudy(${JSON.stringify(kind)}, ${JSON.stringify(mode)}, ${keyboard})`,
+      true,
+    )
+  }
+  const layouts = [
+    ['iphone-menu-sport', 'actions', 'menu', 0, 390, 844, true],
+    ['iphone-menu-ham', 'hamstring', 'menu', 0, 390, 844, true],
+    ['iphone-actions-learn', 'actions', 'learn', 0, 390, 844, true],
+    ['iphone-actions-type', 'actions', 'type', 0, 390, 844, true],
+    ['iphone-actions-type-kb', 'actions', 'type', 300, 390, 844, true],
+    ['iphone-actions-tap', 'actions', 'tap', 0, 390, 844, true],
+    ['iphone-actions-rest', 'actions', 'rest', 0, 390, 844, true],
+    ['iphone-actions-peak', 'actions', 'peak', 0, 390, 844, true],
+    ['iphone-ham-learn', 'hamstring', 'learn', 0, 390, 844, true],
+    ['iphone-ham-tap', 'hamstring', 'tap', 0, 390, 844, true],
+    ['iphone-ham-type', 'hamstring', 'type', 0, 390, 844, true],
+    ['iphone-ham-rest', 'hamstring', 'rest', 0, 390, 844, true],
+    ['iphone-ham-peak', 'hamstring', 'peak', 0, 390, 844, true],
+    ['laptop-actions-learn', 'actions', 'learn', 0, 1024, 768, false],
+    ['laptop-ham-type', 'hamstring', 'type', 0, 1024, 768, false],
+    ['desk-actions-learn', 'actions', 'learn', 0, 1440, 900, false],
+    ['desk-actions-type', 'actions', 'type', 0, 1440, 900, false],
+    ['wide-actions-tap', 'actions', 'tap', 0, 1680, 1050, false],
+    ['wide-ham-learn', 'hamstring', 'learn', 0, 1680, 1050, false],
+    ['large-actions-type', 'actions', 'type', 0, 1920, 1080, false],
+    ['large-ham-learn', 'hamstring', 'learn', 0, 1920, 1080, false],
+    ['large-ham-tap', 'hamstring', 'tap', 0, 1920, 1080, false],
+  ]
+  const saved = {}
+  for (const [label, kind, mode, keyboard, width, height, mobile] of layouts) {
+    const report = await show(kind, mode, keyboard, width, height, mobile)
+    report.keyboard = keyboard
+    assertStudyLayout(report, label, mode === 'menu' ? 'menu' : mode, kind)
+    saved[label] = report
+    const png = await cdp.send('Page.captureScreenshot', { format: 'png' })
+    await writeFile(`${OUT}/sport-${label}.png`, Buffer.from(png.data, 'base64'))
+  }
+  const armRest = saved['iphone-actions-rest']
+  const armPeak = saved['iphone-actions-peak']
+  const restRadius = armRest.points?.radius_r
+  const peakRadius = armPeak.points?.radius_r
+  if (!restRadius || !peakRadius) throw new Error('missing radius point for the elbow cue')
+  const armMove = Math.hypot(peakRadius.x - restRadius.x, peakRadius.y - restRadius.y, peakRadius.z - restRadius.z)
+  if (armMove < 0.04) throw new Error(`elbow cue did not move the radius, delta ${armMove}`)
+  const swingRest = saved['iphone-ham-rest']
+  const swingPeak = saved['iphone-ham-peak']
+  const restTibia = swingRest.points?.tibia_r
+  const peakTibia = swingPeak.points?.tibia_r
+  if (!restTibia || !peakTibia) throw new Error('missing tibia point for late swing')
+  const swingMove = Math.hypot(peakTibia.x - restTibia.x, peakTibia.y - restTibia.y, peakTibia.z - restTibia.z)
+  if (swingMove < 0.03) throw new Error(`late swing did not move the tibia, delta ${swingMove}`)
+  if (!(peakTibia.z > restTibia.z + 0.01)) {
+    throw new Error(`late swing should carry the leg forward, z ${restTibia.z} -> ${peakTibia.z}`)
+  }
+  console.log(`ok motion radius ${armMove.toFixed(3)} tibia ${swingMove.toFixed(3)} z ${restTibia.z} -> ${peakTibia.z}`)
+}
+
 async function main() {
   await mkdir(OUT, { recursive: true })
   const chrome = launchChrome()
@@ -200,6 +338,11 @@ async function main() {
 
     if (process.env.QA_ASSERT_ANKLE === '1') {
       await assertAnkleScene(cdp)
+      return
+    }
+
+    if (process.env.QA_ASSERT_SPORT === '1') {
+      await assertStudyScene(cdp)
       return
     }
 
