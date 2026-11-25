@@ -203,6 +203,11 @@ async function main() {
       return
     }
 
+    if (process.env.QA_ASSERT_TYPEIT === '1') {
+      await assertTypeItReopen(cdp)
+      return
+    }
+
     if (process.env.QA_ASSERT_VIEWS === '1') {
       const viewShow = (subject, id) =>
         cdp.evaluate(
@@ -655,6 +660,201 @@ async function assertCatalogViews(cdp, quiz, viewShow) {
   if (failures.length) {
     throw new Error(`${failures.length} catalog view failures\n${failures.join('\n')}`)
   }
+}
+
+function failType(label, msg, report) {
+  throw new Error(`${label}: ${msg}\n${JSON.stringify(report)}`)
+}
+
+function assertLifted(report, label, keyboard) {
+  if (report.hudHidden) failType(label, 'typing bar is hidden', report)
+  if (report.skipHidden) failType(label, 'Skip is hidden', report)
+  if (!report.wordText || report.wordHeight < 20) failType(label, 'big answer word is missing', report)
+  const limit = report.innerHeight - keyboard + 8
+  if (report.wordBottom > limit) {
+    failType(label, `word sits under the keyboard, bottom ${report.wordBottom} limit ${limit}`, report)
+  }
+  if (report.skipBottom > limit) {
+    failType(label, `Skip sits under the keyboard, bottom ${report.skipBottom} limit ${limit}`, report)
+  }
+  if (report.promptBottom > limit) {
+    failType(label, `prompt block sits under the keyboard, bottom ${report.promptBottom} limit ${limit}`, report)
+  }
+  if (report.wordTop < 40) failType(label, `word was pushed off the top (${report.wordTop})`, report)
+}
+
+function assertBigWord(report, label) {
+  const border = Number.parseFloat(report.inputBorder)
+  if (Number.isFinite(border) && border > 0) failType(label, `answer field has a border (${report.inputBorder})`, report)
+  const fill = String(report.inputFill || report.inputColor || '')
+  if (!/transparent|rgba?\(0,\s*0,\s*0,\s*0\)/i.test(fill)) {
+    failType(label, `answer field is drawing its own text (${fill})`, report)
+  }
+  if (!(report.wordFont >= 24)) failType(label, `answer word is not the big display (${report.wordFont}px)`, report)
+}
+
+async function assertTypeItReopen(cdp) {
+  const rows = []
+  const shotOf = async (name) => {
+    const png = await cdp.send('Page.captureScreenshot', { format: 'png' })
+    const file = `${OUT}/typeit-${name}.png`
+    await writeFile(file, Buffer.from(png.data, 'base64'))
+    return file
+  }
+
+  async function show(level, keyboard, width, height, mobile) {
+    await setViewport(cdp, width, height, mobile)
+    await delay(250)
+    await openApp(cdp, mobile)
+    await cdp.evaluate(
+      `window.__anatomyQA.showQuiz('bones', 'frontal', ${keyboard}, ${JSON.stringify(level)})`,
+      true,
+    )
+    await delay(200)
+    return cdp.evaluate(`window.__anatomyQA.typeBar()`)
+  }
+
+  // iPhone Learn round: see-it shows the prompt, the big word, TAP TO TYPE, and Skip.
+  const phoneOpen = await show('see', 300, 390, 844, true)
+  assertLifted(phoneOpen, 'iphone first open', 300)
+  assertBigWord(phoneOpen, 'iphone first open')
+  if (!phoneOpen.tapVisible || !/tap to type/i.test(phoneOpen.tapText)) {
+    failType('iphone first open', `expected TAP TO TYPE, got "${phoneOpen.tapText}" visible ${phoneOpen.tapVisible}`, phoneOpen)
+  }
+  if (!/os frontale/i.test(phoneOpen.prompt)) {
+    failType('iphone first open', `prompt missing, got "${phoneOpen.prompt}"`, phoneOpen)
+  }
+  if (!/type it/i.test(phoneOpen.label)) failType('iphone first open', `label missing, got "${phoneOpen.label}"`, phoneOpen)
+  rows.push({ surface: 'iphone first open', ...phoneOpen })
+  await shotOf('iphone-first-open')
+
+  const phoneDown = await show('see', 0, 390, 844, true)
+  if (phoneDown.hudHidden) failType('iphone dismiss', 'typing bar hidden after dismiss', phoneDown)
+  if (!(phoneDown.skipBottom > phoneOpen.skipBottom + 80)) {
+    failType('iphone dismiss', `layout did not return, skip ${phoneDown.skipBottom} vs lifted ${phoneOpen.skipBottom}`, phoneDown)
+  }
+  if (phoneDown.inset > 40) failType('iphone dismiss', `inset still ${phoneDown.inset}`, phoneDown)
+  rows.push({ surface: 'iphone dismiss', ...phoneDown })
+  await shotOf('iphone-dismiss')
+
+  const phoneReopen = await show('see', 300, 390, 844, true)
+  assertLifted(phoneReopen, 'iphone second open', 300)
+  assertBigWord(phoneReopen, 'iphone second open')
+  if (Math.abs(phoneReopen.skipBottom - phoneOpen.skipBottom) > 12) {
+    failType('iphone second open', `lift changed, skip ${phoneReopen.skipBottom} vs first ${phoneOpen.skipBottom}`, phoneReopen)
+  }
+  rows.push({ surface: 'iphone second open', ...phoneReopen })
+  await shotOf('iphone-second-open')
+
+  // The real bug geometry: first open shrinks the visual viewport, dismiss
+  // restores it, the second open reports no change at all. Forced pins never
+  // hit that path — drive the resolver with the numbers Safari reports.
+  await setViewport(cdp, 390, 844, true)
+  await delay(200)
+  await openApp(cdp, true)
+  await cdp.evaluate(`window.__anatomyQA.showQuiz('bones', 'frontal', 0, 'see')`, true)
+  const height = (await cdp.evaluate(`window.innerHeight`)) || 844
+  const keyboard = 300
+  const probe = (visualHeight, focused, arm, offsetTop = 0) =>
+    cdp.evaluate(
+      `window.__anatomyQA.setKeyboardViewport(${JSON.stringify({
+        innerHeight: height,
+        visualHeight,
+        offsetTop,
+        scrollY: 0,
+        focused,
+        arm,
+      })})`,
+    )
+  const measuredOpen = await probe(height - keyboard, true, true)
+  assertLifted(measuredOpen, 'iphone measured first open', keyboard)
+  assertBigWord(measuredOpen, 'iphone measured first open')
+  rows.push({ surface: 'iphone measured first open', ...measuredOpen })
+  await shotOf('iphone-measured-open')
+
+  const measuredDown = await probe(height, false, false)
+  if (measuredDown.inset > 40) failType('iphone measured dismiss', `inset still ${measuredDown.inset}`, measuredDown)
+  if (!(measuredDown.skipBottom > measuredOpen.skipBottom + 80)) {
+    failType('iphone measured dismiss', `layout did not return, skip ${measuredDown.skipBottom}`, measuredDown)
+  }
+  rows.push({ surface: 'iphone measured dismiss', ...measuredDown })
+  await shotOf('iphone-measured-dismiss')
+
+  const measuredBlind = await probe(height, true, true)
+  assertLifted(measuredBlind, 'iphone blind second open', keyboard)
+  assertBigWord(measuredBlind, 'iphone blind second open')
+  if (Math.abs(measuredBlind.inset - measuredOpen.inset) > 2) {
+    failType('iphone blind second open', `inset ${measuredBlind.inset} vs first ${measuredOpen.inset}`, measuredBlind)
+  }
+  rows.push({ surface: 'iphone blind second open', ...measuredBlind })
+  await shotOf('iphone-blind-reopen')
+
+  const measuredPan = await probe(height - keyboard, true, true, keyboard)
+  assertLifted(measuredPan, 'iphone panned second open', keyboard)
+  if (measuredPan.inset < keyboard - 2) {
+    failType('iphone panned second open', `offsetTop canceled the lift, inset ${measuredPan.inset}`, measuredPan)
+  }
+  rows.push({ surface: 'iphone panned second open', ...measuredPan })
+  await shotOf('iphone-panned-reopen')
+
+  // Regressions: start menu, a lesson card, a tap step (not TAP TO TYPE).
+  await openApp(cdp, true)
+  const menu = await cdp.evaluate(`window.__anatomyQA.showAnkle('menu', 0)`, true)
+  if (!menu.visible) failType('iphone menu', 'start menu rehab card is missing', menu)
+  if (menu.title !== 'Lateral ankle sprain') failType('iphone menu', `title ${menu.title}`, menu)
+  rows.push({ surface: 'iphone menu', title: menu.title })
+  await shotOf('iphone-menu')
+
+  const lesson = await cdp.evaluate(`window.__anatomyQA.showAnkle('learn', 0)`, true)
+  if (lesson.panelHidden) failType('iphone lesson', 'lesson card is hidden', lesson)
+  if (!lesson.title) failType('iphone lesson', 'lesson card has no title', lesson)
+  rows.push({ surface: 'iphone lesson', title: lesson.title })
+  await shotOf('iphone-lesson')
+
+  const tap = await cdp.evaluate(`window.__anatomyQA.showAnkle('tap', 0)`, true)
+  const tapBar = await cdp.evaluate(`window.__anatomyQA.typeBar()`)
+  if (tapBar.hudHidden) failType('iphone tap step', 'quiz step is hidden', tapBar)
+  if (!tapBar.tapVisible || !/tap the model/i.test(tapBar.tapText)) {
+    failType('iphone tap step', `expected TAP THE MODEL, got "${tapBar.tapText}" visible ${tapBar.tapVisible}`, tapBar)
+  }
+  if (/tap to type/i.test(tapBar.tapText)) failType('iphone tap step', 'tap step still says TAP TO TYPE', tapBar)
+  rows.push({ surface: 'iphone tap step', tapText: tapBar.tapText, prompt: tap.prompt })
+  await shotOf('iphone-tap')
+
+  // Desktop typing stays put across a blur and a second focus.
+  await setViewport(cdp, 1440, 900, false)
+  await delay(250)
+  await openApp(cdp, false)
+  await cdp.evaluate(`window.__anatomyQA.showQuiz('bones', 'frontal', 0, 'see')`, true)
+  const deskOpen = await cdp.evaluate(`window.__anatomyQA.typeBar()`)
+  assertBigWord(deskOpen, 'desktop open')
+  if (deskOpen.hudHidden || deskOpen.skipHidden) failType('desktop open', 'typing bar missing', deskOpen)
+  if (deskOpen.tapVisible) failType('desktop open', 'desktop is showing TAP TO TYPE', deskOpen)
+  if (deskOpen.inset > 40) failType('desktop open', `desktop lifted by ${deskOpen.inset}`, deskOpen)
+  rows.push({ surface: 'desktop open', ...deskOpen })
+  await shotOf('desktop-open')
+
+  await cdp.evaluate(`(() => { const el = document.querySelector('#answer'); el.blur(); el.focus(); })()`)
+  await delay(800)
+  const deskReopen = await cdp.evaluate(`window.__anatomyQA.typeBar()`)
+  assertBigWord(deskReopen, 'desktop reopen')
+  if (deskReopen.hudHidden || deskReopen.skipHidden) failType('desktop reopen', 'typing bar missing after refocus', deskReopen)
+  if (deskReopen.inset > 40) failType('desktop reopen', `desktop lifted by ${deskReopen.inset}`, deskReopen)
+  if (Math.abs(deskReopen.skipBottom - deskOpen.skipBottom) > 12) {
+    failType('desktop reopen', `bar moved, skip ${deskReopen.skipBottom} vs ${deskOpen.skipBottom}`, deskReopen)
+  }
+  rows.push({ surface: 'desktop reopen', ...deskReopen })
+  await shotOf('desktop-reopen')
+
+  console.log('\ntype-it reopen')
+  console.log(['surface', 'inset', 'wordBottom', 'skipBottom', 'prompt', 'tap'].join('\t'))
+  for (const row of rows) {
+    console.log(
+      [row.surface, row.inset ?? '', row.wordBottom ?? '', row.skipBottom ?? '', row.prompt || row.title || '', row.tapText || '']
+        .join('\t'),
+    )
+  }
+  console.log('ok type-it reopen cycle')
 }
 
 main().catch((err) => {
