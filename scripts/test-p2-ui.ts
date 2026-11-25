@@ -72,9 +72,25 @@ assert(chrome.includes('id="menu-restart"') && chrome.includes('id="menu-change"
 assert(block('.quiz-progress').includes('height: 4px'), 'the progress bar is thin')
 assert(block('.quiz-progress-fill').includes('background: var(--accent)'), 'progress uses the accent')
 
-assert(hud.includes('class="prompt-block panel"'), 'the prompt sits on a panel')
-assert(block('.panel').includes('background: var(--surface-raised)'), 'panels use the raised surface')
-assert(block('.panel').includes('backdrop-filter: blur(20px) saturate(140%)'), 'panels are raised glass')
+assert(hud.includes('class="prompt-block"'), 'the type-it prompt block remains')
+assert(!hud.includes('prompt-block panel'), 'the type-it prompt is not wrapped in a card')
+assert(block('.prompt-block').includes('background: transparent'), 'the type-it prompt has no card fill')
+assert(block('.target-word').includes('text-shadow: var(--text-halo)'), 'the answer word stays readable without a card')
+assert(block('.type-label').includes('text-shadow: var(--text-halo)'), 'the prompt label stays readable without a card')
+assert(block('.prompt-block').includes('box-shadow: none'), 'the type-it prompt has no card shadow')
+assert(!block('.prompt-block').includes('border-radius'), 'the type-it prompt is not a rounded card')
+assert(block('.panel').includes('background: var(--surface-raised)'), 'menu sheets still use the raised surface')
+assert(block('.panel').includes('backdrop-filter: blur(20px) saturate(140%)'), 'menu sheets stay raised glass')
+assert(
+  css.includes('top: calc(max(var(--space-3), env(safe-area-inset-top)) + var(--target-min) + var(--space-2) + var(--space-3))'),
+  'desktop lesson card starts below the quiz bar',
+)
+assert(!cssBare.includes('top: max(var(--space-4), env(safe-area-inset-top))'), 'lesson card no longer sits on the quiz bar')
+assert(css.includes('.chrome--top.is-view .chrome-context'), 'study view hides the context bar')
+assert(css.includes('--study-panel'), 'the study list width is shared with the filter band')
+assert(css.includes('var(--chrome-menu-clearance, 136px)'), 'study chips start after the menu button')
+assert(css.includes('.footer-cluster'), 'licence and helper words share one stack')
+assert(css.includes('font-size: var(--type-quiet)'), 'licence and helper words use the quiet size')
 assert(hud.includes('Skip · show answer'), 'Skip says show answer')
 assert(!hud.includes("don't know"), 'the old Skip cue is gone')
 assert(hud.includes('id="check-btn"'), 'desktop has a Check button')

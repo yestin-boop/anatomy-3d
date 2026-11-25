@@ -356,7 +356,7 @@ app.innerHTML = `
 
   <!-- In-play typing HUD -->
   <div class="hud" id="play-hud" hidden>
-    <div class="prompt-block panel" id="prompt-block">
+    <div class="prompt-block" id="prompt-block">
       <div class="type-label" id="type-label">TYPE IT · SPINE</div>
       <div class="type-field" id="type-field">
         <div class="target-word" id="target-word"></div>
@@ -383,16 +383,18 @@ app.innerHTML = `
     </div>
   </div>
 
-  <div class="footer-bar">
-    <span class="footer-tips" id="footer-tips">SKIP / TAB REVEAL · ESC MENU · DRAG ROTATE · SCROLL ZOOM</span>
-    <span class="footer-meta" id="footer-meta">MODELS: PROCEDURAL · BODY PARTS 3D</span>
-  </div>
-  <div class="footer-attr">
-    <span>BodyParts3D, © The Database Center for Life Science / CC BY 4.0</span>
-    <span class="footer-attr-sep"> · </span>
-    <span>Some trunk muscles from Z-Anatomy / Écorché, CC BY-SA 4.0</span>
-    <span class="footer-attr-sep"> · </span>
-    <span>Ankle ligaments from Z-Anatomy, CC BY-SA 4.0</span>
+  <div class="footer-cluster">
+    <div class="footer-bar">
+      <span class="footer-tips" id="footer-tips">SKIP / TAB REVEAL · ESC MENU · DRAG ROTATE · SCROLL ZOOM</span>
+      <span class="footer-meta" id="footer-meta">MODELS: PROCEDURAL · BODY PARTS 3D</span>
+    </div>
+    <div class="footer-attr">
+      <span>BodyParts3D, © The Database Center for Life Science / CC BY 4.0</span>
+      <span class="footer-attr-sep"> · </span>
+      <span>Some trunk muscles from Z-Anatomy / Écorché, CC BY-SA 4.0</span>
+      <span class="footer-attr-sep"> · </span>
+      <span>Ankle ligaments from Z-Anatomy, CC BY-SA 4.0</span>
+    </div>
   </div>
 `
 
@@ -2380,6 +2382,15 @@ function syncHudChrome(): void {
   const land = touchQuiz && window.innerWidth > window.innerHeight && window.innerHeight <= 520
   document.documentElement.classList.toggle('phone-landscape', land)
   document.documentElement.classList.toggle('keyboard-open', currentKeyboardInset() > 40)
+  if (!chromeTop.hidden) {
+    const menu = btnMenuTop.getBoundingClientRect()
+    if (menu.width > 8) {
+      document.documentElement.style.setProperty(
+        '--chrome-menu-clearance',
+        `${Math.round(menu.right + 12)}px`,
+      )
+    }
+  }
 }
 
 function armKeyboardLift(): void {
@@ -2557,6 +2568,7 @@ function measureOcclusionInsets(): FramingInsets {
 }
 
 function syncFramingInsetsNow(): void {
+  syncHudChrome()
   const insets = framingActive() ? measureOcclusionInsets() : ZERO_FRAME_INSETS
   const enabled = framingActive()
   if (appliedFraming === enabled && !insetsChanged(appliedInsets, insets, 6)) return
@@ -3307,6 +3319,22 @@ function qaShowCommonBones(): { count: number; total: number; label: string } {
   }
 }
 
+async function qaShowStudy(): Promise<Record<string, unknown>> {
+  pinForcedKeyboard(0)
+  if (state.caseActive || state.playing) showMenu()
+  if (!state.viewing) await startView()
+  applyViewSelection(null)
+  viewPanel.classList.remove('is-expanded', 'has-selection')
+  syncFramingInsetsNow()
+  await scene.whenPoseSettled()
+  const contextStyle = getComputedStyle(document.querySelector('#chrome-context')!)
+  return {
+    viewing: state.viewing,
+    context: (quizContext.textContent ?? '').trim(),
+    contextDisplay: contextStyle.display,
+  }
+}
+
 async function qaShowAnkle(
   mode: 'menu' | 'learn' | 'motion' | 'injury' | 'ligaments' | 'type' | 'tap' | 'palpation',
   keyboardPx = 0,
@@ -3376,6 +3404,7 @@ function qaTypeBar(): Record<string, unknown> {
   const wordStyle = getComputedStyle(targetWord)
   const hintStyle = getComputedStyle(tapHint)
   const checkStyle = getComputedStyle(checkBtn)
+  const promptStyle = getComputedStyle(promptBlock)
   const menuLook = document.querySelector('#menu-overlay [data-look]')
   const quizLook = document.querySelector('#quiz-look')
   const lookStyle = quizLook ? getComputedStyle(quizLook) : null
@@ -3406,6 +3435,8 @@ function qaTypeBar(): Record<string, unknown> {
     progressWidth: quizProgressFill.style.width,
     round: quizRound.hidden ? '' : (quizRound.textContent ?? '').trim(),
     promptPanel: promptBlock.classList.contains('panel'),
+    promptBg: promptStyle.backgroundColor,
+    promptShadow: promptStyle.boxShadow,
     menuLook: Boolean(menuLook),
     lookVisible: Boolean(lookStyle && lookStyle.display !== 'none' && !quizLook?.hasAttribute('hidden')),
     wordText: (targetWord.textContent ?? '').replace(/\s+/g, ' ').trim(),

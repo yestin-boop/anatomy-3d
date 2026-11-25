@@ -2148,6 +2148,7 @@ export class ThoraxScene {
     labels: { atfl: boolean; cfl: boolean }
     inflate: number
     spinning: boolean
+    screen: Record<string, { x: number; y: number } | null>
   } {
     const round = (v: THREE.Vector3) => ({
       x: +v.x.toFixed(4),
@@ -2168,19 +2169,23 @@ export class ThoraxScene {
       points[name] = centerOf(name)
     }
     const canvas = this.mainCanvas.getBoundingClientRect()
-    for (const name of ['atfl_r', 'cfl_r', 'fibula_r']) {
+    const project = (name: string) => {
       const mesh = this.meshByName.get(name)
-      if (!mesh || canvas.width <= 0) {
-        picks[name] = null
-        continue
-      }
+      if (!mesh || canvas.width <= 0) return null
       mesh.updateWorldMatrix(true, false)
       const center = new THREE.Box3().setFromObject(mesh).getCenter(new THREE.Vector3())
       center.project(this.camera)
-      const sx = canvas.left + (center.x * 0.5 + 0.5) * canvas.width
-      const sy = canvas.top + (-center.y * 0.5 + 0.5) * canvas.height
-      picks[name] = this.pickAnkle(sx, sy)?.hit ?? null
+      return {
+        x: Math.round(canvas.left + (center.x * 0.5 + 0.5) * canvas.width),
+        y: Math.round(canvas.top + (-center.y * 0.5 + 0.5) * canvas.height),
+      }
     }
+    for (const name of ['atfl_r', 'cfl_r', 'fibula_r']) {
+      const at = project(name)
+      picks[name] = at ? this.pickAnkle(at.x, at.y)?.hit ?? null : null
+    }
+    const screen: Record<string, { x: number; y: number } | null> = {}
+    for (const name of ['talus_r', 'atfl_r', 'calcaneus_r']) screen[name] = project(name)
     return {
       active: this.ankleCase,
       ligaments: ANKLE_LIGAMENT_MESHES.every((name) => this.meshByName.has(name)),
@@ -2197,6 +2202,7 @@ export class ThoraxScene {
       labels: this.ankleLabelState(),
       inflate: LIGAMENT_INFLATE_MM,
       spinning: this.spinning,
+      screen,
     }
   }
 
