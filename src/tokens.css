@@ -1,0 +1,90 @@
+/* Role-named tokens. Raw colours live only in this file. */
+
+:root {
+  color-scheme: dark;
+
+  --surface-base: #0B0D12;
+  --surface-raised: rgba(21, 25, 34, 0.78);
+  --surface-overlay: #151922;
+  --border-subtle: rgba(255, 255, 255, 0.10);
+
+  --text-primary: #F2F4F8;
+  --text-secondary: #B4BAC6;
+  --text-tertiary: #8B93A1;
+
+  --accent: #7CC4FF;
+  --text-on-accent: #0B0D12;
+  --correct: #4ADE9B;
+  --wrong: #FF8A7A;
+  --highlight: #FFD166;
+
+  /* View pins. Not the app accent. */
+  --pin-origin: #F0C56E;
+  --pin-origin-ink: #2A1C00;
+  --pin-insertion: #6ED0C6;
+  --pin-insertion-ink: #06221F;
+  --pin-atfl: #E0B03A;
+  --pin-atfl-ink: #2A1A00;
+  --pin-cfl: #C45A28;
+  --pin-cfl-ink: #1F0A00;
+
+  --radius-sm: 10px;
+  --radius-md: 14px;
+  --radius-pill: 999px;
+
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 24px;
+  --space-6: 32px;
+
+  --type-caption: 13px;
+  --type-label: 14px;
+  --type-body: 17px;
+  --type-title: 22px;
+  --type-prompt-min: 28px;
+  --type-prompt-max: 34px;
+  --type-prompt-landscape: 24px;
+  --type-input: 16px;
+
+  --target-min: 44px;
+
+  --motion-fast: 150ms;
+  --motion-base: 250ms;
+  --ease-out: cubic-bezier(0.2, 0.8, 0.2, 1);
+
+  --font: "SF Pro Display", "Segoe UI", system-ui, -apple-system, sans-serif;
+
+  /* Supporting surfaces and effects. Still role-named; no raw colour in style.css. */
+  --surface-hover: rgba(255, 255, 255, 0.08);
+  --surface-inset: rgba(11, 13, 18, 0.55);
+  --surface-list-head: rgba(21, 25, 34, 0.92);
+  --scrim: rgba(11, 13, 18, 0.55);
+  --scrim-strong: rgba(11, 13, 18, 0.45);
+  --border-strong: rgba(255, 255, 255, 0.22);
+  --border-faint: rgba(255, 255, 255, 0.08);
+  --border-pin: rgba(255, 255, 255, 0.20);
+  --handle: rgba(255, 255, 255, 0.28);
+  --text-on-accent-border: rgba(11, 13, 18, 0.28);
+  --shadow-panel: 0 24px 80px rgba(0, 0, 0, 0.45);
+  --shadow-case: 0 18px 50px rgba(0, 0, 0, 0.42);
+  --shadow-pin: 0 4px 14px rgba(0, 0, 0, 0.35);
+  --shadow-pin-tight: 0 2px 8px rgba(0, 0, 0, 0.45);
+  --shadow-primary: 0 8px 28px rgba(124, 196, 255, 0.28);
+  --glow-letter: 0 0 22px rgba(124, 196, 255, 0.35);
+  --glow-reveal: 0 0 28px rgba(124, 196, 255, 0.45);
+  --glow-caret: 0 0 10px rgba(242, 244, 248, 0.55);
+  --focus-ring: 0 0 0 2px rgba(124, 196, 255, 0.45);
+  --menu-wash: linear-gradient(90deg, rgba(11, 13, 18, 0.55) 0%, rgba(11, 13, 18, 0.15) 48%, transparent 70%);
+  --side-glow: drop-shadow(0 0 18px rgba(124, 196, 255, 0.15));
+
+  /* Thin compat layer for the previous names. Do not use these in new rules. */
+  --bg: var(--surface-base);
+  --hud: var(--text-primary);
+  --hud-dim: var(--text-secondary);
+  --glass: var(--surface-raised);
+  --glass-border: var(--border-subtle);
+  --card: var(--surface-overlay);
+  --card-on: var(--surface-overlay);
+}
