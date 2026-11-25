@@ -239,7 +239,7 @@ async function assertStudyScene(cdp) {
       touchPage = mobile
     }
     return cdp.evaluate(
-      `window.__anatomyQA.showStudy(${JSON.stringify(kind)}, ${JSON.stringify(mode)}, ${keyboard})`,
+      `window.__anatomyQA.showStudyCase(${JSON.stringify(kind)}, ${JSON.stringify(mode)}, ${keyboard})`,
       true,
     )
   }

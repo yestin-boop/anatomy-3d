@@ -3524,7 +3524,7 @@ function qaLayout(): Record<string, unknown> {
   }
 }
 
-async function qaShowStudy(
+async function qaShowStudyCase(
   kind: 'actions' | 'hamstring',
   mode: 'menu' | 'learn' | 'type' | 'tap' | 'peak' | 'rest',
   keyboardPx = 0,
@@ -3588,6 +3588,7 @@ function installQaHooks(): void {
     showCommonBones: qaShowCommonBones,
     showAnkle: qaShowAnkle,
     showStudy: qaShowStudy,
+    showStudyCase: qaShowStudyCase,
     typeBar: qaTypeBar,
     setKeyboardViewport: qaSetKeyboardViewport,
     report: () => scene.getFramingReport(),
