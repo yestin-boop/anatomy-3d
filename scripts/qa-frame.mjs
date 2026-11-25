@@ -213,6 +213,11 @@ async function main() {
       return
     }
 
+    if (process.env.QA_ASSERT_LAYOUT === '1') {
+      await assertDesktopLayout(cdp)
+      return
+    }
+
     if (process.env.QA_ASSERT_VIEWS === '1') {
       const viewShow = (subject, id) =>
         cdp.evaluate(
@@ -865,7 +870,9 @@ async function assertP2(cdp) {
   if (rehab.lookDisplay === 'none' || rehab.looks.join(',') !== 'xray,solid') {
     failP2('iphone quiz', 'Look is missing from the top bar', rehab)
   }
-  if (!rehab.bar.promptPanel) failP2('iphone quiz', 'prompt is not on a panel', rehab)
+  if (rehab.bar.promptPanel || !transparentBg(rehab.bar.promptBg)) {
+    failP2('iphone quiz', 'type-it is still wrapped in a card', rehab)
+  }
   if (rehab.bar.skipText !== 'Skip · show answer') failP2('iphone quiz', `Skip is "${rehab.bar.skipText}"`, rehab)
   if (!rehab.bar.checkHidden) failP2('iphone quiz', 'iPhone is showing a Check button', rehab)
   console.log(`ok quiz bar "${rehab.context}" ${rehab.progress} look ${rehab.looks.join('/')}`)
@@ -914,7 +921,9 @@ async function assertP2(cdp) {
   const open = await cdp.evaluate(`window.__anatomyQA.typeBar()`)
   assertLifted(open, 'iphone type 300', 300)
   assertBigWord(open, 'iphone type 300')
-  if (!open.promptPanel) failType('iphone type 300', 'prompt is not on a panel', open)
+  if (open.promptPanel || !transparentBg(open.promptBg)) {
+    failType('iphone type 300', 'type-it is still wrapped in a card', open)
+  }
   if (!open.tapVisible || !/tap to type/i.test(open.tapText)) {
     failType('iphone type 300', `expected TAP TO TYPE, got "${open.tapText}"`, open)
   }
@@ -967,7 +976,9 @@ async function assertP2(cdp) {
   if (desk.checkText !== 'Check') failType('desktop type', `Check label "${desk.checkText}"`, desk)
   if (!accentish(desk.checkBg)) failType('desktop type', `Check fill is ${desk.checkBg}`, desk)
   if (desk.skipText !== 'Skip · show answer') failType('desktop type', `Skip is "${desk.skipText}"`, desk)
-  if (!desk.promptPanel) failType('desktop type', 'prompt is not on a panel', desk)
+  if (desk.promptPanel || !transparentBg(desk.promptBg)) {
+    failType('desktop type', 'type-it is still wrapped in a card', desk)
+  }
   if (!desk.lookVisible) failType('desktop type', 'Look is missing from the desktop quiz bar', desk)
   if (desk.context !== 'Bones · memory') failType('desktop type', `context "${desk.context}"`, desk)
   if (desk.inset > 40) failType('desktop type', `desktop lifted by ${desk.inset}`, desk)
@@ -975,6 +986,277 @@ async function assertP2(cdp) {
   await save('desktop-type')
 
   console.log('ok P2')
+}
+
+function transparentBg(color) {
+  return /transparent|rgba?\(\s*0\s*,\s*0\s*,\s*0\s*,\s*0\s*\)/i.test(String(color || ''))
+}
+
+function boxesOverlap(a, b) {
+  if (!a || !b || a.hidden || b.hidden) return false
+  if (a.width < 2 || a.height < 2 || b.width < 2 || b.height < 2) return false
+  return a.left < b.right - 1 && a.right > b.left + 1 && a.top < b.bottom - 1 && a.bottom > b.top + 1
+}
+
+async function readLayout(cdp) {
+  return cdp.evaluate(`(() => {
+    const box = (sel) => {
+      const el = document.querySelector(sel)
+      if (!el) return null
+      const r = el.getBoundingClientRect()
+      const s = getComputedStyle(el)
+      return {
+        hidden: el.hasAttribute('hidden') || s.display === 'none' || s.visibility === 'hidden',
+        left: Math.round(r.left),
+        top: Math.round(r.top),
+        right: Math.round(r.right),
+        bottom: Math.round(r.bottom),
+        width: Math.round(r.width),
+        height: Math.round(r.height),
+      }
+    }
+    const hitOf = (sel) => {
+      const el = document.querySelector(sel)
+      if (!el) return 'missing'
+      const r = el.getBoundingClientRect()
+      if (r.width < 2 || r.height < 2) return 'empty'
+      const hit = document.elementFromPoint(r.left + r.width / 2, Math.min(r.bottom - 1, r.top + r.height / 2))
+      if (!hit) return 'none'
+      if (el.contains(hit) || hit.contains(el)) return 'self'
+      return hit.id || (typeof hit.className === 'string' ? hit.className : hit.tagName)
+    }
+    const chips = [...document.querySelectorAll('#view-filters .view-filter-btn')].map((el) => {
+      const r = el.getBoundingClientRect()
+      const label = (el.textContent || '').replace(/\\s+/g, ' ').trim()
+      return {
+        label,
+        left: Math.round(r.left),
+        top: Math.round(r.top),
+        right: Math.round(r.right),
+        bottom: Math.round(r.bottom),
+        width: Math.round(r.width),
+        height: Math.round(r.height),
+        hidden: getComputedStyle(el).display === 'none',
+      }
+    })
+    const cluster = document.querySelector('.footer-cluster')
+    const clusterStyle = cluster ? getComputedStyle(cluster) : null
+    const attr = document.querySelector('.footer-attr')
+    const attrStyle = attr ? getComputedStyle(attr) : null
+    return {
+      panel: box('#case-panel'),
+      chrome: box('#chrome-top'),
+      menu: box('#btn-menu-top'),
+      context: box('#chrome-context'),
+      progress: box('#quiz-progress'),
+      count: box('#pill-round'),
+      acc: box('#stat-acc'),
+      look: box('#quiz-look'),
+      filters: box('#view-filters'),
+      study: box('#view-panel'),
+      footer: box('.footer-cluster'),
+      footerAttr: box('.footer-attr'),
+      footerBar: box('.footer-bar'),
+      chips,
+      hits: {
+        menu: hitOf('#btn-menu-top'),
+        progress: hitOf('#quiz-progress'),
+        count: hitOf('#pill-round'),
+        acc: hitOf('#stat-acc'),
+        solid: hitOf('#quiz-look [data-look="solid"]'),
+        xray: hitOf('#quiz-look [data-look="xray"]'),
+      },
+      contextText: (document.querySelector('#quiz-context')?.textContent || '').trim(),
+      title: (document.querySelector('#case-title')?.textContent || '').trim(),
+      attrText: (attr?.textContent || '').replace(/\\s+/g, ' ').trim(),
+      attrFont: attrStyle ? Number.parseFloat(attrStyle.fontSize) : 0,
+      footerOpacity: clusterStyle ? Number.parseFloat(clusterStyle.opacity) : 1,
+      innerWidth: window.innerWidth,
+      innerHeight: window.innerHeight,
+    }
+  })()`)
+}
+
+async function assertDesktopLayout(cdp) {
+  const fail = (label, msg, extra) => {
+    throw new Error(`${label}: ${msg}${extra ? `\n${JSON.stringify(extra)}` : ''}`)
+  }
+  const shotOf = async (name) => {
+    const png = await cdp.send('Page.captureScreenshot', { format: 'png' })
+    await writeFile(`${OUT}/layout-${name}.png`, Buffer.from(png.data, 'base64'))
+    console.log('shot', name)
+  }
+  const hudIds = [
+    ['menu', 'menu'],
+    ['progress', 'progress'],
+    ['count', 'count'],
+    ['acc', 'accuracy'],
+    ['look', 'Look'],
+  ]
+
+  await setViewport(cdp, 1440, 900, false)
+  await openApp(cdp, false)
+
+  const desks = [
+    ['1280x800', 1280, 800],
+    ['1440x900', 1440, 900],
+    ['1680x1050', 1680, 1050],
+    ['1920x1080', 1920, 1080],
+  ]
+  for (const [label, width, height] of desks) {
+    await setViewport(cdp, width, height, false)
+    await delay(200)
+    await cdp.evaluate(`window.__anatomyQA.showAnkle('learn', 0)`, true)
+    await cdp.evaluate(`document.querySelector('#case-back').click()`)
+    await delay(200)
+    const ankle = await cdp.evaluate(`window.__anatomyQA.ankleReport()`)
+    const layout = await readLayout(cdp)
+    if (layout.panel?.hidden) fail(label, 'lesson card is hidden', layout)
+    if (!(layout.panel.top >= layout.chrome.bottom - 1)) {
+      fail(label, `lesson card top ${layout.panel.top} covers the bar bottom ${layout.chrome.bottom}`, layout)
+    }
+    for (const [key, name] of hudIds) {
+      const piece = layout[key]
+      if (!piece || piece.hidden || piece.width < 2 || piece.height < 2) {
+        fail(label, `${name} is missing from the quiz bar`, piece)
+      }
+      if (piece.right > width + 1 || piece.bottom > height + 1 || piece.left < -1 || piece.top < -1) {
+        fail(label, `${name} is outside the window`, piece)
+      }
+      if (boxesOverlap(layout.panel, piece)) {
+        fail(label, `lesson card covers ${name}`, { panel: layout.panel, piece })
+      }
+    }
+    for (const [key, name] of [['menu', 'menu'], ['progress', 'progress'], ['count', 'count'], ['solid', 'Look']]) {
+      if (layout.hits[key] !== 'self') fail(label, `${name} is not clickable (${layout.hits[key]})`, layout.hits)
+    }
+    const talus = ankle.screen?.talus_r
+    const atfl = ankle.screen?.atfl_r
+    if (!talus || !atfl) fail(label, 'ankle screen point missing', ankle.screen)
+    if (talus.x < layout.panel.right - 8) {
+      fail(label, `talus x ${talus.x} is behind the card right ${layout.panel.right}`, ankle.screen)
+    }
+    if (atfl.x < layout.panel.right - 8) {
+      fail(label, `ATFL x ${atfl.x} is behind the card right ${layout.panel.right}`, ankle.screen)
+    }
+    if (talus.y < layout.chrome.bottom || talus.y > height - 8) {
+      fail(label, `talus y ${talus.y} is outside the open canvas`, ankle.screen)
+    }
+    console.log(`ok ${label} lesson clears the bar, ankle at ${talus.x},${talus.y}`)
+    await shotOf(`${label}-lesson`)
+  }
+
+  await setViewport(cdp, 1440, 900, false)
+  await delay(150)
+  const police = await cdp.evaluate(`(() => {
+    const next = document.querySelector('#case-next')
+    let guard = 0
+    while ((next.textContent || '').trim() !== 'Start quiz' && guard < 6) {
+      next.click()
+      guard += 1
+    }
+    const body = document.querySelector('#case-body')
+    body.scrollTop = body.scrollHeight
+    const last = body.lastElementChild.getBoundingClientRect()
+    const actions = document.querySelector('.case-actions').getBoundingClientRect()
+    const bodyRect = body.getBoundingClientRect()
+    return {
+      title: (document.querySelector('#case-title')?.textContent || '').trim(),
+      lastBottom: Math.round(last.bottom),
+      actionsTop: Math.round(actions.top),
+      bodyBottom: Math.round(bodyRect.bottom),
+      clear: last.bottom <= actions.top + 1 && last.bottom <= bodyRect.bottom + 1,
+      overflow: body.scrollHeight > body.clientHeight + 2,
+    }
+  })()`)
+  const policeLayout = await readLayout(cdp)
+  if (police.title !== 'Grade II · POLICE') fail('desktop police', `title "${police.title}"`, police)
+  if (!police.clear) fail('desktop police', 'last line is not reachable above the actions', police)
+  if (policeLayout.panel.top < policeLayout.chrome.bottom - 1) {
+    fail('desktop police', 'POLICE card covers the quiz bar', policeLayout)
+  }
+  console.log(`ok POLICE reachable overflow ${police.overflow}`)
+  await shotOf('1440x900-police')
+
+  await cdp.evaluate(`window.__anatomyQA.showAnkle('type', 0)`, true)
+  await delay(150)
+  const typed = await cdp.evaluate(`window.__anatomyQA.typeBar()`)
+  if (typed.promptPanel || !transparentBg(typed.promptBg)) fail('desktop type', 'type-it still has a card', typed)
+  if (typed.checkHidden) fail('desktop type', 'Check is hidden', typed)
+  if (typed.skipText !== 'Skip · show answer') fail('desktop type', `Skip is "${typed.skipText}"`, typed)
+  console.log('ok desktop type-it has no card')
+  await shotOf('1440x900-type')
+
+  await setViewport(cdp, 1440, 900, false)
+  await openApp(cdp, false)
+  await cdp.evaluate(`window.__anatomyQA.showQuiz('bones', 'frontal', 0, 'memory')`, true)
+  await delay(200)
+  const skull = await cdp.evaluate(`window.__anatomyQA.typeBar()`)
+  if (skull.promptPanel || !transparentBg(skull.promptBg)) fail('desktop skull', 'type-it still has a card', skull)
+  if (skull.checkHidden || skull.checkText !== 'Check') fail('desktop skull', 'Check is missing', skull)
+  console.log('ok skull type-it has no card')
+  await shotOf('1440x900-skull-type')
+
+  for (const [label, width, height] of desks) {
+    await setViewport(cdp, width, height, false)
+    await delay(200)
+    const study = await cdp.evaluate(`window.__anatomyQA.showStudy()`, true)
+    await delay(200)
+    const layout = await readLayout(cdp)
+    if (study.contextDisplay !== 'none') fail(label + ' study', 'Study context bar is still showing', study)
+    if (layout.hits.menu !== 'self') fail(label + ' study', `menu is not clickable (${layout.hits.menu})`, layout)
+    const shown = layout.chips.filter((chip) => !chip.hidden && chip.width > 2)
+    const want = ['Both', 'Bones', 'Muscles', 'All', 'Mid', 'Deep', 'Cartilage', 'X-ray', 'Solid']
+    for (const name of want) {
+      const chip = shown.find((item) => item.label.toLowerCase() === name.toLowerCase())
+      if (!chip) fail(label + ' study', `missing chip ${name}`, shown.map((item) => item.label))
+      if (chip.left < 0 || chip.top < 0 || chip.right > width - 1 || chip.bottom > height - 1) {
+        fail(label + ' study', `${name} is outside the window`, chip)
+      }
+      if (boxesOverlap(chip, layout.study)) fail(label + ' study', `${name} overlaps the study list`, { chip, study: layout.study })
+      if (boxesOverlap(chip, layout.menu)) fail(label + ' study', `${name} overlaps Menu`, { chip, menu: layout.menu })
+    }
+    if (!layout.footerAttr || layout.footerAttr.hidden || layout.footerAttr.height < 8) {
+      fail(label + ' study', 'licence line is missing', layout.footerAttr)
+    }
+    if (!/BodyParts3D/.test(layout.attrText) || !/Z-Anatomy/.test(layout.attrText)) {
+      fail(label + ' study', 'attribution text changed', layout.attrText)
+    }
+    if (!(layout.attrFont > 0 && layout.attrFont <= 12)) {
+      fail(label + ' study', `licence is ${layout.attrFont}px`, layout)
+    }
+    if (!(layout.footerOpacity < 0.75)) fail(label + ' study', `credits opacity ${layout.footerOpacity}`, layout)
+    if (boxesOverlap(layout.footerAttr, layout.footerBar)) {
+      fail(label + ' study', 'helper words collide with the licence', layout)
+    }
+    if (boxesOverlap(layout.footer, layout.study)) fail(label + ' study', 'credits run under the study list', layout)
+    console.log(`ok ${label} study chips clear, credits ${layout.attrFont}px @ ${layout.footerOpacity}`)
+    await shotOf(`${label}-study`)
+  }
+
+  await setViewport(cdp, 390, 844, true)
+  await openApp(cdp, true)
+  await cdp.evaluate(`window.__anatomyQA.showAnkle('learn', 0)`, true)
+  const phoneLesson = await readLayout(cdp)
+  if (phoneLesson.panel?.hidden) fail('iphone lesson', 'lesson card is hidden', phoneLesson)
+  if (boxesOverlap(phoneLesson.panel, phoneLesson.progress) || boxesOverlap(phoneLesson.panel, phoneLesson.look)) {
+    fail('iphone lesson', 'lesson card covers the quiz bar', phoneLesson)
+  }
+  await shotOf('iphone-lesson')
+  await cdp.evaluate(`window.__anatomyQA.showAnkle('type', 300)`, true)
+  await delay(200)
+  const phoneType = await cdp.evaluate(`window.__anatomyQA.typeBar()`)
+  if (phoneType.promptPanel || !transparentBg(phoneType.promptBg)) {
+    fail('iphone type', 'type-it is still wrapped in a card', phoneType)
+  }
+  if (!phoneType.checkHidden) fail('iphone type', 'iPhone is showing Check', phoneType)
+  const limit = phoneType.innerHeight - 300 + 8
+  if (phoneType.skipBottom > limit || phoneType.wordBottom > limit) {
+    fail('iphone type', `prompt is under the keyboard, skip ${phoneType.skipBottom} word ${phoneType.wordBottom}`, phoneType)
+  }
+  console.log('ok iphone lesson and type-it')
+  await shotOf('iphone-type')
+  console.log('ok desktop layout')
 }
 
 function failType(label, msg, report) {

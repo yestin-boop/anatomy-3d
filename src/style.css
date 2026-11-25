@@ -16,6 +16,8 @@ html, body {
   width: 100%;
   height: 100%;
   min-height: 100dvh;
+  /* Study list width. Filters and the quiet footer share this so they stop at the list. */
+  --study-panel: min(320px, 32vw);
 }
 
 .stage { position: absolute; inset: 0; z-index: 0; }
@@ -50,7 +52,7 @@ html, body {
   top: 0;
   left: 0;
   right: 0;
-  z-index: 4;
+  z-index: 5;
   display: flex;
   flex-wrap: wrap;
   align-items: center;
@@ -549,9 +551,10 @@ html.touch-quiz .target-word {
   width: min(760px, 94vw);
   pointer-events: auto;
   cursor: text;
-  padding: var(--space-4) var(--space-4) var(--space-3);
-  border-radius: var(--radius-md);
-  box-shadow: var(--shadow-case);
+  padding: var(--space-2) var(--space-2) 0;
+  background: transparent;
+  border: 0;
+  box-shadow: none;
 }
 .type-label {
   font-size: var(--type-caption);
@@ -559,6 +562,7 @@ html.touch-quiz .target-word {
   color: var(--text-tertiary);
   text-transform: uppercase;
   margin-bottom: var(--space-3);
+  text-shadow: var(--text-halo);
 }
 .type-field {
   position: relative;
@@ -571,6 +575,7 @@ html.touch-quiz .target-word {
   line-height: 1.15;
   min-height: 1.2em;
   font-variant-ligatures: none;
+  text-shadow: var(--text-halo);
 }
 .tw-on {
   color: var(--text-primary);
@@ -637,6 +642,7 @@ html.touch-quiz .target-word {
   color: var(--text-secondary);
   letter-spacing: 0.02em;
   opacity: 0;
+  text-shadow: var(--text-halo);
   transition: opacity var(--motion-base) var(--ease-out);
 }
 .gloss-line.show { opacity: 1; }
@@ -912,7 +918,7 @@ html.touch-quiz.phone-landscape.keyboard-open .view-filters.is-quiz {
     display: none;
   }
   #app:has(#view-panel:not([hidden])) .footer-attr {
-    top: calc(env(safe-area-inset-top) + 54px);
+    top: calc(env(safe-area-inset-top) + var(--target-min) + var(--space-3) + var(--space-2));
     bottom: auto;
     display: block;
     font-size: var(--type-caption);
@@ -946,11 +952,48 @@ html.touch-quiz.phone-landscape.keyboard-open .view-filters.is-quiz {
   }
 }
 @media (min-width: 901px) {
-  /* Credits stay on the model, clear of the pinned Start column. */
-  #app:has(#menu-overlay:not([hidden])) .footer-bar,
-  #app:has(#menu-overlay:not([hidden])) .footer-attr {
-    left: calc(var(--space-5) + min(420px, 92vw) + var(--space-4));
+  /* One quiet stack, not a full-width bar. Licence stays, just receded. */
+  .footer-cluster {
+    position: absolute;
+    left: var(--space-4);
+    bottom: max(8px, env(safe-area-inset-bottom));
+    z-index: 3;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 2px;
+    max-width: min(640px, 52vw);
+    pointer-events: none;
+    opacity: 0.55;
+  }
+  .footer-cluster .footer-bar,
+  .footer-cluster .footer-attr {
+    position: static;
+    left: auto;
+    right: auto;
+    bottom: auto;
+    max-width: none;
+    font-size: var(--type-quiet);
+    line-height: 1.3;
+    letter-spacing: 0.01em;
     text-align: left;
+    opacity: 1;
+  }
+  .footer-cluster .footer-bar {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 1px;
+    text-transform: lowercase;
+  }
+  /* Credits stay on the model, clear of the pinned Start column. */
+  #app:has(#menu-overlay:not([hidden])) .footer-cluster {
+    left: calc(var(--space-5) + min(420px, 92vw) + var(--space-4));
+    max-width: min(420px, 34vw);
+  }
+  /* Stay in the model column so the study list does not cover the licence. */
+  #app:has(#view-panel:not([hidden])) .footer-cluster {
+    right: calc(var(--study-panel) + var(--space-4) + var(--space-3));
+    max-width: none;
   }
 }
 
@@ -1069,26 +1112,26 @@ html.touch-quiz.phone-landscape.keyboard-open .view-filters.is-quiz {
     white-space: nowrap;
   }
 }
-@media (min-width: 901px) and (max-width: 1180px) {
+@media (min-width: 901px) {
+  /* Chips sit in the band between Menu and the study list, wrapping there
+     instead of running under the list. */
   .view-filters:not(.is-quiz) {
-    top: max(58px, calc(env(safe-area-inset-top) + 48px));
-    left: var(--space-3);
-    right: calc(min(360px, 38vw) + var(--space-5));
+    top: max(var(--space-3), env(safe-area-inset-top));
+    left: var(--chrome-menu-clearance, 136px);
+    right: calc(var(--study-panel) + var(--space-4) + var(--space-3));
     transform: none;
     width: auto;
     max-width: none;
-    flex-wrap: nowrap;
-    justify-content: flex-start;
-    overflow-x: auto;
-    scrollbar-width: none;
+    flex-wrap: wrap;
+    justify-content: center;
+    overflow: visible;
   }
-  .view-filters:not(.is-quiz)::-webkit-scrollbar { display: none; }
   .view-filters:not(.is-quiz) .view-filter-group { flex: 0 0 auto; }
   .view-filters:not(.is-quiz) .view-filter-btn {
     min-width: var(--target-min);
     min-height: var(--target-min);
     padding: var(--space-2) var(--space-3);
-    letter-spacing: 0.05em;
+    letter-spacing: 0.04em;
   }
 }
 
@@ -1142,6 +1185,7 @@ html.touch-quiz.phone-landscape.keyboard-open .view-filters.is-quiz {
   transform: translate(-50%, 40%);
 }
 
+.chrome--top.is-view .chrome-context,
 .chrome--top.is-view .chrome-center,
 .chrome--top.is-view .quiz-meter,
 .chrome--top.is-view .quiz-look {
@@ -1151,10 +1195,10 @@ html.touch-quiz.phone-landscape.keyboard-open .view-filters.is-quiz {
 .view-panel[hidden] { display: none !important; }
 .view-panel {
   position: absolute;
-  top: max(64px, calc(env(safe-area-inset-top) + 52px));
+  top: max(var(--space-3), env(safe-area-inset-top));
   right: var(--space-4);
-  bottom: max(52px, calc(env(safe-area-inset-bottom) + 42px));
-  width: min(360px, 38vw);
+  bottom: max(var(--space-3), env(safe-area-inset-bottom));
+  width: var(--study-panel);
   z-index: 4;
   display: flex;
   flex-direction: column;
@@ -1681,13 +1725,14 @@ html.touch-quiz.phone-landscape.ankle-case .target-word {
 }
 @media (min-width: 980px) {
   .case-panel {
-    top: max(var(--space-4), env(safe-area-inset-top));
+    /* Quiz bar is 12px pad + 44px controls + 8px pad. A 16px top drew the card over it. */
+    top: calc(max(var(--space-3), env(safe-area-inset-top)) + var(--target-min) + var(--space-2) + var(--space-3));
     bottom: auto;
-    max-height: calc(100dvh - var(--space-6));
+    max-height: calc(100dvh - max(var(--space-3), env(safe-area-inset-top)) - var(--target-min) - var(--space-2) - var(--space-3) - var(--space-4));
     width: min(400px, 34vw);
   }
   .case-body {
-    max-height: calc(100dvh - 12rem);
+    max-height: calc(100dvh - max(var(--space-3), env(safe-area-inset-top)) - var(--target-min) - var(--space-2) - var(--space-3) - 12rem);
   }
 }
 
