@@ -364,6 +364,12 @@ the fibula and 2 mm from the talus; the right CFL ends sit about 1 mm from
 the fibula and 4 mm from the calcaneus. They are the real meshes, not
 landmark stand-ins.
 
+At runtime the app applies a small rigid seat to the right ATFL and CFL
+(a few millimetres, and a 4° tilt on the CFL) plus a milder 1.1 mm
+display inflate, so those licensed ends sit on the fibula, talus, and
+calcaneus without rewriting the packed GLBs. The deltoid is not moved;
+the tibionavicular shortfall is unchanged.
+
 | GLB | Structure |
 | --- | --- |
 | `extra/ligaments/atfl_l` / `atfl_r` | anterior talofibular ligament |
