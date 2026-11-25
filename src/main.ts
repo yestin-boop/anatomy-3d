@@ -39,6 +39,25 @@ import {
   type AnkleQuizStep,
   type AnkleTypeStep,
 } from './data/ankleSprain'
+import {
+  ACTION_LEARN,
+  ACTION_QUIZ,
+  actionTypeMatch,
+  gradeActionTap,
+  type ActionLearnCard,
+  type ActionQuizStep,
+  type ActionTypeStep,
+  type StudyFocus,
+} from './data/muscleActions'
+import {
+  HAMSTRING_LEARN,
+  HAMSTRING_QUIZ,
+  gradeHamstringTap,
+  hamstringTypeMatch,
+  type HamLearnCard,
+  type HamQuizStep,
+  type HamTypeStep,
+} from './data/hamstringStrain'
 import { insetsChanged, type FramingInsets } from './scene/framing'
 import { playCorrectChime, playKeyTap, playWrongTick, unlockAudio } from './audio/chime'
 import { getBoneView, getCartilageView, getMuscleView, type ViewAttachmentSite, type ViewSide } from './data/viewInfo'
@@ -186,12 +205,30 @@ app.innerHTML = `
       </section>
 
       <section class="menu-section">
+        <h2>Sport</h2>
+        <button type="button" class="mode-card mode-card--wide" id="btn-muscle-actions">
+          <span class="mode-key">S</span>
+          <div>
+            <span class="mode-title">Muscle actions</span>
+            <span class="mode-sub">lit muscle · type the movement or tap the one that does it</span>
+          </div>
+        </button>
+      </section>
+
+      <section class="menu-section">
         <h2>Rehab</h2>
         <button type="button" class="mode-card mode-card--wide" id="btn-ankle-case">
           <span class="mode-key">R</span>
           <div>
             <span class="mode-title">Lateral ankle sprain</span>
             <span class="mode-sub">soccer cut · inversion and plantarflexion · learn, then tap and type</span>
+          </div>
+        </button>
+        <button type="button" class="mode-card mode-card--wide" id="btn-hamstring-case">
+          <span class="mode-key">H</span>
+          <div>
+            <span class="mode-title">Grade II hamstring strain</span>
+            <span class="mode-sub">sprint · eccentric overload · learn, then tap and type</span>
           </div>
         </button>
       </section>
@@ -401,6 +438,8 @@ const sessionCountsEl = document.querySelector<HTMLDivElement>('#session-counts'
 const startBtn = document.querySelector<HTMLButtonElement>('#start-btn')!
 const btnView = document.querySelector<HTMLButtonElement>('#btn-view')!
 const btnAnkleCase = document.querySelector<HTMLButtonElement>('#btn-ankle-case')!
+const btnMuscleActions = document.querySelector<HTMLButtonElement>('#btn-muscle-actions')!
+const btnHamstringCase = document.querySelector<HTMLButtonElement>('#btn-hamstring-case')!
 const casePanel = document.querySelector<HTMLElement>('#case-panel')!
 const caseKicker = document.querySelector<HTMLElement>('#case-kicker')!
 const caseTitle = document.querySelector<HTMLElement>('#case-title')!
@@ -482,10 +521,13 @@ const scene = new ThoraxScene({
 })
 ;(window as unknown as { __anatomyScene: typeof scene }).__anatomyScene = scene
 
+type CaseKind = 'ankle' | 'actions' | 'hamstring'
+
 type QuizState = {
   playing: boolean
   viewing: boolean
   caseActive: boolean
+  caseKind: CaseKind
   casePhase: 'learn' | 'quiz'
   caseLearnIndex: number
   caseQuizIndex: number
@@ -514,10 +556,14 @@ let commonBonesOnly = false
 let activePreset: FilterPreset | 'custom' = 'all'
 let moreFiltersOpen = false
 
+/** Last learn card or quiz step whose 3D focus was applied. Keystrokes must not reframe. */
+let appliedFocusId = ''
+
 const state: QuizState = {
   playing: false,
   viewing: false,
   caseActive: false,
+  caseKind: 'ankle',
   casePhase: 'learn',
   caseLearnIndex: 0,
   caseQuizIndex: 0,
@@ -724,8 +770,25 @@ function quizActivity(): QuizActivity {
 }
 
 function quizSubject(): QuizSubject {
+  if (state.caseActive && state.caseKind === 'actions') return 'sport'
   if (state.caseActive) return 'rehab'
   return state.subject
+}
+
+function isStudyCase(): boolean {
+  return state.caseKind === 'actions' || state.caseKind === 'hamstring'
+}
+
+function caseLearnTotal(): number {
+  if (state.caseKind === 'actions') return ACTION_LEARN.length
+  if (state.caseKind === 'hamstring') return HAMSTRING_LEARN.length
+  return ANKLE_LEARN.length
+}
+
+function caseQuizTotal(): number {
+  if (state.caseKind === 'actions') return ACTION_QUIZ.length
+  if (state.caseKind === 'hamstring') return HAMSTRING_QUIZ.length
+  return ANKLE_QUIZ.length
 }
 
 /** One context label, a thin bar, and the round count. Not two pills. */
@@ -742,10 +805,10 @@ function syncChromeContext(): void {
   let roundLabel = ''
   if (state.caseActive) {
     if (state.casePhase === 'learn') {
-      total = ANKLE_LEARN.length
+      total = caseLearnTotal()
       shown = Math.min(state.caseLearnIndex + 1, total)
     } else {
-      total = ANKLE_QUIZ.length
+      total = caseQuizTotal()
       shown = state.finished ? total : Math.min(state.caseQuizIndex + 1, total)
     }
   } else if (!viewing) {
@@ -860,11 +923,16 @@ function wait(ms: number): Promise<void> {
 }
 
 function showMenu(): void {
-  if (state.caseActive || scene.isAnkleCase()) {
+  if (state.caseActive || scene.isAnkleCase() || scene.isStudyCase()) {
     scene.exitAnkleCase()
+    scene.exitStudyCase()
     state.caseActive = false
     state.caseTyping = false
-    document.documentElement.classList.remove('ankle-case')
+    state.caseKind = 'ankle'
+    appliedFocusId = ''
+    document.documentElement.classList.remove('ankle-case', 'study-quiet')
+    caseReplay.textContent = 'Replay the roll'
+    targetWord.classList.remove('is-long')
   }
   if (state.viewing) {
     scene.exitView()
@@ -1892,6 +1960,16 @@ btnAnkleCase.addEventListener('pointerdown', (e) => {
   void startAnkleCase()
 })
 
+btnMuscleActions.addEventListener('pointerdown', (e) => {
+  e.preventDefault()
+  void startStudyCase('actions')
+})
+
+btnHamstringCase.addEventListener('pointerdown', (e) => {
+  e.preventDefault()
+  void startStudyCase('hamstring')
+})
+
 btnView.addEventListener('pointerdown', (e) => {
   e.preventDefault()
   void startView()
@@ -2009,11 +2087,13 @@ function restartCurrent(): void {
     if (state.casePhase === 'learn') {
       state.caseLearnIndex = 0
       state.finished = false
+      appliedFocusId = ''
       renderLearnCard()
       syncChromeContext()
       return
     }
-    startAnkleQuiz()
+    if (isStudyCase()) startStudyQuiz()
+    else startAnkleQuiz()
     return
   }
   if (!state.playing || state.queue.length === 0) {
@@ -2092,6 +2172,16 @@ window.addEventListener('keydown', (e) => {
   if (!state.playing && !state.viewing && (e.key === 'r' || e.key === 'R') && document.activeElement !== hiddenInput) {
     e.preventDefault()
     void startAnkleCase()
+    return
+  }
+  if (!state.playing && !state.viewing && (e.key === 's' || e.key === 'S') && document.activeElement !== hiddenInput) {
+    e.preventDefault()
+    void startStudyCase('actions')
+    return
+  }
+  if (!state.playing && !state.viewing && (e.key === 'h' || e.key === 'H') && document.activeElement !== hiddenInput) {
+    e.preventDefault()
+    void startStudyCase('hamstring')
     return
   }
   if (e.key === 'Tab' && state.playing) {
@@ -2552,16 +2642,75 @@ mainCanvas.addEventListener('pointercancel', () => {
   pointerIsPick = false
 })
 
-function currentCaseStep(): AnkleQuizStep | null {
+function currentCaseStep(): AnkleQuizStep | ActionQuizStep | HamQuizStep | null {
+  if (state.caseKind === 'actions') return ACTION_QUIZ[state.caseQuizIndex] ?? null
+  if (state.caseKind === 'hamstring') return HAMSTRING_QUIZ[state.caseQuizIndex] ?? null
   return ANKLE_QUIZ[state.caseQuizIndex] ?? null
 }
 
-function caseTypeStep(): AnkleTypeStep | null {
+function caseTypeStep(): AnkleTypeStep | ActionTypeStep | HamTypeStep | null {
   const step = currentCaseStep()
   return step && step.kind === 'type' ? step : null
 }
 
+function caseTypeMatches(typed: string, mode: AnswerMatchMode = 'live'): boolean {
+  if (state.caseKind === 'actions') {
+    const step = ACTION_QUIZ[state.caseQuizIndex]
+    return !!step && step.kind === 'type' && actionTypeMatch(step, typed, mode)
+  }
+  if (state.caseKind === 'hamstring') {
+    const step = HAMSTRING_QUIZ[state.caseQuizIndex]
+    return !!step && step.kind === 'type' && hamstringTypeMatch(step, typed, mode)
+  }
+  const step = ANKLE_QUIZ[state.caseQuizIndex]
+  return !!step && step.kind === 'type' && ankleTypeMatch(step, typed, mode)
+}
+
+function studyQuizStep(): ActionQuizStep | HamQuizStep | null {
+  if (state.caseKind === 'actions') return ACTION_QUIZ[state.caseQuizIndex] ?? null
+  if (state.caseKind === 'hamstring') return HAMSTRING_QUIZ[state.caseQuizIndex] ?? null
+  return null
+}
+
+function studyLearnCard(): ActionLearnCard | HamLearnCard | null {
+  if (state.caseKind === 'actions') return ACTION_LEARN[state.caseLearnIndex] ?? null
+  if (state.caseKind === 'hamstring') return HAMSTRING_LEARN[state.caseLearnIndex] ?? null
+  return null
+}
+
+/** Apply a muscle highlight once per card. Typing must not rebuild the pose. */
+function applyStudyStepFocus(id: string, focus: StudyFocus, play: boolean): void {
+  if (appliedFocusId === id) return
+  appliedFocusId = id
+  scene.setStudyFocus(focus)
+  if (play) scene.replayStudyCue()
+  else scene.holdStudyCue(focus.cue === 'none' ? 0 : 1)
+}
+
+function fillCaseCopy(kicker: string, title: string, paragraphs: string[]): void {
+  caseKicker.textContent = kicker
+  caseTitle.textContent = title
+  caseBody.replaceChildren(
+    ...paragraphs.map((text) => {
+      const p = document.createElement('p')
+      p.textContent = text
+      return p
+    }),
+  )
+}
+
 function renderLearnCard(): void {
+  if (isStudyCase()) {
+    const card = studyLearnCard()
+    if (!card) return
+    fillCaseCopy(card.kicker, card.title, [...card.paragraphs])
+    caseReplay.hidden = !card.motion
+    caseBack.hidden = state.caseLearnIndex === 0
+    caseNext.textContent = state.caseLearnIndex === caseLearnTotal() - 1 ? 'Start quiz' : 'Next'
+    applyStudyStepFocus(card.id, card.focus, card.motion)
+    syncChromeContext()
+    return
+  }
   const card = ANKLE_LEARN[state.caseLearnIndex]
   if (!card) return
   caseKicker.textContent = card.kicker
@@ -2585,10 +2734,16 @@ function renderLearnCard(): void {
 
 async function startAnkleCase(): Promise<void> {
   void unlockAudio()
+  if (scene.isStudyCase()) scene.exitStudyCase()
   if (state.viewing) {
     scene.exitView()
     state.viewing = false
   }
+  state.caseKind = 'ankle'
+  appliedFocusId = ''
+  document.documentElement.classList.remove('study-quiet')
+  caseReplay.textContent = 'Replay the roll'
+  targetWord.classList.remove('is-long')
   state.caseActive = true
   state.casePhase = 'learn'
   state.caseLearnIndex = 0
@@ -2626,13 +2781,78 @@ async function startAnkleCase(): Promise<void> {
 
 function advanceCaseLearn(): void {
   if (!state.caseActive || state.casePhase !== 'learn') return
-  if (state.caseLearnIndex < ANKLE_LEARN.length - 1) {
+  if (state.caseLearnIndex < caseLearnTotal() - 1) {
     state.caseLearnIndex += 1
     renderLearnCard()
     scheduleFramingSync()
     return
   }
-  startAnkleQuiz()
+  if (isStudyCase()) startStudyQuiz()
+  else startAnkleQuiz()
+}
+
+async function startStudyCase(kind: 'actions' | 'hamstring'): Promise<void> {
+  void unlockAudio()
+  if (scene.isAnkleCase()) scene.exitAnkleCase()
+  if (state.viewing) {
+    scene.exitView()
+    state.viewing = false
+  }
+  state.caseKind = kind
+  appliedFocusId = ''
+  state.caseActive = true
+  state.casePhase = 'learn'
+  state.caseLearnIndex = 0
+  state.caseQuizIndex = 0
+  state.caseTyping = false
+  state.playing = true
+  state.finished = false
+  state.revealing = false
+  state.typed = ''
+  state.correct = 0
+  state.attempts = 0
+  hiddenInput.value = ''
+  document.documentElement.classList.remove('ankle-case')
+  document.documentElement.classList.add('study-quiet')
+  caseReplay.textContent = 'Replay'
+  targetWord.classList.remove('is-long')
+  menuOverlay.hidden = true
+  playHud.hidden = true
+  viewPanel.hidden = true
+  chromeTop.hidden = false
+  chromeTop.classList.remove('is-view')
+  viewFilters.hidden = true
+  viewFilters.classList.remove('is-quiz')
+  sideViews.hidden = true
+  casePanel.hidden = false
+  setMenuSheet(false)
+  syncChromeContext()
+  statusEl.style.display = ''
+  statusEl.textContent = 'Loading muscles…'
+  scene.setLook('solid')
+  await scene.enterStudyCase()
+  if (!state.caseActive || state.caseKind !== kind) return
+  statusEl.style.display = 'none'
+  renderLearnCard()
+  syncFramingInsetsNow()
+  scheduleFramingSync()
+}
+
+function startStudyQuiz(): void {
+  state.casePhase = 'quiz'
+  state.caseQuizIndex = 0
+  state.finished = false
+  state.revealing = false
+  state.typed = ''
+  state.correct = 0
+  state.attempts = 0
+  hiddenInput.value = ''
+  appliedFocusId = ''
+  casePanel.hidden = true
+  playHud.hidden = false
+  renderCaseHud()
+  syncFramingInsetsNow()
+  if (state.caseTyping) focusInput()
 }
 
 function startAnkleQuiz(): void {
@@ -2654,7 +2874,70 @@ function startAnkleQuiz(): void {
   if (state.caseTyping) focusInput()
 }
 
+function renderStudyHud(): void {
+  document.documentElement.classList.remove('ankle-case')
+  document.documentElement.classList.add('study-quiet')
+  playHud.classList.toggle('case-quiz', state.casePhase === 'quiz')
+  const acc = state.attempts === 0 ? 100 : Math.round((state.correct / state.attempts) * 100)
+  statAcc.textContent = `${acc}%`
+  syncChromeContext()
+
+  if (state.casePhase === 'learn') {
+    syncSkipButton()
+    scheduleFramingSync()
+    return
+  }
+
+  if (state.finished) {
+    state.caseTyping = false
+    typeLabel.textContent = 'CASE COMPLETE · TAP OR ESC FOR MENU'
+    targetWord.classList.add('reveal')
+    targetWord.classList.remove('is-long')
+    targetWord.innerHTML = `<span class="tw-done">case complete</span>`
+    glossLine.textContent =
+      state.caseKind === 'hamstring'
+        ? 'Grade II hamstring strain: eccentric tensile overload in a sprint. Phase 2 uses Nordic hamstring curls.'
+        : 'Muscles pull on bones. You matched each movement to the muscle on the model.'
+    glossLine.classList.add('show')
+    glossLine.classList.remove('is-wrong')
+    syncSkipButton()
+    scheduleFramingSync()
+    return
+  }
+
+  const step = studyQuizStep()
+  if (!step) return
+  state.caseTyping = step.kind === 'type' && !state.revealing
+  typeLabel.textContent = `${step.kind === 'type' ? 'TYPE IT' : 'TAP IT'} · ${step.region}`
+  glossLine.textContent =
+    state.revealing && step.kind === 'type'
+      ? step.reveal
+      : state.revealing && step.kind === 'tap'
+        ? step.correct
+        : step.prompt
+  glossLine.classList.add('show')
+  glossLine.classList.remove('is-wrong')
+  targetWord.classList.toggle('is-long', step.kind === 'type' && step.official.length > 28)
+  if (step.kind === 'type') renderCaseTypeWord(step)
+  else {
+    targetWord.classList.toggle('reveal', state.revealing)
+    targetWord.innerHTML = state.revealing
+      ? `<span class="tw-done">${escapeHtml(step.revealName)}</span>`
+      : `<span class="tw-on">tap</span>`
+  }
+  if ('focus' in step) applyStudyStepFocus(step.id, step.focus, false)
+  syncSkipButton()
+  if (step.kind === 'tap') blurQuizInput()
+  syncTapHint()
+  scheduleFramingSync()
+}
+
 function renderCaseHud(): void {
+  if (isStudyCase()) {
+    renderStudyHud()
+    return
+  }
+  targetWord.classList.remove('is-long')
   document.documentElement.classList.toggle('ankle-case', state.caseActive)
   playHud.classList.toggle('case-quiz', state.caseActive && state.casePhase === 'quiz')
   const acc = state.attempts === 0 ? 100 : Math.round((state.correct / state.attempts) * 100)
@@ -2707,7 +2990,7 @@ function renderCaseHud(): void {
   scheduleFramingSync()
 }
 
-function renderCaseTypeWord(step: AnkleTypeStep): void {
+function renderCaseTypeWord(step: AnkleTypeStep | ActionTypeStep | HamTypeStep): void {
   if (state.revealing) {
     targetWord.classList.add('reveal')
     targetWord.innerHTML = `<span class="tw-done">${escapeHtml(step.official)}</span>`
@@ -2767,7 +3050,7 @@ function onCaseFieldInput(): void {
   if (step && added && firstWrongIndex(cleaned, [step.official, ...step.aliases]) >= 0) playWrongTick()
   else if (cleaned.length !== prev.length) playKeyTap()
   updateHud()
-  if (step && ankleTypeMatch(step, cleaned)) void onCaseCorrect()
+  if (step && caseTypeMatches(cleaned)) void onCaseCorrect()
 }
 
 function onCaseChar(ch: string): void {
@@ -2778,7 +3061,7 @@ function onCaseChar(ch: string): void {
   if (firstWrongIndex(state.typed, [step.official, ...step.aliases]) >= 0) playWrongTick()
   else playKeyTap()
   updateHud()
-  if (ankleTypeMatch(step, state.typed)) void onCaseCorrect()
+  if (caseTypeMatches(state.typed)) void onCaseCorrect()
 }
 
 function onCaseConfirm(): void {
@@ -2789,15 +3072,47 @@ function onCaseConfirm(): void {
   if (state.casePhase !== 'quiz' || state.revealing) return
   const step = caseTypeStep()
   if (!step) return
-  if (ankleTypeMatch(step, state.typed, 'confirm')) void onCaseCorrect()
+  if (caseTypeMatches(state.typed, 'confirm')) void onCaseCorrect()
 }
 
 function onCaseTap(clientX: number, clientY: number): void {
   if (state.casePhase !== 'quiz' || state.revealing || state.finished || state.caseTyping) return
-  const step = currentCaseStep()
+  if (isStudyCase()) {
+    onStudyTap(clientX, clientY)
+    return
+  }
+  const step = ANKLE_QUIZ[state.caseQuizIndex]
   if (!step || step.kind !== 'tap') return
   const picked = scene.pickAnkle(clientX, clientY)
   const graded = gradeAnkleTap(step, picked?.hit ?? null)
+  if (!graded.ok) {
+    playWrongTick()
+    glossLine.textContent = graded.message
+    glossLine.classList.add('show', 'is-wrong')
+    return
+  }
+  void onCaseCorrect(graded.message)
+}
+
+function onStudyTap(clientX: number, clientY: number): void {
+  const picked = scene.pickStudy(clientX, clientY)
+  const hit = picked?.hit ?? null
+  if (state.caseKind === 'hamstring') {
+    const step = HAMSTRING_QUIZ[state.caseQuizIndex]
+    if (!step || step.kind !== 'tap') return
+    const graded = gradeHamstringTap(step, hit)
+    if (!graded.ok) {
+      playWrongTick()
+      glossLine.textContent = graded.message
+      glossLine.classList.add('show', 'is-wrong')
+      return
+    }
+    void onCaseCorrect(graded.message)
+    return
+  }
+  const step = ACTION_QUIZ[state.caseQuizIndex]
+  if (!step || step.kind !== 'tap') return
+  const graded = gradeActionTap(step, hit)
   if (!graded.ok) {
     playWrongTick()
     glossLine.textContent = graded.message
@@ -2836,12 +3151,15 @@ function revealCaseAnswer(): void {
   state.caseTyping = false
   state.typed = ''
   hiddenInput.value = ''
-  if (step.kind === 'tap') scene.setAnkleEmphasis(step.accept[0] === 'cfl' ? 'cfl' : 'atfl')
+  if (!isStudyCase() && step.kind === 'tap') {
+    const ankle = ANKLE_QUIZ[state.caseQuizIndex]
+    if (ankle && ankle.kind === 'tap') scene.setAnkleEmphasis(ankle.accept[0] === 'cfl' ? 'cfl' : 'atfl')
+  }
   updateHud()
   if (state.caseTyping) focusInputNow()
   void (async () => {
     await wait(1400)
-    scene.setAnkleEmphasis('none')
+    if (!isStudyCase()) scene.setAnkleEmphasis('none')
     advanceCaseQuiz()
   })()
 }
@@ -2852,7 +3170,7 @@ function advanceCaseQuiz(): void {
   state.typed = ''
   hiddenInput.value = ''
   state.caseQuizIndex += 1
-  if (state.caseQuizIndex >= ANKLE_QUIZ.length) {
+  if (state.caseQuizIndex >= caseQuizTotal()) {
     state.finished = true
     state.caseTyping = false
     updateHud()
@@ -2865,7 +3183,7 @@ function advanceCaseQuiz(): void {
 caseBack.addEventListener('click', () => {
   if (!state.caseActive || state.casePhase !== 'learn' || state.caseLearnIndex === 0) return
   state.caseLearnIndex -= 1
-  pillRound.textContent = `${state.caseLearnIndex + 1} / ${ANKLE_LEARN.length}`
+  pillRound.textContent = `${state.caseLearnIndex + 1} / ${caseLearnTotal()}`
   renderLearnCard()
   scheduleFramingSync()
 })
@@ -2875,7 +3193,8 @@ caseNext.addEventListener('click', () => {
 })
 
 caseReplay.addEventListener('click', () => {
-  scene.replayAnkleMotion()
+  if (isStudyCase()) scene.replayStudyCue()
+  else scene.replayAnkleMotion()
 })
 
 function qaEntry(subject: 'bones' | 'muscles', id: string): ViewSelection {
@@ -3157,6 +3476,111 @@ function qaSetKeyboardViewport(probe: {
   return qaTypeBar()
 }
 
+function qaLayout(): Record<string, unknown> {
+  const chrome = chromeTop.getBoundingClientRect()
+  const panel = casePanel.getBoundingClientRect()
+  const prompt = promptBlock.getBoundingClientRect()
+  const context = quizContext.getBoundingClientRect()
+  const promptStyle = getComputedStyle(promptBlock)
+  const licence = document.querySelector<HTMLElement>('.footer-attr')
+  const licenceStyle = licence ? getComputedStyle(licence) : null
+  const bg = promptStyle.backgroundColor
+  const shadow = promptStyle.boxShadow
+  const transparent = bg === 'transparent' || bg === 'rgba(0, 0, 0, 0)'
+  return {
+    chromeTop: Math.round(chrome.top),
+    chromeBottom: Math.round(chrome.bottom),
+    chromeLeft: Math.round(chrome.left),
+    chromeRight: Math.round(chrome.right),
+    contextLeft: Math.round(context.left),
+    contextRight: Math.round(context.right),
+    contextText: (quizContext.textContent ?? '').trim(),
+    panelHidden: casePanel.hidden,
+    panelTop: Math.round(panel.top),
+    panelBottom: Math.round(panel.bottom),
+    panelLeft: Math.round(panel.left),
+    panelRight: Math.round(panel.right),
+    title: caseTitle.textContent ?? '',
+    prompt: (glossLine.textContent ?? '').trim(),
+    label: (typeLabel.textContent ?? '').trim(),
+    promptTop: Math.round(prompt.top),
+    promptBottom: Math.round(prompt.bottom),
+    promptBg: bg,
+    promptShadow: shadow,
+    promptRaised: !transparent || (shadow !== 'none' && shadow !== ''),
+    skipBottom: Math.round(skipBtn.getBoundingClientRect().bottom),
+    skipHidden: skipBtn.hidden,
+    licenceText: (licence?.textContent ?? '').replace(/\s+/g, ' ').trim(),
+    licenceSize: licenceStyle ? Number.parseFloat(licenceStyle.fontSize) : 0,
+    licenceOpacity: licenceStyle ? Number.parseFloat(licenceStyle.opacity) : 1,
+    licenceTop: licence ? Math.round(licence.getBoundingClientRect().top) : 0,
+    licenceBottom: licence ? Math.round(licence.getBoundingClientRect().bottom) : 0,
+    licenceLeft: licence ? Math.round(licence.getBoundingClientRect().left) : 0,
+    licenceRight: licence ? Math.round(licence.getBoundingClientRect().right) : 0,
+    licenceDisplay: licenceStyle?.display ?? '',
+    innerWidth: window.innerWidth,
+    innerHeight: window.innerHeight,
+    progress: (pillRound.textContent ?? '').trim(),
+  }
+}
+
+async function qaShowStudyCase(
+  kind: 'actions' | 'hamstring',
+  mode: 'menu' | 'learn' | 'type' | 'tap' | 'peak' | 'rest',
+  keyboardPx = 0,
+): Promise<Record<string, unknown>> {
+  pinForcedKeyboard(keyboardPx)
+  if (mode === 'menu') {
+    showMenu()
+    const sport = btnMuscleActions
+    const ham = btnHamstringCase
+    const target = kind === 'actions' ? sport : ham
+    target.scrollIntoView({ block: 'center' })
+    const sportRect = sport.getBoundingClientRect()
+    const hamRect = ham.getBoundingClientRect()
+    return {
+      sportTitle: sport.querySelector('.mode-title')?.textContent ?? '',
+      hamTitle: ham.querySelector('.mode-title')?.textContent ?? '',
+      sportVisible: sportRect.width > 8 && sportRect.bottom > 0 && sportRect.top < window.innerHeight,
+      hamVisible: hamRect.width > 8 && hamRect.bottom > 0 && hamRect.top < window.innerHeight,
+      ...qaLayout(),
+    }
+  }
+  if (!state.caseActive || state.caseKind !== kind) await startStudyCase(kind)
+  const learn = kind === 'hamstring' ? HAMSTRING_LEARN : ACTION_LEARN
+  const quiz = kind === 'hamstring' ? HAMSTRING_QUIZ : ACTION_QUIZ
+  if (mode === 'learn' || mode === 'peak' || mode === 'rest') {
+    const motionIndex = learn.findIndex((card) => card.motion)
+    const index = mode === 'learn' ? 0 : motionIndex
+    state.casePhase = 'learn'
+    state.caseLearnIndex = index < 0 ? 0 : index
+    state.finished = false
+    appliedFocusId = ''
+    casePanel.hidden = false
+    playHud.hidden = true
+    renderLearnCard()
+    const card = learn[state.caseLearnIndex]
+    const holdPeak = mode === 'peak' || (mode === 'learn' && !!card && card.focus.cue !== 'none')
+    if (card) scene.holdStudyCue(holdPeak ? 1 : 0)
+  } else {
+    const index = quiz.findIndex((step) => step.kind === (mode === 'tap' ? 'tap' : 'type'))
+    state.casePhase = 'quiz'
+    state.caseQuizIndex = index < 0 ? 0 : index
+    state.finished = false
+    state.revealing = false
+    state.typed = ''
+    appliedFocusId = ''
+    casePanel.hidden = true
+    playHud.hidden = false
+    renderCaseHud()
+  }
+  syncFramingInsetsNow()
+  await scene.whenPoseSettled()
+  syncFramingInsetsNow()
+  await scene.whenPoseSettled()
+  return { ...scene.getStudyReport(), ...qaLayout(), mode, kind }
+}
+
 function installQaHooks(): void {
   const api = {
     showQuiz: qaShowQuiz,
@@ -3164,6 +3588,7 @@ function installQaHooks(): void {
     showCommonBones: qaShowCommonBones,
     showAnkle: qaShowAnkle,
     showStudy: qaShowStudy,
+    showStudyCase: qaShowStudyCase,
     typeBar: qaTypeBar,
     setKeyboardViewport: qaSetKeyboardViewport,
     report: () => scene.getFramingReport(),

@@ -17,6 +17,7 @@ import {
   type ViewExtents,
 } from './framing'
 import { anklePoseAt, type AnklePose } from './anklePose'
+import { limbPoseAt, pivotsFor, type LimbCue, type LimbPose, type PivotEnd } from './limbCue'
 import {
   ANKLE_FRAME_FILL,
   LIGAMENT_BASE,
@@ -41,6 +42,7 @@ import {
   type AnkleEmphasis,
   type AnkleHit,
 } from '../data/ankleSprain'
+import { classifyStudyMesh, type StudyFocus } from '../data/muscleActions'
 
 const _segV = new THREE.Vector3()
 const _segW = new THREE.Vector3()
@@ -332,6 +334,15 @@ export class ThoraxScene {
   private ligamentsInflated = false
   private ankleLabelsWanted = false
   private ankleLabelGroup = new THREE.Group()
+  private studyCase = false
+  private studyPivots: THREE.Group[] = []
+  private studyHomes: Array<{ mesh: THREE.Mesh; parent: THREE.Object3D }> = []
+  private studyMotion: { t: number; duration: number; playing: boolean; cue: LimbCue } | null = null
+  private studyCue: LimbCue = 'none'
+  private studyPose: LimbPose = limbPoseAt('none', 0)
+  private studyHighlight = new Set<string>()
+  private studyHide = new Set<string>()
+  private studyContext = new Set<string>()
   private targetIds = new Set<string>()
   private subject: 'bones' | 'muscles' = 'bones'
   private spinning = true
@@ -768,6 +779,10 @@ export class ThoraxScene {
   }
 
   private applySubjectVisibility(): void {
+    if (this.studyCase) {
+      this.applyStudyLook()
+      return
+    }
     if (this.ankleCase) {
       this.applyAnkleLook()
       return
@@ -1073,6 +1088,7 @@ export class ThoraxScene {
     this.lerpFramingInsets(dt)
     this.tickViewFrame(dt)
     this.tickAnkleMotion(dt)
+    this.tickStudyMotion(dt)
     this.controls.update()
     this.applyFramingOffset()
     this.renderer.render(this.scene, this.camera)
@@ -1098,7 +1114,10 @@ export class ThoraxScene {
   showMenuView(): void {
     this.controls.minDistance = DEFAULT_MIN_DISTANCE
     this.frameFullBody()
-    this.spinning = shouldResumeIdleSpinOnMenuOrExitView({ ankleCase: this.ankleCase })
+    this.spinning = shouldResumeIdleSpinOnMenuOrExitView({
+      ankleCase: this.ankleCase,
+      studyCase: this.studyCase,
+    })
   }
 
   listMeshNames(): string[] {
@@ -1137,7 +1156,10 @@ export class ThoraxScene {
     this.viewSelected.clear()
     this.clearViewMarkers()
     this.applyViewLighting(this.look === 'solid')
-    this.spinning = shouldResumeIdleSpinOnMenuOrExitView({ ankleCase: this.ankleCase })
+    this.spinning = shouldResumeIdleSpinOnMenuOrExitView({
+      ankleCase: this.ankleCase,
+      studyCase: this.studyCase,
+    })
     this.applySubjectVisibility()
   }
 
@@ -2198,6 +2220,7 @@ export class ThoraxScene {
         disposed: this.disposed,
         viewMode: this.viewMode,
         ankleCase: this.ankleCase,
+        studyCase: this.studyCase,
         targetCount: this.targetIds.size,
       })
     ) {
@@ -2435,11 +2458,300 @@ export class ThoraxScene {
     }
   }
 
+  async enterStudyCase(): Promise<void> {
+    this.studyCase = true
+    this.spinning = false
+    this.spin.rotation.y = 0
+    this.viewMode = false
+    this.targetIds = new Set()
+    this.controls.enablePan = false
+    this.controls.minDistance = VIEW_MIN_DISTANCE
+    await this.ensureMusclesLoaded()
+    if (!this.studyCase || this.disposed) return
+    this.applyStudyLook()
+  }
+
+  exitStudyCase(): void {
+    if (!this.studyCase && this.studyPivots.length === 0) return
+    this.clearStudyPivots()
+    this.studyCase = false
+    this.studyCue = 'none'
+    this.studyHighlight = new Set()
+    this.studyHide = new Set()
+    this.studyContext = new Set()
+    this.targetIds = new Set()
+    this.framedBox = null
+    this.framedExtents = null
+    this.cancelViewFrame()
+    this.applySubjectVisibility()
+  }
+
+  isStudyCase(): boolean {
+    return this.studyCase
+  }
+
+  /** Highlight packed meshes, frame them, and optionally pose existing bones. */
+  setStudyFocus(focus: StudyFocus): void {
+    if (!this.studyCase) return
+    this.studyHighlight = new Set(focus.highlight)
+    this.studyHide = new Set(focus.hide)
+    this.studyContext = new Set(focus.context)
+    this.studyCue = focus.cue
+    this.clearStudyPivots()
+    this.studyCue = focus.cue
+    this.buildStudyPivots(focus.cue)
+    this.applyStudyPose(limbPoseAt(focus.cue, 0))
+    this.frameStudy(focus.frame, focus.view)
+    this.applyStudyLook()
+  }
+
+  /** Play the current cue from neutral to the peak and hold it. */
+  replayStudyCue(): void {
+    if (!this.studyCase || this.studyCue === 'none') return
+    this.studyMotion = { t: 0, duration: 2.2, playing: true, cue: this.studyCue }
+    this.applyStudyPose(limbPoseAt(this.studyCue, 0))
+    this.applyStudyLook()
+  }
+
+  /** Hold a cue without playing. `u` is 0 at rest and 1 at the peak. */
+  holdStudyCue(u: number): void {
+    if (!this.studyCase) return
+    this.studyMotion = null
+    this.applyStudyPose(limbPoseAt(this.studyCue, u))
+    this.applyStudyLook()
+  }
+
+  pickStudy(clientX: number, clientY: number): { hit: string; meshName: string } | null {
+    if (!this.studyCase) return null
+    const rect = this.mainCanvas.getBoundingClientRect()
+    if (rect.width <= 0 || rect.height <= 0) return null
+    this.pointerNdc.set(
+      ((clientX - rect.left) / rect.width) * 2 - 1,
+      -((clientY - rect.top) / rect.height) * 2 + 1,
+    )
+    this.raycaster.setFromCamera(this.pointerNdc, this.camera)
+    const targets: THREE.Object3D[] = []
+    for (const mesh of this.meshByName.values()) {
+      if (mesh.visible) targets.push(mesh)
+    }
+    const hits = this.raycaster.intersectObjects(targets, false)
+    let firstSolid: { hit: string; meshName: string; distance: number } | null = null
+    let firstHighlight: { hit: string; meshName: string; distance: number } | null = null
+    for (const hit of hits) {
+      const obj = hit.object
+      if (!(obj instanceof THREE.Mesh) || !obj.name) continue
+      const kind = this.kindByName.get(obj.name) ?? 'bone'
+      if (kind !== 'muscle' && kind !== 'bone') continue
+      const picked = { hit: classifyStudyMesh(obj.name, kind), meshName: obj.name, distance: hit.distance }
+      const mat = this.materials.get(obj.name)
+      const ghost = kind === 'muscle' && !!mat && mat.opacity < 0.4 && !this.studyHighlight.has(obj.name)
+      if (this.studyHighlight.has(obj.name) && !firstHighlight) firstHighlight = picked
+      if (!ghost && !firstSolid) firstSolid = picked
+      if (firstSolid && firstHighlight) break
+    }
+    // A ghost in front of the lit muscle should not steal the tap.
+    if (firstHighlight && (!firstSolid || firstHighlight.distance <= firstSolid.distance + 0.035)) {
+      return { hit: firstHighlight.hit, meshName: firstHighlight.meshName }
+    }
+    return firstSolid ? { hit: firstSolid.hit, meshName: firstSolid.meshName } : null
+  }
+
+  getStudyReport(): {
+    active: boolean
+    spinning: boolean
+    yaw: number
+    cue: LimbCue
+    pose: { primary: number; knee: number }
+    highlighted: string[]
+    camera: { x: number; y: number; z: number }
+    target: { x: number; y: number; z: number }
+    viewId: string
+    points: Record<string, { x: number; y: number; z: number } | null>
+    picks: Record<string, string | null>
+  } {
+    const round = (v: THREE.Vector3) => ({
+      x: +v.x.toFixed(4),
+      y: +v.y.toFixed(4),
+      z: +v.z.toFixed(4),
+    })
+    const centerOf = (name: string) => {
+      const mesh = this.meshByName.get(name)
+      if (!mesh) return null
+      mesh.updateWorldMatrix(true, false)
+      const box = new THREE.Box3().setFromObject(mesh)
+      if (box.isEmpty()) return null
+      return round(box.getCenter(new THREE.Vector3()))
+    }
+    const names = [
+      'femur_r',
+      'tibia_r',
+      'talus_r',
+      'humerus_r',
+      'radius_r',
+      ...this.studyHighlight,
+    ]
+    const points: Record<string, { x: number; y: number; z: number } | null> = {}
+    for (const name of names) points[name] = centerOf(name)
+    const picks: Record<string, string | null> = {}
+    const canvas = this.mainCanvas.getBoundingClientRect()
+    for (const name of this.studyHighlight) {
+      const mesh = this.meshByName.get(name)
+      if (!mesh || canvas.width <= 0) {
+        picks[name] = null
+        continue
+      }
+      mesh.updateWorldMatrix(true, false)
+      const center = new THREE.Box3().setFromObject(mesh).getCenter(new THREE.Vector3())
+      center.project(this.camera)
+      if (center.z > 1) {
+        picks[name] = null
+        continue
+      }
+      const sx = canvas.left + (center.x * 0.5 + 0.5) * canvas.width
+      const sy = canvas.top + (-center.y * 0.5 + 0.5) * canvas.height
+      picks[name] = this.pickStudy(sx, sy)?.hit ?? null
+    }
+    return {
+      active: this.studyCase,
+      spinning: this.spinning,
+      yaw: +this.spin.rotation.y.toFixed(4),
+      cue: this.studyCue,
+      pose: { primary: +this.studyPose.primary.toFixed(4), knee: +this.studyPose.knee.toFixed(4) },
+      highlighted: [...this.studyHighlight].sort(),
+      camera: round(this.camera.position),
+      target: round(this.controls.target),
+      viewId: this.lastViewId,
+      points,
+      picks,
+    }
+  }
+
+  private frameStudy(names: readonly string[], view: StudyFocus['view']): void {
+    this.holdUserOrbit = false
+    this.spinning = false
+    this.spin.rotation.y = 0
+    const token = ++this.frameToken
+    this.framePending = true
+    const present = names.filter((name) => this.meshByName.has(name))
+    this.frameWhenReady(present, view, token, 0, 'quiz')
+  }
+
+  private anchorPoint(name: string, end: PivotEnd, midline: number): THREE.Vector3 | null {
+    const mesh = this.meshByName.get(name)
+    if (!mesh) return null
+    mesh.updateWorldMatrix(true, false)
+    const box = new THREE.Box3().setFromObject(mesh)
+    if (box.isEmpty()) return null
+    const size = box.getSize(new THREE.Vector3())
+    const point = box.getCenter(new THREE.Vector3())
+    if (end === 'proximal') point.y = box.max.y - size.y * 0.06
+    if (end === 'distal') point.y = box.min.y + size.y * 0.06
+    point.x += size.x * midline
+    return point
+  }
+
+  private buildStudyPivots(cue: LimbCue): void {
+    let primary: THREE.Group | null = null
+    for (const spec of pivotsFor(cue)) {
+      const world = this.anchorPoint(spec.anchor, spec.end, spec.midline)
+      if (!world) continue
+      const pivot = new THREE.Group()
+      pivot.name = `study-pivot-${spec.id}`
+      pivot.rotation.order = 'XYZ'
+      const parent = spec.parent === 'primary' && primary ? primary : this.spin
+      parent.add(pivot)
+      parent.updateMatrixWorld(true)
+      pivot.position.copy(parent.worldToLocal(world.clone()))
+      pivot.updateMatrixWorld(true)
+      for (const bone of spec.bones) {
+        const mesh = this.meshByName.get(bone)
+        const meshParent = mesh?.parent
+        if (!mesh || !meshParent || meshParent === pivot) continue
+        this.studyHomes.push({ mesh, parent: meshParent })
+        pivot.attach(mesh)
+      }
+      this.studyPivots.push(pivot)
+      if (spec.id === 'primary') primary = pivot
+    }
+  }
+
+  private clearStudyPivots(): void {
+    this.studyMotion = null
+    for (const pivot of this.studyPivots) pivot.rotation.set(0, 0, 0)
+    for (const pivot of this.studyPivots) pivot.updateMatrixWorld(true)
+    for (const home of this.studyHomes) home.parent.attach(home.mesh)
+    this.studyHomes = []
+    for (const pivot of this.studyPivots) pivot.removeFromParent()
+    this.studyPivots = []
+    this.studyPose = limbPoseAt(this.studyCue, 0)
+  }
+
+  private applyStudyPose(pose: LimbPose): void {
+    this.studyPose = pose
+    const primary = this.studyPivots[0]
+    const knee = this.studyPivots[1]
+    if (primary) {
+      if (pose.axis === 'z') primary.rotation.set(0, 0, pose.primary)
+      else primary.rotation.set(pose.primary, 0, 0)
+    }
+    if (knee) knee.rotation.set(pose.knee, 0, 0)
+  }
+
+  private tickStudyMotion(dt: number): void {
+    const motion = this.studyMotion
+    if (!motion?.playing || !this.studyCase) return
+    motion.t += dt
+    const u = Math.min(1, motion.t / motion.duration)
+    this.applyStudyPose(limbPoseAt(motion.cue, u))
+    if (u >= 1) motion.playing = false
+  }
+
+  private applyStudyLook(): void {
+    const highlight = this.studyHighlight
+    const hide = this.studyHide
+    const context = this.studyContext
+    for (const [name, mat] of this.materials) {
+      const mesh = this.meshByName.get(name)
+      if (!mesh) continue
+      const kind = this.kindByName.get(name) ?? 'bone'
+      if (kind === 'ligament' || kind === 'cartilage' || name === 'diaphragm') {
+        mesh.visible = false
+        continue
+      }
+      if (kind === 'muscle') {
+        if (hide.has(name) && !highlight.has(name)) {
+          mesh.visible = false
+          continue
+        }
+        mesh.visible = true
+        if (highlight.has(name)) {
+          this.applyPalette(mat, MUSCLE_TARGET, { transparent: false, depthWrite: true })
+          mesh.renderOrder = 10
+        } else {
+          this.applyPalette(mat, MUSCLE_CONTEXT_FADE, { transparent: true, depthWrite: false })
+          mat.opacity = 0.1
+          mesh.renderOrder = 2
+        }
+        continue
+      }
+      mesh.visible = true
+      if (context.has(name)) {
+        this.applyPalette(mat, VIEW_BONE, { transparent: false, depthWrite: true })
+        mesh.renderOrder = 2
+      } else {
+        this.applyPalette(mat, BONE_CONTEXT_FADE, { transparent: true, depthWrite: false })
+        mat.opacity = 0.07
+        mesh.renderOrder = 0
+      }
+    }
+  }
+
   dispose(): void {
     this.disposed = true
     this.cancelViewFrame()
     window.removeEventListener('resize', this.resize)
     this.clearViewMarkers()
+    this.clearStudyPivots()
     this.clearAnkleLabels()
     this.ankleLabelGroup.removeFromParent()
     this.controls.dispose()

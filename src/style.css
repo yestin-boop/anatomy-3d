@@ -1689,6 +1689,89 @@ html.ankle-case .gloss-line {
 html.ankle-case .gloss-line.is-wrong { color: var(--wrong); }
 html.ankle-case .footer-bar,
 html.ankle-case .footer-attr { display: none; }
+
+/* Sport and hamstring. Caption under the model, not a card, and never over the top HUD.
+   The type line keeps the existing HUD and drops the raised panel. */
+html.study-quiet .case-panel {
+  top: auto;
+  bottom: max(22px, env(safe-area-inset-bottom));
+  left: max(var(--space-3), env(safe-area-inset-left));
+  width: min(440px, calc(100vw - var(--space-5)));
+  max-height: min(38vh, 300px);
+  padding: 0 0 var(--space-4);
+  background: transparent;
+  border: 0;
+  box-shadow: none;
+  backdrop-filter: none;
+}
+html.study-quiet .case-kicker,
+html.study-quiet .case-panel h2,
+html.study-quiet .case-body p {
+  text-shadow: var(--text-halo);
+}
+html.study-quiet .case-body {
+  max-height: min(24vh, 180px);
+  padding-bottom: var(--space-2);
+  scroll-padding-bottom: var(--space-2);
+}
+html.study-quiet .case-btn {
+  background: transparent;
+  color: var(--accent);
+  border: 0;
+  box-shadow: none;
+  padding-left: 0;
+  padding-right: var(--space-3);
+}
+html.study-quiet .case-btn--ghost {
+  color: var(--text-secondary);
+  border: 0;
+}
+html.study-quiet .prompt-block {
+  background: transparent;
+  border: 0;
+  box-shadow: none;
+  backdrop-filter: none;
+}
+html.study-quiet .target-word {
+  font-size: clamp(1.2rem, 4.6vw, 2.05rem);
+  white-space: normal;
+}
+html.study-quiet .target-word.is-long {
+  font-size: clamp(1rem, 3.1vw, 1.4rem);
+  line-height: 1.25;
+}
+html.study-quiet .footer-bar { display: none; }
+html.study-quiet .footer-attr {
+  /* Fixed to the viewport so the Mac left-cluster rule cannot leave this
+     over Next / Replay on the transparent desktop caption. */
+  position: fixed;
+  z-index: 1;
+  top: auto;
+  bottom: 2px;
+  left: auto;
+  right: max(8px, env(safe-area-inset-right));
+  width: min(260px, 70vw);
+  text-align: right;
+  font-size: var(--type-caption);
+  line-height: 1.25;
+  letter-spacing: 0;
+  opacity: 0.4;
+  text-transform: none;
+  display: block;
+}
+@media (min-width: 901px) {
+  html.study-quiet .footer-cluster .footer-attr {
+    position: fixed;
+    left: auto;
+    right: max(8px, env(safe-area-inset-right));
+    bottom: max(2px, env(safe-area-inset-bottom));
+    width: min(260px, 28vw);
+    max-width: min(260px, 28vw);
+    text-align: right;
+    font-size: var(--type-caption);
+    opacity: 0.4;
+  }
+}
 html.touch-quiz.phone-landscape .case-quiz .gloss-line,
 html.touch-quiz.phone-landscape .case-quiz .type-label {
   display: block !important;
@@ -1733,6 +1816,31 @@ html.touch-quiz.phone-landscape.ankle-case .target-word {
   }
   .case-body {
     max-height: calc(100dvh - max(var(--space-3), env(safe-area-inset-top)) - var(--target-min) - var(--space-2) - var(--space-3) - 12rem);
+  }
+  html.study-quiet .case-panel {
+    top: auto;
+    bottom: max(28px, env(safe-area-inset-bottom));
+    left: max(var(--space-5), env(safe-area-inset-left));
+    width: min(420px, 32vw);
+    max-height: min(48vh, 460px);
+  }
+  html.study-quiet .case-body {
+    max-height: min(34vh, 300px);
+  }
+}
+@media (max-width: 900px) {
+  /* The caption sits above a quiet licence line so Next is not covered. */
+  html.study-quiet .case-panel {
+    bottom: calc(max(4px, env(safe-area-inset-bottom)) + 3.6rem);
+  }
+  html.study-quiet .footer-attr {
+    left: var(--space-3);
+    right: var(--space-3);
+    width: auto;
+    bottom: max(4px, env(safe-area-inset-bottom));
+    text-align: center;
+    max-height: 2.8em;
+    overflow: hidden;
   }
 }
 

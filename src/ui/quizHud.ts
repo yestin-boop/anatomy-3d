@@ -6,7 +6,7 @@
 
 export type LevelId = 'see' | 'hint' | 'memory'
 export type PlayModeId = 'combined' | LevelId
-export type QuizSubject = 'bones' | 'muscles' | 'rehab'
+export type QuizSubject = 'bones' | 'muscles' | 'rehab' | 'sport'
 export type QuizActivity =
   | 'view'
   | 'learn'
@@ -75,6 +75,7 @@ const SUBJECT_LABEL: Record<QuizSubject, string> = {
   bones: 'Bones',
   muscles: 'Muscles',
   rehab: 'Rehab',
+  sport: 'Sport',
 }
 
 /** One context line, e.g. "Rehab · type it" or "Bones · memory". */
