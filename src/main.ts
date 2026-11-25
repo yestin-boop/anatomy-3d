@@ -43,9 +43,14 @@ import { insetsChanged, type FramingInsets } from './scene/framing'
 import { playCorrectChime, playKeyTap, playWrongTick, unlockAudio } from './audio/chime'
 import { getBoneView, getCartilageView, getMuscleView, type ViewAttachmentSite, type ViewSide } from './data/viewInfo'
 import {
+  armKeyboardSession,
+  initialKeyboardSession,
   probeTouchQuiz,
+  resolveKeyboardInset,
   sanitizeTypedInput,
   shouldUseNativeSoftKeyboard,
+  type KeyboardSession,
+  type KeyboardViewport,
 } from './input/quizKeyboard'
 import { tapCueFor, untypedLetterClass, wrongMarkHtml } from './ui/wordMarks'
 
@@ -2019,7 +2024,9 @@ function endCanvasKeyboardRetain(): void {
 }
 
 hiddenInput.addEventListener('focus', () => {
+  armKeyboardLift()
   syncTapHint()
+  scheduleKeyboardResync()
 })
 
 hiddenInput.addEventListener('blur', () => {
@@ -2027,7 +2034,9 @@ hiddenInput.addEventListener('blur', () => {
     focusInputNow()
     return
   }
+  disarmKeyboardLift()
   syncTapHint()
+  scheduleKeyboardResync()
 })
 
 hiddenInput.addEventListener('input', () => {
@@ -2075,7 +2084,14 @@ promptBlock.addEventListener('pointerdown', (e) => {
   // path can cancel the focus and drop the iOS keyboard.
   if ((e.target as HTMLElement | null)?.closest('#answer')) {
     void unlockAudio()
-    if (state.finished) showMenu()
+    if (state.finished) {
+      showMenu()
+      return
+    }
+    // The word is the field. A second tap can reopen the iOS keyboard
+    // without a focus event when the field never blurred. Arm anyway.
+    armKeyboardLift()
+    scheduleKeyboardResync()
     return
   }
   e.preventDefault()
@@ -2084,7 +2100,9 @@ promptBlock.addEventListener('pointerdown', (e) => {
     showMenu()
     return
   }
+  armKeyboardLift()
   focusInput()
+  scheduleKeyboardResync()
 })
 
 skipBtn.addEventListener('pointerdown', (e) => {
@@ -2094,8 +2112,17 @@ skipBtn.addEventListener('pointerdown', (e) => {
   revealAnswer()
 })
 
-/** QA can pin a keyboard height. Null uses the real visualViewport overlap. */
+/** QA can pin a keyboard height. Null measures the visual viewport. */
 let forcedKeyboardInset: number | null = null
+/**
+ * QA feeds the viewport numbers Safari would report, including the second
+ * open where every number still looks like the keyboard is closed.
+ */
+let keyboardProbe: KeyboardViewport | null = null
+let keyboardProbeFocused: boolean | null = null
+let keyboardSession: KeyboardSession = initialKeyboardSession(window.innerHeight)
+let keyboardResyncTimers: number[] = []
+let keyboardCloseTimer = 0
 const ZERO_FRAME_INSETS: FramingInsets = { top: 0, right: 0, bottom: 0, left: 0 }
 let appliedInsets: FramingInsets = { top: -1, right: -1, bottom: -1, left: -1 }
 let appliedFraming = false
@@ -2114,24 +2141,84 @@ function syncHudChrome(): void {
   document.documentElement.classList.toggle('keyboard-open', currentKeyboardInset() > 40)
 }
 
-function syncKeyboardInset(): void {
-  const vv = window.visualViewport
-  if (forcedKeyboardInset != null) {
-    document.documentElement.style.setProperty('--keyboard-inset', `${Math.round(forcedKeyboardInset)}px`)
-  } else if (vv) {
-    // iOS may try to scroll a focused field into view; pin the layout viewport
-    // so --keyboard-inset is the only lift for the prompt and Skip.
-    if (touchQuiz && (window.scrollX || window.scrollY)) window.scrollTo(0, 0)
-    const overlap = Math.max(0, window.innerHeight - vv.offsetTop - vv.height)
-    const inset = Math.min(overlap, window.innerHeight * 0.62)
-    document.documentElement.style.setProperty('--keyboard-inset', `${Math.round(inset)}px`)
+function armKeyboardLift(): void {
+  keyboardSession = armKeyboardSession(keyboardSession)
+  if (keyboardCloseTimer) {
+    window.clearTimeout(keyboardCloseTimer)
+    keyboardCloseTimer = 0
   }
+}
+
+function disarmKeyboardLift(): void {
+  keyboardProbeFocused = null
+  if (keyboardCloseTimer) {
+    window.clearTimeout(keyboardCloseTimer)
+    keyboardCloseTimer = 0
+  }
+}
+
+function readKeyboardViewport(): KeyboardViewport {
+  if (keyboardProbe) return keyboardProbe
+  const vv = window.visualViewport
+  return {
+    innerHeight: window.innerHeight,
+    visualHeight: vv?.height ?? window.innerHeight,
+    offsetTop: vv?.offsetTop ?? 0,
+    scrollY: window.scrollY || document.documentElement.scrollTop || 0,
+  }
+}
+
+function keyboardFieldFocused(): boolean {
+  if (keyboardProbeFocused != null) return keyboardProbeFocused
+  return document.activeElement === hiddenInput
+}
+
+function syncKeyboardInset(confirmClose = false): void {
+  // Read the pan before pinning. iOS scrolls a bottom field into view; we
+  // undo that scroll so the top chrome stays, and the inset has to replace it.
+  const viewport = readKeyboardViewport()
+  if (!keyboardProbe && touchQuiz && (window.scrollX || window.scrollY)) window.scrollTo(0, 0)
+
+  let inset: number
+  if (forcedKeyboardInset != null) {
+    inset = Math.round(forcedKeyboardInset)
+  } else {
+    const decision = resolveKeyboardInset(viewport, keyboardSession, {
+      focused: keyboardFieldFocused(),
+      touch: touchQuiz,
+      forcedInset: null,
+      confirmClose,
+    })
+    keyboardSession = decision.session
+    inset = decision.inset
+    if (decision.pendingClose && !confirmClose) {
+      if (!keyboardCloseTimer) {
+        keyboardCloseTimer = window.setTimeout(() => {
+          keyboardCloseTimer = 0
+          syncKeyboardInset(true)
+        }, 220)
+      }
+    } else if (keyboardCloseTimer) {
+      window.clearTimeout(keyboardCloseTimer)
+      keyboardCloseTimer = 0
+    }
+  }
+  document.documentElement.style.setProperty('--keyboard-inset', `${inset}px`)
   syncHudChrome()
   scheduleFramingSync()
 }
+
+/** Focus and viewport events both arrive before Safari's numbers settle. */
+function scheduleKeyboardResync(): void {
+  for (const id of keyboardResyncTimers) window.clearTimeout(id)
+  keyboardResyncTimers = [0, 50, 150, 350, 700].map((ms) =>
+    window.setTimeout(() => syncKeyboardInset(), ms),
+  )
+}
+
 if (window.visualViewport) {
-  window.visualViewport.addEventListener('resize', syncKeyboardInset)
-  window.visualViewport.addEventListener('scroll', syncKeyboardInset)
+  window.visualViewport.addEventListener('resize', () => syncKeyboardInset())
+  window.visualViewport.addEventListener('scroll', () => syncKeyboardInset())
   syncKeyboardInset()
 }
 
@@ -2243,8 +2330,7 @@ function scheduleFramingSync(): void {
 }
 
 window.addEventListener('resize', () => {
-  syncHudChrome()
-  scheduleFramingSync()
+  syncKeyboardInset()
 })
 syncHudChrome()
 viewPanel.addEventListener('transitionend', scheduleFramingSync)
@@ -2668,13 +2754,20 @@ function qaEntry(subject: 'bones' | 'muscles', id: string): ViewSelection {
   }
 }
 
+function pinForcedKeyboard(px: number): void {
+  forcedKeyboardInset = px
+  keyboardProbe = null
+  keyboardProbeFocused = null
+  syncKeyboardInset()
+}
+
 async function qaShowQuiz(
   subject: 'bones' | 'muscles',
   id: string,
   keyboardPx: number,
+  level: Level = 'memory',
 ): Promise<FramingReport> {
-  forcedKeyboardInset = keyboardPx
-  syncKeyboardInset()
+  pinForcedKeyboard(keyboardPx)
   if (state.viewing) {
     scene.exitView()
     state.viewing = false
@@ -2684,8 +2777,8 @@ async function qaShowQuiz(
   state.finished = false
   state.revealing = false
   state.viewing = false
-  state.mode = 'memory'
-  state.levels = ['memory']
+  state.mode = level
+  state.levels = [level]
   state.levelIndex = 0
   state.typed = ''
   state.correct = 0
@@ -2721,8 +2814,7 @@ async function qaShowQuiz(
 }
 
 async function qaShowView(subject: 'bones' | 'muscles', id: string): Promise<FramingReport> {
-  forcedKeyboardInset = 0
-  syncKeyboardInset()
+  pinForcedKeyboard(0)
   scene.setLook('solid')
   if (!state.viewing) await startView()
   scene.setLook('solid')
@@ -2759,8 +2851,7 @@ async function qaShowAnkle(
   mode: 'menu' | 'learn' | 'motion' | 'injury' | 'ligaments' | 'type' | 'tap' | 'palpation',
   keyboardPx = 0,
 ): Promise<Record<string, unknown>> {
-  forcedKeyboardInset = keyboardPx
-  syncKeyboardInset()
+  pinForcedKeyboard(keyboardPx)
   if (mode === 'menu') {
     showMenu()
     const btn = btnAnkleCase
@@ -2820,12 +2911,74 @@ async function qaShowAnkle(
   }
 }
 
+function qaTypeBar(): Record<string, unknown> {
+  const prompt = promptBlock.getBoundingClientRect()
+  const skip = skipBtn.getBoundingClientRect()
+  const word = targetWord.getBoundingClientRect()
+  const inputStyle = getComputedStyle(hiddenInput)
+  const wordStyle = getComputedStyle(targetWord)
+  const hintStyle = getComputedStyle(tapHint)
+  return {
+    inset: currentKeyboardInset(),
+    innerHeight: window.innerHeight,
+    promptBottom: Math.round(prompt.bottom),
+    skipBottom: Math.round(skip.bottom),
+    wordTop: Math.round(word.top),
+    wordBottom: Math.round(word.bottom),
+    wordHeight: Math.round(word.height),
+    hudHidden: playHud.hidden,
+    skipHidden: skipBtn.hidden,
+    menuHidden: menuOverlay.hidden,
+    caseHidden: casePanel.hidden,
+    caseTitle: caseTitle.textContent ?? '',
+    tapText: (tapHint.textContent ?? '').trim(),
+    tapVisible: hintStyle.display !== 'none' && tapHint.classList.contains('is-visible'),
+    label: (typeLabel.textContent ?? '').trim(),
+    prompt: (glossLine.textContent ?? '').trim(),
+    wordText: (targetWord.textContent ?? '').replace(/\s+/g, ' ').trim(),
+    wordFont: Number.parseFloat(wordStyle.fontSize),
+    inputBorder: inputStyle.borderTopWidth,
+    inputColor: inputStyle.color,
+    inputFill: inputStyle.getPropertyValue('-webkit-text-fill-color') || inputStyle.color,
+    focused: document.activeElement === hiddenInput,
+  }
+}
+
+function qaSetKeyboardViewport(probe: {
+  innerHeight: number
+  visualHeight: number
+  offsetTop: number
+  scrollY: number
+  focused: boolean
+  arm: boolean
+} | null): Record<string, unknown> {
+  forcedKeyboardInset = null
+  if (!probe) {
+    keyboardProbe = null
+    keyboardProbeFocused = null
+    syncKeyboardInset()
+    return qaTypeBar()
+  }
+  keyboardProbe = {
+    innerHeight: probe.innerHeight,
+    visualHeight: probe.visualHeight,
+    offsetTop: probe.offsetTop,
+    scrollY: probe.scrollY,
+  }
+  keyboardProbeFocused = probe.focused
+  if (probe.arm) armKeyboardLift()
+  syncKeyboardInset()
+  return qaTypeBar()
+}
+
 function installQaHooks(): void {
   const api = {
     showQuiz: qaShowQuiz,
     showView: qaShowView,
     showCommonBones: qaShowCommonBones,
     showAnkle: qaShowAnkle,
+    typeBar: qaTypeBar,
+    setKeyboardViewport: qaSetKeyboardViewport,
     report: () => scene.getFramingReport(),
     ankleReport: () => scene.getAnkleReport(),
     simulateControlsEnd: () => {
