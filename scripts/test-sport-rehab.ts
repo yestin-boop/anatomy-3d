@@ -23,6 +23,8 @@ import {
 } from '../src/data/hamstringStrain.ts'
 import { RIGHT_FOOT_BONES } from '../src/data/ankleSprain.ts'
 import {
+  KICK_HIP,
+  KICK_KNEE,
   LATE_SWING_HIP,
   LATE_SWING_KNEE,
   limbPoseAt,
@@ -32,6 +34,7 @@ import {
   RIGHT_LEG_DISTAL,
   RIGHT_LIMB_BONES,
 } from '../src/scene/limbCue.ts'
+import { seatInfluence, type SeatBox } from '../src/scene/muscleSeat.ts'
 import {
   shouldResumeIdleSpinAfterControlsEnd,
   shouldResumeIdleSpinOnMenuOrExitView,
@@ -174,7 +177,16 @@ assert(actionCopy.includes('lifts the front of the foot'), 'learn keeps tibialis
 assert(actionCopy.includes('chief abductor of the arm'), 'learn keeps the deltoid phrase')
 assert(actionCopy.includes('chief supinator'), 'learn keeps the biceps phrase')
 assert(actionCopy.includes('chief extensor of the elbow'), 'learn keeps the triceps phrase')
+assert(actionCopy.includes('moves with the limb'), 'learn says the muscle moves with the limb')
+assert(!actionCopy.includes('stays in its resting shape'), 'learn does not claim the muscle stays at rest')
 assert(!/lisfranc|pcl|whiplash|high ankle|shoulder dislocation/i.test(actionCopy), 'sport learn does not add other injuries')
+assert(ACTION_LEARN.find((card) => card.id === 'thigh')?.focus.cue === 'kick', 'knee and hip plays the kick')
+assert(ACTION_QUIZ.find((step) => step.id === 'type-rectus')?.focus.cue === 'kick', 'rectus quiz plays the kick')
+assert(ACTION_QUIZ.find((step) => step.id === 'tap-vastus-lat')?.focus.cue === 'knee-extend', 'vastus quiz shows knee extension')
+assert(ACTION_QUIZ.find((step) => step.id === 'type-triceps')?.focus.cue === 'elbow-extend', 'triceps quiz shows elbow extension')
+for (const card of ACTION_LEARN) {
+  if (card.motion) assert(card.focus.cue !== 'none', `${card.id} motion has a cue`)
+}
 
 assert(HAMSTRING_QUIZ.length >= 6 && HAMSTRING_QUIZ.length <= 10, `hamstring quiz stays tight, got ${HAMSTRING_QUIZ.length}`)
 for (const id of ['biceps_femoris', 'semitendinosus', 'semimembranosus'] as const) {
@@ -195,6 +207,9 @@ assert(hamCopy.includes('Nordic hamstring curls'), 'phase 2 names Nordic hamstri
 assert(hamCopy.toLowerCase().includes('away from the painful site'), 'TOTAPS starts away from the painful site')
 assert(hamCopy.toLowerCase().includes('ischial tuberosity'), 'the shared origin is named')
 assert(hamCopy.toLowerCase().includes('teaching pathway, not a date'), 'phase ranges are not clearance dates')
+assert(hamCopy.includes('move with the limb'), 'hamstring learn moves the muscles with the limb')
+assert(!hamCopy.includes('stay in their resting shape'), 'hamstring learn does not claim the meshes stay at rest')
+assert(HAMSTRING_LEARN.find((card) => card.id === 'mechanism')?.focus.cue === 'late-swing', 'mechanism lesson still swings the thigh')
 assert(!/lisfranc|pcl\b|whiplash|high ankle|achilles rupture|ottawa|surgery is required/i.test(hamCopy), 'hamstring learn does not invent other injuries')
 
 const anyHam = tapStep(HAMSTRING_QUIZ, 'tap-hamstring') as HamTapStep
@@ -249,13 +264,42 @@ assert(limbPoseAt('knee-flex', 1).primary > 0.4, 'knee flexion swings the leg ba
 assert(limbPoseAt('elbow-flex', 1).primary < -0.4, 'elbow flexion brings the hand forward')
 assert(limbPoseAt('hip-abduct', 1).axis === 'z' && limbPoseAt('hip-abduct', 1).primary < 0, 'right hip abduction is −Z')
 assert(limbPoseAt('hip-extend', 1).primary > 0.2, 'hip extension swings the thigh back')
-assert(limbPoseAt('arm-abduct', 1).primary < 0, 'right arm abduction is outward')
+assert(limbPoseAt('hip-flex', 1).primary < -0.6, 'hip flexion is large enough to read')
+assert(Math.abs(limbPoseAt('elbow-flex', 1).primary) > 1, 'elbow flexion is a clear bend')
+assert(limbPoseAt('arm-abduct', 1).primary < -0.5, 'arm abduction lifts the arm clear of the side')
 const late = limbPoseAt('late-swing', 1)
 assert(late.primary === LATE_SWING_HIP && late.primary < 0, 'late swing flexes the hip')
-assert(late.knee === LATE_SWING_KNEE && late.knee > 0, 'late swing keeps a little knee flexion')
+assert(late.knee === LATE_SWING_KNEE && late.knee > 0 && late.knee < 0.45, 'late swing keeps a little knee flexion')
 assert(limbPoseAt('none', 1).primary === 0, 'no cue stays still')
+const kick0 = limbPoseAt('kick', 0)
+const kick1 = limbPoseAt('kick', 1)
+assert(kick0.primary === 0 && kick0.knee === KICK_KNEE && kick0.knee > 0.6, 'kick starts with the knee bent')
+assert(kick1.primary === KICK_HIP && kick1.primary < -0.6 && kick1.knee === 0, 'kick ends with the hip flexed and the knee extended')
+const kneeExt0 = limbPoseAt('knee-extend', 0)
+const kneeExt1 = limbPoseAt('knee-extend', 1)
+assert(kneeExt0.primary > 0.6 && kneeExt1.primary === 0, 'knee extension starts bent and finishes straight')
+const elbowExt0 = limbPoseAt('elbow-extend', 0)
+const elbowExt1 = limbPoseAt('elbow-extend', 1)
+assert(elbowExt0.primary < -0.6 && elbowExt1.primary === 0, 'elbow extension starts bent and finishes straight')
+const kickPivots = pivotsFor('kick')
+assert(kickPivots[0]?.bones.includes('femur_r') && !kickPivots[0]?.bones.includes('tibia_r'), 'kick hip pivot is the femur')
+assert(kickPivots[1]?.bones.includes('tibia_r') && !kickPivots[1]?.bones.includes('femur_r'), 'kick knee pivot is the shin')
+assert(pivotsFor('knee-extend').every((spec) => !spec.bones.includes('femur_r')), 'knee extension leaves the thigh bone still')
+assert(
+  pivotsFor('elbow-extend').some((spec) => spec.bones.includes('radius_r') && !spec.bones.includes('humerus_r')),
+  'elbow extension moves the forearm',
+)
 
-for (const cue of ['plantarflex', 'dorsiflex', 'knee-flex', 'elbow-flex', 'hip-abduct', 'hip-extend', 'hip-flex', 'arm-abduct', 'late-swing'] as const) {
+const femurBox: SeatBox = { pivot: 0, minX: -0.4, maxX: -0.15, minY: 0.2, maxY: 1, minZ: -0.08, maxZ: 0.08 }
+const pelvisBox: SeatBox = { pivot: -1, minX: -0.25, maxX: 0.25, minY: 1.08, maxY: 1.5, minZ: -0.2, maxZ: 0.2 }
+const onFemur = seatInfluence([femurBox, pelvisBox], -0.25, 0.6, 0)
+assert(onFemur.pivotA === 0 && onFemur.t === 0, 'a mid-thigh point follows the femur pivot')
+const onPelvis = seatInfluence([femurBox, pelvisBox], 0, 1.25, 0)
+assert(onPelvis.pivotA === -1 && onPelvis.t === 0, 'a pelvic point stays in rest space')
+const atHip = seatInfluence([femurBox, pelvisBox], -0.2, 1.04, 0)
+assert(atHip.t > 0.2 && atHip.t < 0.51, 'the hip joint blends the two bones')
+
+for (const cue of ['plantarflex', 'dorsiflex', 'knee-flex', 'knee-extend', 'elbow-flex', 'elbow-extend', 'hip-abduct', 'hip-extend', 'hip-flex', 'arm-abduct', 'kick', 'late-swing'] as const) {
   for (const spec of pivotsFor(cue)) {
     for (const bone of spec.bones) assert(bone.endsWith('_r'), `${cue} only moves right-side ${bone}`)
   }

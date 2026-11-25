@@ -23,7 +23,7 @@ export type ActionLearnCard = {
   title: string
   paragraphs: string[]
   focus: StudyFocus
-  /** Play the bone cue once. The muscle mesh stays in its rest pose. */
+  /** Play the bone cue. The lit muscle rides the moving limb. */
   motion: boolean
 }
 
@@ -85,18 +85,18 @@ function focus(
   return { highlight: meshes, frame: meshes, hide, context, view, cue }
 }
 
-const GLUT_MED = focus('gluteus_medius', 'posterior-lateral', 'hip-abduct', ['glut_max_r'], HIP)
+const GLUT_MED = focus('gluteus_medius', 'posterior', 'hip-abduct', ['glut_max_r'], HIP)
 const GLUT_MIN = focus('gluteus_minimus', 'posterior', 'hip-abduct', ['glut_max_r', 'glut_med_r'], HIP)
-const GLUT_MAX = focus('gluteus_maximus', 'posterior', 'hip-extend', [], HIP)
-const RECTUS = focus('rectus_femoris', 'anterior', 'hip-flex', ['sartorius_r'], THIGH)
-const VASTUS_LAT = focus('vastus_lateralis', 'anterior-lateral', 'none', ['sartorius_r'], THIGH)
-const GASTROC = focus('gastrocnemius', 'posterior', 'plantarflex', [], LEG)
-const SOLEUS = focus('soleus', 'posterior', 'plantarflex', ['gastroc_lat_r', 'gastroc_med_r'], LEG)
-const TIB_ANT = focus('tibialis_anterior', 'anterior', 'dorsiflex', [], LEG)
-const BICEPS_FEM = focus('biceps_femoris', 'posterior', 'knee-flex', ['glut_max_r'], THIGH)
-const DELTOID = focus('deltoid', 'posterior-lateral', 'arm-abduct', [], ARM)
+const GLUT_MAX = focus('gluteus_maximus', 'lateral', 'hip-extend', [], HIP)
+const RECTUS = focus('rectus_femoris', 'lateral', 'kick', ['sartorius_r'], THIGH)
+const VASTUS_LAT = focus('vastus_lateralis', 'lateral', 'knee-extend', ['sartorius_r'], THIGH)
+const GASTROC = focus('gastrocnemius', 'lateral', 'plantarflex', [], LEG)
+const SOLEUS = focus('soleus', 'lateral', 'plantarflex', ['gastroc_lat_r', 'gastroc_med_r'], LEG)
+const TIB_ANT = focus('tibialis_anterior', 'lateral', 'dorsiflex', [], LEG)
+const BICEPS_FEM = focus('biceps_femoris', 'lateral', 'knee-flex', ['glut_max_r'], THIGH)
+const DELTOID = focus('deltoid', 'posterior', 'arm-abduct', [], ARM)
 const BICEPS = focus('biceps_brachii', 'lateral', 'elbow-flex', [], ARM)
-const TRICEPS = focus('triceps_brachii', 'posterior', 'none', [], ARM)
+const TRICEPS = focus('triceps_brachii', 'lateral', 'elbow-extend', [], ARM)
 
 export const ACTION_LEARN: readonly ActionLearnCard[] = [
   {
@@ -107,7 +107,7 @@ export const ACTION_LEARN: readonly ActionLearnCard[] = [
     focus: BICEPS,
     paragraphs: [
       'A muscle pulls on the bones it crosses, and the joint moves. The muscle is lit on the model. You type the movement, or you tap the muscle that does it.',
-      'The bones can show a short movement. The muscle mesh stays in its resting shape.',
+      'The bones show a short movement, and the lit muscle moves with the limb. The mesh does not shorten fibre by fibre.',
     ],
   },
   {
