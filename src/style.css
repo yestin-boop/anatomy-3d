@@ -52,26 +52,117 @@ html, body {
   right: 0;
   z-index: 4;
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-start;
   padding: max(var(--space-3), env(safe-area-inset-top)) var(--space-4) var(--space-2);
   pointer-events: none;
-  gap: var(--space-3);
+  gap: var(--space-2);
 }
-.chrome-left, .chrome-right, .chrome-center {
+.chrome--top.is-sheet { z-index: 6; }
+.chrome-left, .chrome-center {
   display: flex;
   align-items: center;
   gap: var(--space-2);
 }
+.chrome-left { position: static; pointer-events: auto; flex: 0 0 auto; }
 .chrome-center {
   font-size: var(--type-label);
   letter-spacing: 0.06em;
   text-transform: uppercase;
   color: var(--text-secondary);
-  gap: 1.4rem;
+  gap: var(--space-3);
 }
-.chrome-center strong { color: var(--text-primary); font-weight: 600; }
-.chrome-right { pointer-events: auto; }
+.chrome-center strong { color: var(--text-primary); font-weight: 600; font-variant-numeric: tabular-nums; }
+.menu-word { white-space: nowrap; }
+.menu-sheet {
+  position: absolute;
+  top: calc(100% + var(--space-2));
+  left: 0;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  min-width: 180px;
+  padding: var(--space-2);
+  border-radius: var(--radius-md);
+  pointer-events: auto;
+}
+.menu-sheet[hidden] { display: none !important; }
+.menu-sheet-btn {
+  appearance: none;
+  min-height: var(--target-min);
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-subtle);
+  background: transparent;
+  color: var(--text-primary);
+  font: 600 var(--type-label)/1.2 var(--font);
+  text-align: left;
+  cursor: pointer;
+}
+.menu-sheet-btn:active { transform: scale(0.985); }
+.chrome-context {
+  flex: 1 1 240px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2) var(--space-3);
+  min-width: 0;
+  min-height: var(--target-min);
+  padding: 0 var(--space-3);
+  border-radius: var(--radius-pill);
+  pointer-events: auto;
+}
+.quiz-context {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: var(--type-label);
+  font-weight: 600;
+  line-height: 1.2;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.quiz-meter {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex: 0 1 200px;
+  margin-left: auto;
+  min-width: 0;
+}
+.quiz-meter[hidden] { display: none !important; }
+.quiz-progress {
+  flex: 0 0 72px;
+  width: 72px;
+  height: 4px;
+  border-radius: var(--radius-pill);
+  background: var(--border-subtle);
+  overflow: hidden;
+}
+.quiz-progress-fill {
+  display: block;
+  height: 100%;
+  width: 0;
+  background: var(--accent);
+  border-radius: var(--radius-pill);
+}
+.quiz-count {
+  font-size: var(--type-label);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+.quiz-round {
+  font-size: var(--type-caption);
+  color: var(--text-tertiary);
+  white-space: nowrap;
+}
+.quiz-round[hidden] { display: none !important; }
+.quiz-look { pointer-events: auto; flex: 0 0 auto; }
 
 .pill {
   display: inline-flex;
@@ -120,14 +211,28 @@ html, body {
   pointer-events: auto;
   width: min(420px, 92vw);
   max-height: calc(100dvh - 48px);
-  overflow-y: auto;
-  padding: 22px 22px 20px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  padding: 0;
   border-radius: var(--radius-md);
   background: var(--surface-raised);
   border: 1px solid var(--border-subtle);
   backdrop-filter: blur(20px) saturate(140%);
   box-shadow: var(--shadow-panel);
+}
+.menu-scroll {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 22px 22px var(--space-3);
   scrollbar-width: thin;
+}
+.menu-start {
+  flex: 0 0 auto;
+  padding: var(--space-3) 22px max(20px, env(safe-area-inset-bottom));
+  background: var(--surface-overlay);
+  border-top: 1px solid var(--border-subtle);
 }
 
 .menu-header h1 {
@@ -247,6 +352,10 @@ html, body {
 .mode-card--on .mode-key {
   color: var(--accent);
   border-color: var(--accent);
+}
+.mode-card--dim,
+.mode-grid--levels.is-dimmed .mode-card:not(.mode-card--on) {
+  opacity: 0.5;
 }
 .mode-card--disabled { opacity: 0.4; cursor: not-allowed; }
 .mode-card:active:not(:disabled) { transform: scale(0.985); }
@@ -387,7 +496,22 @@ html, body {
   border-radius: 6px;
   padding: 3px 6px;
 }
-.start-btn:active { transform: scale(0.985); }
+.start-btn:active:not(:disabled) { transform: scale(0.985); }
+.start-btn:disabled {
+  background: var(--surface-overlay);
+  color: var(--text-tertiary);
+  box-shadow: none;
+  border: 1px solid var(--border-subtle);
+  cursor: default;
+}
+.start-reason {
+  margin: 0 0 var(--space-2);
+  font-size: var(--type-caption);
+  line-height: 1.4;
+  color: var(--text-tertiary);
+  text-align: center;
+}
+.start-reason[hidden] { display: none !important; }
 
 /* —— Play HUD / typing —— */
 .hud {
@@ -406,21 +530,28 @@ html, body {
 html.touch-quiz .hud {
   padding: 0 var(--space-3) max(var(--space-3), env(safe-area-inset-bottom), calc(var(--keyboard-inset, 0px) + var(--space-3)));
 }
-html.touch-quiz .tap-hint { display: none; }
 html.touch-quiz .tap-hint.is-visible { display: block; }
 html.touch-quiz .type-label { margin-bottom: var(--space-1); }
 html.touch-quiz .gloss-line { margin-top: var(--space-1); }
-html.touch-quiz .skip-btn { margin-top: var(--space-2); }
+html.touch-quiz .answer-actions { margin-top: var(--space-2); }
 html.touch-quiz .target-word {
   font-size: clamp(var(--type-prompt-min), 7vw, var(--type-prompt-max));
 }
 .hud[hidden] { display: none !important; }
 
+.panel {
+  background: var(--surface-raised);
+  border: 1px solid var(--border-subtle);
+  backdrop-filter: blur(20px) saturate(140%);
+}
 .prompt-block {
   text-align: center;
   width: min(760px, 94vw);
   pointer-events: auto;
   cursor: text;
+  padding: var(--space-4) var(--space-4) var(--space-3);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-case);
 }
 .type-label {
   font-size: var(--type-caption);
@@ -521,6 +652,7 @@ html.touch-quiz .target-word {
 }
 
 .tap-hint {
+  display: none;
   margin: var(--space-4) 0 0;
   font-size: var(--type-caption);
   letter-spacing: 0.06em;
@@ -528,9 +660,17 @@ html.touch-quiz .target-word {
   color: var(--text-tertiary);
 }
 
+.answer-actions {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin-top: var(--space-4);
+}
 .skip-btn {
   appearance: none;
-  margin: var(--space-4) auto 0;
+  margin: 0;
   min-height: var(--target-min);
   min-width: var(--target-min);
   padding: var(--space-3) 18px;
@@ -547,13 +687,28 @@ html.touch-quiz .target-word {
   gap: var(--space-2);
   backdrop-filter: blur(20px) saturate(140%);
 }
-.skip-btn .skip-cue {
-  font-weight: 500;
-  font-size: var(--type-caption);
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: var(--text-tertiary);
+.check-btn {
+  appearance: none;
+  margin: 0;
+  min-height: var(--target-min);
+  min-width: var(--target-min);
+  padding: var(--space-3) 18px;
+  border: 0;
+  border-radius: var(--radius-pill);
+  background: var(--accent);
+  color: var(--text-on-accent);
+  font: 700 var(--type-label)/1 var(--font);
+  letter-spacing: 0.02em;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
+.check-btn:active:not(:disabled) { transform: scale(0.97); }
+.check-btn:disabled { opacity: 0.38; cursor: default; }
+.check-btn[hidden] { display: none !important; }
+/* iPhone Check is the keyboard Go / Enter key. */
+html.touch-quiz .check-btn { display: none !important; }
 .skip-btn:active:not(:disabled) { transform: scale(0.97); }
 .skip-btn:disabled {
   opacity: 0.38;
@@ -580,17 +735,25 @@ html.touch-quiz.phone-landscape .prompt-block {
   justify-content: center;
   gap: var(--space-2);
   width: min(520px, 72vw);
+  padding: var(--space-1) var(--space-2);
 }
 html.touch-quiz.phone-landscape .type-field { flex: 1 1 auto; }
 html.touch-quiz.phone-landscape .target-word {
   font-size: var(--type-prompt-landscape);
   min-height: 0;
 }
+html.touch-quiz.phone-landscape .answer-actions {
+  margin: 0;
+  flex: 0 0 auto;
+}
 html.touch-quiz.phone-landscape .skip-btn {
   margin: 0;
   flex: 0 0 auto;
   min-height: var(--target-min);
   padding: var(--space-2) var(--space-3);
+}
+html.touch-quiz.phone-landscape.keyboard-open .quiz-look {
+  display: none !important;
 }
 html.touch-quiz.phone-landscape .view-filters.is-quiz {
   top: max(6px, env(safe-area-inset-top));
@@ -740,7 +903,9 @@ html.touch-quiz.phone-landscape.keyboard-open .view-filters.is-quiz {
   .footer-attr-sep { display: none; }
   /* The system keyboard owns the bottom edge during a quiz. */
   html.touch-quiz #app:has(#play-hud:not([hidden])) .footer-bar,
-  html.touch-quiz #app:has(#play-hud:not([hidden])) .footer-attr {
+  html.touch-quiz #app:has(#play-hud:not([hidden])) .footer-attr,
+  #app:has(#menu-overlay:not([hidden])) .footer-bar,
+  #app:has(#menu-overlay:not([hidden])) .footer-attr {
     display: none;
   }
   #app:has(#view-panel:not([hidden])) .footer-bar {
@@ -760,9 +925,36 @@ html.touch-quiz.phone-landscape.keyboard-open .view-filters.is-quiz {
   }
   .mode-grid--levels { grid-template-columns: 1fr; }
   .chrome-center { display: none; }
+  .chrome--top {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    grid-template-areas:
+      "menu look"
+      "context context";
+    align-items: center;
+  }
+  .chrome-left { grid-area: menu; }
+  .quiz-look { grid-area: look; justify-self: end; }
+  .chrome-context { grid-area: context; width: 100%; }
+  .chrome--top.is-view {
+    grid-template-columns: auto minmax(0, 1fr);
+    grid-template-areas: "menu context";
+  }
+  html.touch-quiz.phone-landscape .chrome--top {
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    grid-template-areas: "menu context look";
+  }
+}
+@media (min-width: 901px) {
+  /* Credits stay on the model, clear of the pinned Start column. */
+  #app:has(#menu-overlay:not([hidden])) .footer-bar,
+  #app:has(#menu-overlay:not([hidden])) .footer-attr {
+    left: calc(var(--space-5) + min(420px, 92vw) + var(--space-4));
+    text-align: left;
+  }
 }
 
-/* —— View subject/layer filters; in quiz only the Look group is shown —— */
+/* —— View subject/layer filters. Quiz Look lives in the top bar. —— */
 .view-filters.is-quiz .view-filter-group:not(#look-group) {
   display: none;
 }
@@ -951,8 +1143,9 @@ html.touch-quiz.phone-landscape.keyboard-open .view-filters.is-quiz {
 }
 
 .chrome--top.is-view .chrome-center,
-.chrome--top.is-view #pill-round {
-  display: none;
+.chrome--top.is-view .quiz-meter,
+.chrome--top.is-view .quiz-look {
+  display: none !important;
 }
 
 .view-panel[hidden] { display: none !important; }
@@ -1507,7 +1700,8 @@ html.touch-quiz.phone-landscape.ankle-case .target-word {
   .case-panel,
   .case-actions,
   .skip-btn,
-  .pill {
+  .pill,
+  .panel {
     background: var(--surface-overlay);
     backdrop-filter: none;
   }
@@ -1526,8 +1720,10 @@ html.touch-quiz.phone-landscape.ankle-case .target-word {
   .view-panel-body,
   .filter-chip,
   .skip-btn,
+  .check-btn,
   .case-btn,
   .start-btn,
+  .menu-sheet-btn,
   .view-filter-btn {
     transition: none;
   }
