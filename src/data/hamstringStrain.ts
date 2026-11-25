@@ -53,21 +53,26 @@ const HAM_MESHES = [
   ...rightMeshes('semimembranosus'),
 ]
 
-function hamFocus(highlight: readonly string[], cue: LimbCue, hide: readonly string[]): StudyFocus {
+function hamFocus(
+  highlight: readonly string[],
+  cue: LimbCue,
+  hide: readonly string[],
+  view: AnatomicalView = POSTERIOR,
+): StudyFocus {
   return {
     highlight,
     frame: highlight,
     hide,
     context: THIGH,
-    view: POSTERIOR,
+    view,
     cue,
   }
 }
 
 const ALL = hamFocus(HAM_MESHES, 'none', ['glut_max_r'])
-const ALL_SWING = hamFocus(HAM_MESHES, 'late-swing', ['glut_max_r'])
+const ALL_SWING = hamFocus(HAM_MESHES, 'late-swing', ['glut_max_r'], 'lateral')
 const SEMITEND = hamFocus(rightMeshes('semitendinosus'), 'none', ['glut_max_r'])
-const BICEPS = hamFocus(rightMeshes('biceps_femoris'), 'knee-flex', ['glut_max_r'])
+const BICEPS = hamFocus(rightMeshes('biceps_femoris'), 'knee-flex', ['glut_max_r'], 'lateral')
 const SEMIMEMB = hamFocus(rightMeshes('semimembranosus'), 'none', ['glut_max_r', 'semitend_r'])
 
 export const HAMSTRING_LEARN: readonly HamLearnCard[] = [
@@ -90,7 +95,7 @@ export const HAMSTRING_LEARN: readonly HamLearnCard[] = [
     focus: ALL_SWING,
     paragraphs: [
       'The force is tension: a pull lengthwise. A hamstring strain in a sprint is an eccentric tensile overload.',
-      'The thigh swings forward here so you can see that lengthened position. The muscle meshes stay in their resting shape. Nothing on the model is torn.',
+      'The thigh swings forward here so you can see that lengthened position. The muscles move with the limb. Nothing on the model is torn.',
     ],
   },
   {

@@ -1,6 +1,7 @@
 /**
- * Short kinematic cues for existing bones. Muscles are not rigged and do not
- * move. Angles are visual only — the course notes do not give these degrees.
+ * Short kinematic cues for existing bones. Angles are visual only — the course
+ * notes do not give these degrees. A muscle mesh is not a fibre model: the
+ * scene seats its existing vertices on the bones they already touch.
  *
  * Model axes (same as the ankle case): +Y up, +Z anterior, patient right is −X.
  * +X rotation drops an anterior point and swings a hanging limb posteriorly.
@@ -19,6 +20,11 @@ export type LimbCue =
   | 'hip-flex'
   | 'arm-abduct'
   | 'late-swing'
+  /** Hip flexion with the knee opening from bent to straight. Rectus femoris. */
+  | 'kick'
+  /** Starts bent and finishes straight, so extension is a visible stroke. */
+  | 'knee-extend'
+  | 'elbow-extend'
 
 export type LimbAxis = 'x' | 'z'
 
@@ -83,21 +89,30 @@ export const RIGHT_LEG_DISTAL: readonly string[] = ['patella_r', 'tibia_r', 'fib
 
 export const RIGHT_LIMB_BONES: readonly string[] = ['femur_r', ...RIGHT_LEG_DISTAL]
 
-/** Peak radians. Signs follow the axis notes above. */
-export const LIMB_PEAK: Record<Exclude<LimbCue, 'none' | 'late-swing'>, { rad: number; axis: LimbAxis }> = {
-  plantarflex: { rad: 0.42, axis: 'x' },
-  dorsiflex: { rad: -0.32, axis: 'x' },
-  'knee-flex': { rad: 0.62, axis: 'x' },
-  'elbow-flex': { rad: -1.05, axis: 'x' },
-  'hip-abduct': { rad: -0.28, axis: 'z' },
-  'hip-extend': { rad: 0.4, axis: 'x' },
-  'hip-flex': { rad: -0.4, axis: 'x' },
-  'arm-abduct': { rad: -0.42, axis: 'z' },
+/** Peak radians. Signs follow the axis notes above. Extension cues store the bent start. */
+export const LIMB_PEAK: Record<
+  Exclude<LimbCue, 'none' | 'late-swing' | 'kick'>,
+  { rad: number; axis: LimbAxis }
+> = {
+  plantarflex: { rad: 0.75, axis: 'x' },
+  dorsiflex: { rad: -0.55, axis: 'x' },
+  'knee-flex': { rad: 1.2, axis: 'x' },
+  'elbow-flex': { rad: -1.2, axis: 'x' },
+  'hip-abduct': { rad: -0.58, axis: 'z' },
+  'hip-extend': { rad: 0.62, axis: 'x' },
+  'hip-flex': { rad: -0.9, axis: 'x' },
+  'arm-abduct': { rad: -0.9, axis: 'z' },
+  'knee-extend': { rad: 1.15, axis: 'x' },
+  'elbow-extend': { rad: -1.15, axis: 'x' },
 }
 
 /** Thigh swings forward; the knee stays only slightly bent so the hamstrings read as lengthened. */
-export const LATE_SWING_HIP = -0.5
-export const LATE_SWING_KNEE = 0.2
+export const LATE_SWING_HIP = -0.78
+export const LATE_SWING_KNEE = 0.32
+
+/** Straight-leg raise from a bent knee: hip flexes, knee finishes extended. */
+export const KICK_HIP = -0.82
+export const KICK_KNEE = 1.05
 
 function clamp01(t: number): number {
   if (t <= 0) return 0
@@ -116,7 +131,13 @@ export function limbPoseAt(cue: LimbCue, u: number): LimbPose {
   if (cue === 'late-swing') {
     return { cue, primary: s * LATE_SWING_HIP, knee: s * LATE_SWING_KNEE, axis: 'x' }
   }
+  if (cue === 'kick') {
+    return { cue, primary: s * KICK_HIP, knee: (1 - s) * KICK_KNEE, axis: 'x' }
+  }
   const peak = LIMB_PEAK[cue]
+  if (cue === 'knee-extend' || cue === 'elbow-extend') {
+    return { cue, primary: (1 - s) * peak.rad, knee: 0, axis: peak.axis }
+  }
   return { cue, primary: s * peak.rad, knee: 0, axis: peak.axis }
 }
 
@@ -138,6 +159,7 @@ export function pivotsFor(cue: LimbCue): readonly PivotSpec[] {
         },
       ]
     case 'knee-flex':
+    case 'knee-extend':
       return [
         {
           id: 'primary',
@@ -150,6 +172,7 @@ export function pivotsFor(cue: LimbCue): readonly PivotSpec[] {
         },
       ]
     case 'elbow-flex':
+    case 'elbow-extend':
       return [
         {
           id: 'primary',
@@ -187,6 +210,7 @@ export function pivotsFor(cue: LimbCue): readonly PivotSpec[] {
           axis: cue === 'hip-abduct' ? 'z' : 'x',
         },
       ]
+    case 'kick':
     case 'late-swing':
       return [
         {

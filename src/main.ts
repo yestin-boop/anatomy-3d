@@ -2925,7 +2925,7 @@ function renderStudyHud(): void {
       ? `<span class="tw-done">${escapeHtml(step.revealName)}</span>`
       : `<span class="tw-on">tap</span>`
   }
-  if ('focus' in step) applyStudyStepFocus(step.id, step.focus, false)
+  if ('focus' in step) applyStudyStepFocus(step.id, step.focus, step.focus.cue !== 'none')
   syncSkipButton()
   if (step.kind === 'tap') blurQuizInput()
   syncTapHint()
@@ -3581,6 +3581,76 @@ async function qaShowStudyCase(
   return { ...scene.getStudyReport(), ...qaLayout(), mode, kind }
 }
 
+/** Let a learn card or quiz step play its cue. Does not freeze the pose. */
+async function qaPlayStudy(
+  kind: 'actions' | 'hamstring',
+  phase: 'learn' | 'quiz',
+  which: number | string,
+): Promise<Record<string, unknown>> {
+  pinForcedKeyboard(0)
+  if (!state.caseActive || state.caseKind !== kind) await startStudyCase(kind)
+  appliedFocusId = ''
+  if (phase === 'learn') {
+    state.casePhase = 'learn'
+    state.caseLearnIndex = typeof which === 'number' ? which : 0
+    state.finished = false
+    casePanel.hidden = false
+    playHud.hidden = true
+    renderLearnCard()
+  } else {
+    const quiz = kind === 'hamstring' ? HAMSTRING_QUIZ : ACTION_QUIZ
+    const id = String(which)
+    const index = quiz.findIndex((step) => step.id === id)
+    state.casePhase = 'quiz'
+    state.caseQuizIndex = index < 0 ? 0 : index
+    state.finished = false
+    state.revealing = false
+    state.typed = ''
+    hiddenInput.value = ''
+    casePanel.hidden = true
+    playHud.hidden = false
+    renderCaseHud()
+  }
+  syncFramingInsetsNow()
+  await scene.whenPoseSettled()
+  return { ...scene.getStudyReport(), ...qaLayout(), phase, kind }
+}
+
+function qaStudySample(): Record<string, unknown> {
+  return { ...scene.getStudyReport(), ...qaLayout() }
+}
+
+function qaReplayStudy(): Record<string, unknown> {
+  scene.replayStudyCue()
+  return qaStudySample()
+}
+
+/** In-page pointer drag. OrbitControls listens on the canvas; this is not an OS mouse drag. */
+function qaOrbitStudy(): Record<string, unknown> {
+  const rect = mainCanvas.getBoundingClientRect()
+  const x = rect.left + rect.width * 0.55
+  const y = rect.top + rect.height * 0.42
+  const fire = (type: string, cx: number, cy: number, buttons: number) => {
+    mainCanvas.dispatchEvent(
+      new PointerEvent(type, {
+        bubbles: true,
+        cancelable: true,
+        pointerId: 1,
+        pointerType: 'mouse',
+        clientX: cx,
+        clientY: cy,
+        button: 0,
+        buttons,
+        isPrimary: true,
+      }),
+    )
+  }
+  fire('pointerdown', x, y, 1)
+  fire('pointermove', x + 72, y + 28, 1)
+  fire('pointerup', x + 72, y + 28, 0)
+  return qaStudySample()
+}
+
 function installQaHooks(): void {
   const api = {
     showQuiz: qaShowQuiz,
@@ -3589,6 +3659,10 @@ function installQaHooks(): void {
     showAnkle: qaShowAnkle,
     showStudy: qaShowStudy,
     showStudyCase: qaShowStudyCase,
+    playStudy: qaPlayStudy,
+    studySample: qaStudySample,
+    replayStudy: qaReplayStudy,
+    orbitStudy: qaOrbitStudy,
     typeBar: qaTypeBar,
     setKeyboardViewport: qaSetKeyboardViewport,
     report: () => scene.getFramingReport(),

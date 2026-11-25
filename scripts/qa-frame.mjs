@@ -229,6 +229,270 @@ function assertStudyLayout(report, label, expect, kind) {
   console.log(`ok ${label} ${report.contextText || ''} ${report.title || report.label || ''}`)
 }
 
+function poseDelta(a, b) {
+  return Math.abs((a.pose?.primary ?? 0) - (b.pose?.primary ?? 0)) + Math.abs((a.pose?.knee ?? 0) - (b.pose?.knee ?? 0))
+}
+
+function pointGap(a, b) {
+  if (!a || !b) return Infinity
+  return Math.hypot(a.x - b.x, a.y - b.y, a.z - b.z)
+}
+
+function assertYawStill(report, label) {
+  if (report.spinning) throw new Error(`${label} is auto-spinning`)
+  if (Math.abs(report.yaw || 0) > 0.02) throw new Error(`${label} yaw drifted ${report.yaw}`)
+}
+
+function assertOnScreen(report, name, label, learn) {
+  const s = report.screen?.[name]
+  if (!s) throw new Error(`${label} has no screen point for ${name}`)
+  if (!s.inFrame) throw new Error(`${label} ${name} left the frame ${JSON.stringify(s)}`)
+  if (s.y < report.chromeBottom - 1) {
+    throw new Error(`${label} ${name} is under the top HUD y=${s.y} chrome ${report.chromeBottom}`)
+  }
+  if (learn && !report.panelHidden && s.y > report.panelTop + 2) {
+    throw new Error(`${label} ${name} is under the lesson y=${s.y} panel ${report.panelTop}`)
+  }
+}
+
+async function assertCueMotion(cdp) {
+  let touchPage = null
+  const prepare = async (width, height, mobile) => {
+    await setViewport(cdp, width, height, mobile)
+    await delay(240)
+    if (touchPage !== mobile) {
+      await openApp(cdp, mobile)
+      touchPage = mobile
+    }
+  }
+  const play = (kind, phase, which) =>
+    cdp.evaluate(
+      `window.__anatomyQA.playStudy(${JSON.stringify(kind)}, ${JSON.stringify(phase)}, ${JSON.stringify(which)})`,
+      true,
+    )
+  const sample = () => cdp.evaluate(`window.__anatomyQA.studySample()`)
+  const replay = () => cdp.evaluate(`window.__anatomyQA.replayStudy()`, true)
+  // Headless Chrome can pause requestAnimationFrame between CDP calls.
+  // Wait on the page so the limb cue keeps ticking.
+  const playFor = (ms) =>
+    cdp.evaluate(
+      `new Promise((resolve) => {
+        const start = performance.now()
+        const step = () => {
+          if (performance.now() - start >= ${ms}) resolve(window.__anatomyQA.studySample())
+          else requestAnimationFrame(step)
+        }
+        requestAnimationFrame(step)
+      })`,
+      true,
+    )
+
+  async function clip(label, kind, phase, which, learn) {
+    await play(kind, phase, which)
+    const start = await replay()
+    assertYawStill(start, `${label} start`)
+    const mid = await playFor(900)
+    assertYawStill(mid, `${label} mid`)
+    if (poseDelta(start, mid) < 0.06) {
+      throw new Error(
+        `${label} did not move ${JSON.stringify(start.pose)} -> ${JSON.stringify(mid.pose)} playing ${start.playing}->${mid.playing} u ${start.motionU}->${mid.motionU}`,
+      )
+    }
+    const end = await playFor(2200)
+    assertYawStill(end, `${label} end`)
+    if (end.playing && (end.motionU ?? 0) < 0.98) {
+      throw new Error(`${label} did not finish playing u=${end.motionU}`)
+    }
+    if (learn) {
+      const png = await cdp.send('Page.captureScreenshot', { format: 'png' })
+      await writeFile(`${OUT}/motion-${label}.png`, Buffer.from(png.data, 'base64'))
+    }
+    const again = await replay()
+    assertYawStill(again, `${label} replay`)
+    if (poseDelta(end, again) < 0.08) {
+      throw new Error(`${label} replay did not restart ${JSON.stringify(end.pose)} -> ${JSON.stringify(again.pose)}`)
+    }
+    return { start, end, again, learn }
+  }
+
+  const shots = [
+    ['iphone-knee', 'actions', 'learn', 2, 390, 844, true],
+    ['iphone-elbow', 'actions', 'learn', 0, 390, 844, true],
+    ['iphone-hip', 'actions', 'learn', 1, 390, 844, true],
+    ['iphone-ankle', 'actions', 'learn', 3, 390, 844, true],
+    ['iphone-arm', 'actions', 'learn', 4, 390, 844, true],
+    ['iphone-swing', 'hamstring', 'learn', 1, 390, 844, true],
+    ['desk-knee', 'actions', 'learn', 2, 1440, 900, false],
+    ['mac-elbow', 'actions', 'learn', 0, 1728, 1117, false],
+    ['mac-knee', 'actions', 'learn', 2, 1728, 1117, false],
+  ]
+
+  for (const [label, kind, phase, which, width, height, mobile] of shots) {
+    await prepare(width, height, mobile)
+    const learn = phase === 'learn'
+    const run = await clip(label, kind, phase, which, learn)
+    const { start, end } = run
+    if (label.endsWith('knee')) {
+      if (!(end.pose.primary < -0.55 && end.pose.knee < 0.08)) {
+        throw new Error(`${label} kick did not reach the raised straight leg ${JSON.stringify(end.pose)}`)
+      }
+      if (!(start.pose.knee > 0.6 && Math.abs(start.pose.primary) < 0.08)) {
+        throw new Error(`${label} kick did not restart bent ${JSON.stringify(start.pose)}`)
+      }
+      const boneMove = pointGap(start.points?.femur_r, end.points?.femur_r)
+      const muscleMove = pointGap(start.points?.rectus_fem_r, end.points?.rectus_fem_r)
+      if (boneMove < 0.08) throw new Error(`${label} femur only moved ${boneMove}`)
+      if (muscleMove < boneMove * 0.45) {
+        throw new Error(`${label} rectus stayed behind the femur muscle ${muscleMove} bone ${boneMove}`)
+      }
+      const g0 = pointGap(start.points?.rectus_fem_r, start.points?.femur_r)
+      const g1 = pointGap(end.points?.rectus_fem_r, end.points?.femur_r)
+      if (Math.abs(g1 - g0) > 0.1) throw new Error(`${label} rectus left the femur ${g0} -> ${g1}`)
+      for (const name of ['rectus_fem_r', 'femur_r', 'talus_r']) assertOnScreen(end, name, label, learn)
+    }
+    if (label.endsWith('elbow')) {
+      if (!(end.pose.primary < -0.95)) throw new Error(`${label} elbow did not flex ${JSON.stringify(end.pose)}`)
+      const radiusMove = pointGap(start.points?.radius_r, end.points?.radius_r)
+      if (radiusMove < 0.1) throw new Error(`${label} radius only moved ${radiusMove}`)
+      const handName = end.points?.phal_hand_dist_middle_r ? 'phal_hand_dist_middle_r' : 'metacarpal3_r'
+      const handMove = pointGap(start.points?.[handName], end.points?.[handName])
+      if (handMove < 0.08) throw new Error(`${label} hand only moved ${handMove}`)
+      for (const name of ['biceps_long_r', 'radius_r', handName]) assertOnScreen(end, name, label, learn)
+      const g0 = pointGap(start.points?.biceps_long_r, start.points?.humerus_r)
+      const g1 = pointGap(end.points?.biceps_long_r, end.points?.humerus_r)
+      if (Math.abs(g1 - g0) > 0.1) throw new Error(`${label} biceps left the arm ${g0} -> ${g1}`)
+    }
+    if (label.endsWith('hip')) {
+      if (!(end.pose.primary < -0.4)) throw new Error(`${label} hip did not abduct ${JSON.stringify(end.pose)}`)
+      const boneMove = pointGap(start.points?.femur_r, end.points?.femur_r)
+      const muscleMove = pointGap(start.points?.glut_med_r, end.points?.glut_med_r)
+      if (boneMove < 0.06) throw new Error(`${label} femur only moved ${boneMove}`)
+      if (muscleMove < 0.02) throw new Error(`${label} glute med did not move ${muscleMove}`)
+      for (const name of ['glut_med_r', 'femur_r', 'talus_r']) assertOnScreen(end, name, label, learn)
+    }
+    if (label.endsWith('ankle')) {
+      if (!(end.pose.primary > 0.5)) throw new Error(`${label} foot did not plantarflex ${JSON.stringify(end.pose)}`)
+      const heelMove = pointGap(start.points?.calcaneus_r, end.points?.calcaneus_r)
+      const toeName = end.points?.phal_foot_dist_1_r ? 'phal_foot_dist_1_r' : 'metatarsal1_r'
+      const toeMove = pointGap(start.points?.[toeName], end.points?.[toeName])
+      if (heelMove < 0.02) throw new Error(`${label} heel only moved ${heelMove}`)
+      if (toeMove < 0.03) throw new Error(`${label} forefoot only moved ${toeMove}`)
+      const toeY0 = start.points?.[toeName]?.y
+      const toeY1 = end.points?.[toeName]?.y
+      if (!(toeY1 < toeY0 - 0.01)) throw new Error(`${label} forefoot did not drop ${toeY0} -> ${toeY1}`)
+      const g0 = pointGap(start.points?.gastroc_lat_r, start.points?.calcaneus_r)
+      const g1 = pointGap(end.points?.gastroc_lat_r, end.points?.calcaneus_r)
+      if (g1 > g0 + 0.12) throw new Error(`${label} gastroc left the heel ${g0} -> ${g1}`)
+      for (const name of ['gastroc_lat_r', 'calcaneus_r', toeName]) assertOnScreen(end, name, label, learn)
+    }
+    if (label.endsWith('arm')) {
+      if (!(end.pose.primary < -0.6)) throw new Error(`${label} arm did not abduct ${JSON.stringify(end.pose)}`)
+      const boneMove = pointGap(start.points?.humerus_r, end.points?.humerus_r)
+      const muscleMove = pointGap(start.points?.delt_acro_r, end.points?.delt_acro_r)
+      if (boneMove < 0.06) throw new Error(`${label} humerus only moved ${boneMove}`)
+      if (muscleMove < boneMove * 0.3) throw new Error(`${label} deltoid left the arm ${muscleMove} vs ${boneMove}`)
+      const handName = end.points?.phal_hand_dist_middle_r ? 'phal_hand_dist_middle_r' : 'metacarpal3_r'
+      for (const name of ['delt_acro_r', 'humerus_r', handName]) assertOnScreen(end, name, label, learn)
+    }
+    if (label.endsWith('swing')) {
+      if (!(end.pose.primary < -0.5 && end.pose.knee > 0.1)) {
+        throw new Error(`${label} late swing did not lengthen ${JSON.stringify(end.pose)}`)
+      }
+      const z0 = start.points?.tibia_r?.z
+      const z1 = end.points?.tibia_r?.z
+      if (!(z1 > z0 + 0.02)) throw new Error(`${label} tibia did not swing forward ${z0} -> ${z1}`)
+      const muscleMove = pointGap(start.points?.bf_long_r, end.points?.bf_long_r)
+      if (muscleMove < 0.03) throw new Error(`${label} biceps femoris did not move ${muscleMove}`)
+      for (const name of ['bf_long_r', 'femur_r', 'tibia_r']) assertOnScreen(end, name, label, learn)
+    }
+    console.log(
+      `ok motion ${label} pose ${JSON.stringify(end.pose)} seated ${JSON.stringify(end.seated)} yaw ${end.yaw}`,
+    )
+  }
+
+  await prepare(390, 844, true)
+  const quizzes = [
+    ['quiz-rectus', 'actions', 'type-rectus', (start, end) => {
+      if (!(end.pose.primary < -0.55 && end.pose.knee < 0.08)) {
+        throw new Error(`quiz-rectus did not kick ${JSON.stringify(end.pose)}`)
+      }
+      const muscleMove = pointGap(start.points?.rectus_fem_r, end.points?.rectus_fem_r)
+      if (muscleMove < 0.05) throw new Error(`quiz-rectus muscle did not move ${muscleMove}`)
+    }],
+    ['quiz-vastus', 'actions', 'tap-vastus-lat', (start, end) => {
+      if (Math.abs(end.pose.primary) > 0.08) throw new Error(`quiz-vastus did not finish extended ${JSON.stringify(end.pose)}`)
+      if (!(start.pose.primary > 0.5)) throw new Error(`quiz-vastus did not start bent ${JSON.stringify(start.pose)}`)
+      const shin = pointGap(start.points?.tibia_r, end.points?.tibia_r)
+      if (shin < 0.06) throw new Error(`quiz-vastus tibia only moved ${shin}`)
+      const g0 = pointGap(start.points?.vastus_lat_r, start.points?.femur_r)
+      const g1 = pointGap(end.points?.vastus_lat_r, end.points?.femur_r)
+      if (Math.abs(g1 - g0) > 0.1) throw new Error(`quiz-vastus left the femur ${g0} -> ${g1}`)
+    }],
+    ['quiz-biceps-fem', 'actions', 'type-biceps-fem', (start, end) => {
+      if (!(end.pose.primary > 0.8)) throw new Error(`quiz-biceps-fem did not flex the knee ${JSON.stringify(end.pose)}`)
+      const shin = pointGap(start.points?.tibia_r, end.points?.tibia_r)
+      if (shin < 0.06) throw new Error(`quiz-biceps-fem tibia only moved ${shin}`)
+      const muscleMove = pointGap(start.points?.bf_long_r, end.points?.bf_long_r)
+      if (muscleMove < 0.015) throw new Error(`quiz-biceps-fem muscle did not move ${muscleMove}`)
+    }],
+    ['quiz-triceps', 'actions', 'type-triceps', (start, end) => {
+      if (Math.abs(end.pose.primary) > 0.08) throw new Error(`quiz-triceps did not finish extended ${JSON.stringify(end.pose)}`)
+      if (!(start.pose.primary < -0.5)) throw new Error(`quiz-triceps did not start bent ${JSON.stringify(start.pose)}`)
+      const radius = pointGap(start.points?.radius_r, end.points?.radius_r)
+      if (radius < 0.08) throw new Error(`quiz-triceps radius only moved ${radius}`)
+    }],
+    ['quiz-gastroc', 'actions', 'type-gastroc', (start, end) => {
+      if (!(end.pose.primary > 0.5)) throw new Error(`quiz-gastroc did not plantarflex ${JSON.stringify(end.pose)}`)
+      const foot = pointGap(start.points?.calcaneus_r, end.points?.calcaneus_r)
+      if (foot < 0.02) throw new Error(`quiz-gastroc heel only moved ${foot}`)
+    }],
+    ['quiz-biceps', 'actions', 'type-biceps', (start, end) => {
+      if (!(end.pose.primary < -0.95)) throw new Error(`quiz-biceps did not flex the elbow ${JSON.stringify(end.pose)}`)
+      const radius = pointGap(start.points?.radius_r, end.points?.radius_r)
+      if (radius < 0.08) throw new Error(`quiz-biceps radius only moved ${radius}`)
+      const handName = end.points?.phal_hand_dist_middle_r ? 'phal_hand_dist_middle_r' : 'metacarpal3_r'
+      assertOnScreen(end, handName, 'quiz-biceps', false)
+    }],
+    ['quiz-tib-ant', 'actions', 'type-tib-ant', (start, end) => {
+      if (!(end.pose.primary < -0.35)) throw new Error(`quiz-tib-ant did not dorsiflex ${JSON.stringify(end.pose)}`)
+      const toeName = end.points?.phal_foot_dist_1_r ? 'phal_foot_dist_1_r' : 'calcaneus_r'
+      const foot = pointGap(start.points?.[toeName], end.points?.[toeName])
+      if (foot < 0.02) throw new Error(`quiz-tib-ant foot only moved ${foot}`)
+      const y0 = start.points?.[toeName]?.y
+      const y1 = end.points?.[toeName]?.y
+      if (toeName.startsWith('phal') && !(y1 > y0 + 0.008)) {
+        throw new Error(`quiz-tib-ant forefoot did not lift ${y0} -> ${y1}`)
+      }
+    }],
+    ['quiz-deltoid', 'actions', 'tap-deltoid', (start, end) => {
+      if (!(end.pose.primary < -0.6)) throw new Error(`quiz-deltoid did not abduct ${JSON.stringify(end.pose)}`)
+      const muscleMove = pointGap(start.points?.delt_acro_r, end.points?.delt_acro_r)
+      if (muscleMove < 0.03) throw new Error(`quiz-deltoid muscle did not move ${muscleMove}`)
+    }],
+    ['quiz-ham-swing', 'hamstring', 'type-mechanism', (start, end) => {
+      if (!(end.pose.primary < -0.5)) throw new Error(`quiz-ham-swing did not swing ${JSON.stringify(end.pose)}`)
+      const z0 = start.points?.tibia_r?.z
+      const z1 = end.points?.tibia_r?.z
+      if (!(z1 > z0 + 0.02)) throw new Error(`quiz-ham-swing tibia z ${z0} -> ${z1}`)
+    }],
+  ]
+  for (const [label, kind, id, check] of quizzes) {
+    const run = await clip(label, kind, 'quiz', id, false)
+    check(run.start, run.end)
+    assertYawStill(run.end, label)
+    console.log(`ok motion ${label} pose ${JSON.stringify(run.end.pose)}`)
+  }
+
+  await prepare(390, 844, true)
+  await play('actions', 'learn', 2)
+  const orbited = await cdp.evaluate(`window.__anatomyQA.orbitStudy()`, true)
+  assertYawStill(orbited, 'orbit')
+  await cdp.evaluate(`window.__anatomyQA.simulateControlsEnd()`, true)
+  const afterOrbit = await playFor(2200)
+  assertYawStill(afterOrbit, 'after orbit')
+  console.log(`ok motion orbit yaw ${afterOrbit.yaw} spinning ${afterOrbit.spinning}`)
+}
+
 async function assertStudyScene(cdp) {
   let touchPage = null
   const show = async (kind, mode, keyboard, width, height, mobile) => {
@@ -294,6 +558,7 @@ async function assertStudyScene(cdp) {
     throw new Error(`late swing should carry the leg forward, z ${restTibia.z} -> ${peakTibia.z}`)
   }
   console.log(`ok motion radius ${armMove.toFixed(3)} tibia ${swingMove.toFixed(3)} z ${restTibia.z} -> ${peakTibia.z}`)
+  await assertCueMotion(cdp)
 }
 
 async function main() {
@@ -343,6 +608,13 @@ async function main() {
 
     if (process.env.QA_ASSERT_SPORT === '1') {
       await assertStudyScene(cdp)
+      return
+    }
+
+    if (process.env.QA_ASSERT_MOTION === '1') {
+      await setViewport(cdp, 390, 844, true)
+      await openApp(cdp, true)
+      await assertCueMotion(cdp)
       return
     }
 
