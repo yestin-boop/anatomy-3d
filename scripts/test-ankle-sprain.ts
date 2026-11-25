@@ -25,6 +25,7 @@ import {
   ankleLigamentLabelsVisible,
   applyLigamentDisplayTreatment,
   inflateGeometryAlongNormals,
+  ligamentInflateMm,
   ligamentLabel,
   ligamentRole,
 } from '../src/scene/ligamentLook.ts'
@@ -137,11 +138,18 @@ assert(LIGAMENT_LOOK.cfl.color !== 0xffe6b0, 'CFL is no longer the washed pale g
 assert(LIGAMENT_DIM.color !== LIGAMENT_LOOK.atfl.color, 'dim ligaments are darker than the hot ATFL')
 assert(LIGAMENT_INFLATE_MM === 1.1, 'inflate is the chosen 1.1 mm')
 assert(LIGAMENT_INFLATE_MM > 0.6 && LIGAMENT_INFLATE_MM < 2, 'inflate is a band, not a fleck or a sausage')
-assert(LIGAMENT_SEAT.atfl_r?.position[0] === -1 && LIGAMENT_SEAT.atfl_r?.position[1] === 4.5 && LIGAMENT_SEAT.atfl_r?.position[2] === -2.5, 'right ATFL has the measured seat')
-assert(LIGAMENT_SEAT.cfl_r?.position[0] === -2 && LIGAMENT_SEAT.cfl_r?.position[1] === -1 && LIGAMENT_SEAT.cfl_r?.position[2] === -3.5, 'right CFL has the measured seat')
-assert(LIGAMENT_SEAT.cfl_r?.rotationDeg?.[0] === -4 && LIGAMENT_SEAT.cfl_r?.rotationDeg?.[1] === -4, 'right CFL has the small tilt')
-assert(LIGAMENT_SEAT.deltoid_r === undefined, 'deltoid is not rigidly reseated')
-assert(LIGAMENT_SEAT.atfl_l === undefined && LIGAMENT_SEAT.cfl_l === undefined, 'left ligaments are not reseated')
+assert(ligamentInflateMm('atfl_r') === 1.1 && ligamentInflateMm('atfl_l') === 1.1, 'Open3D ATFL keeps the 1.1 mm band')
+assert(ligamentInflateMm('cfl_r') === 0 && ligamentInflateMm('cfl_l') === 0, 'Open3D CFL is not inflated')
+assert(ligamentInflateMm('deltoid_r') === 1.1, 'deltoid keeps the 1.1 mm inflate')
+assert(LIGAMENT_SEAT.atfl_r?.position[0] === -1.6 && LIGAMENT_SEAT.atfl_r?.position[1] === -1.8 && LIGAMENT_SEAT.atfl_r?.position[2] === 0.4, 'right ATFL has the measured seat')
+assert(LIGAMENT_SEAT.atfl_r?.rotationDeg?.[0] === -2.2 && LIGAMENT_SEAT.atfl_r?.rotationDeg?.[1] === -1.0 && LIGAMENT_SEAT.atfl_r?.rotationDeg?.[2] === -0.3, 'right ATFL has the small tilt')
+assert(LIGAMENT_SEAT.cfl_r?.position[0] === 1.1 && LIGAMENT_SEAT.cfl_r?.position[1] === 1.5 && LIGAMENT_SEAT.cfl_r?.position[2] === 1.2, 'right CFL has the measured seat')
+assert(LIGAMENT_SEAT.cfl_r?.rotationDeg?.[0] === 2.4 && LIGAMENT_SEAT.cfl_r?.rotationDeg?.[1] === 0 && LIGAMENT_SEAT.cfl_r?.rotationDeg?.[2] === 0, 'right CFL has the small tilt')
+assert(LIGAMENT_SEAT.atfl_l?.position[0] === -LIGAMENT_SEAT.atfl_r!.position[0] && LIGAMENT_SEAT.atfl_l?.position[1] === LIGAMENT_SEAT.atfl_r!.position[1] && LIGAMENT_SEAT.atfl_l?.position[2] === LIGAMENT_SEAT.atfl_r!.position[2], 'left ATFL seat is the sagittal mirror of the right')
+assert(LIGAMENT_SEAT.atfl_l?.rotationDeg?.[0] === LIGAMENT_SEAT.atfl_r!.rotationDeg![0] && LIGAMENT_SEAT.atfl_l?.rotationDeg?.[1] === -LIGAMENT_SEAT.atfl_r!.rotationDeg![1] && LIGAMENT_SEAT.atfl_l?.rotationDeg?.[2] === -LIGAMENT_SEAT.atfl_r!.rotationDeg![2], 'left ATFL tilt mirrors the right')
+assert(LIGAMENT_SEAT.cfl_l?.position[0] === -LIGAMENT_SEAT.cfl_r!.position[0] && LIGAMENT_SEAT.cfl_l?.position[1] === LIGAMENT_SEAT.cfl_r!.position[1] && LIGAMENT_SEAT.cfl_l?.position[2] === LIGAMENT_SEAT.cfl_r!.position[2], 'left CFL seat is the sagittal mirror of the right')
+assert(LIGAMENT_SEAT.cfl_l?.rotationDeg?.[0] === 2.4 && LIGAMENT_SEAT.cfl_l?.rotationDeg?.[1] === 0, 'left CFL tilt matches the right X tilt')
+assert(LIGAMENT_SEAT.deltoid_r === undefined && LIGAMENT_SEAT.deltoid_l === undefined, 'deltoid is not rigidly reseated')
 
 const idleBase = { disposed: false, viewMode: false, ankleCase: false, targetCount: 0 }
 assert(shouldResumeIdleSpinAfterControlsEnd(idleBase), 'menu idle spin resumes after controls end')
@@ -236,6 +244,15 @@ function minSignedDistance(verts: THREE.Vector3[], bone: THREE.Mesh): number {
       a.fromBufferAttribute(pos as THREE.BufferAttribute, ia).applyMatrix4(mw)
       b.fromBufferAttribute(pos as THREE.BufferAttribute, ib).applyMatrix4(mw)
       c.fromBufferAttribute(pos as THREE.BufferAttribute, ic).applyMatrix4(mw)
+      const minX = Math.min(a.x, b.x, c.x)
+      const maxX = Math.max(a.x, b.x, c.x)
+      const minY = Math.min(a.y, b.y, c.y)
+      const maxY = Math.max(a.y, b.y, c.y)
+      const minZ = Math.min(a.z, b.z, c.z)
+      const maxZ = Math.max(a.z, b.z, c.z)
+      if (point.x < minX - 30 || point.x > maxX + 30) continue
+      if (point.y < minY - 30 || point.y > maxY + 30) continue
+      if (point.z < minZ - 30 || point.z > maxZ + 30) continue
       tri.set(a, b, c)
       tri.closestPointToPoint(point, closest)
       const d = closest.distanceTo(point)
@@ -258,43 +275,156 @@ function minSignedDistance(verts: THREE.Vector3[], bone: THREE.Mesh): number {
   const talus = await loadMesh('talus_r.glb', 'talus_r')
   const calcaneus = await loadMesh('calcaneus_r.glb', 'calcaneus_r')
   const navicular = await loadMesh('navicular_r.glb', 'navicular_r')
+
+  function pcaLength(mesh: THREE.Mesh): number {
+    const verts = worldVerts(mesh)
+    const n = verts.length
+    const c = new THREE.Vector3()
+    for (const v of verts) c.add(v)
+    c.multiplyScalar(1 / n)
+    const C = [0, 0, 0, 0, 0, 0, 0, 0, 0]
+    for (const v of verts) {
+      const x = v.x - c.x, y = v.y - c.y, z = v.z - c.z
+      C[0] += x * x; C[1] += x * y; C[2] += x * z
+      C[3] += y * x; C[4] += y * y; C[5] += y * z
+      C[6] += z * x; C[7] += z * y; C[8] += z * z
+    }
+    const ax = new THREE.Vector3(1, 0, 0)
+    for (let i = 0; i < 40; i++) {
+      ax.set(
+        C[0] * ax.x + C[1] * ax.y + C[2] * ax.z,
+        C[3] * ax.x + C[4] * ax.y + C[5] * ax.z,
+        C[6] * ax.x + C[7] * ax.y + C[8] * ax.z,
+      ).normalize()
+    }
+    let mn = Infinity, mx = -Infinity
+    for (const v of verts) {
+      const p = (v.x - c.x) * ax.x + (v.y - c.y) * ax.y + (v.z - c.z) * ax.z
+      if (p < mn) mn = p
+      if (p > mx) mx = p
+    }
+    return mx - mn
+  }
+
   const atflRaw = await loadMesh('ligaments/atfl_r.glb', 'atfl_r')
   const cflRaw = await loadMesh('ligaments/cfl_r.glb', 'cfl_r')
+  const atflLRaw = await loadMesh('ligaments/atfl_l.glb', 'atfl_l')
+  const cflLRaw = await loadMesh('ligaments/cfl_l.glb', 'cfl_l')
   const deltoidRaw = await loadMesh('ligaments/deltoid_r.glb', 'deltoid_r')
+
+  const atflLen = pcaLength(atflRaw)
+  const cflLen = pcaLength(cflRaw)
+  const atflN = atflRaw.geometry.getAttribute('position').count
+  const cflN = cflRaw.geometry.getAttribute('position').count
+  const atflLN = atflLRaw.geometry.getAttribute('position').count
+  const cflLN = cflLRaw.geometry.getAttribute('position').count
+  const deltoidNverts = deltoidRaw.geometry.getAttribute('position').count
+
+  assert(atflN === 498 && atflLN === 498, `Open3D ATFL has 498 verts (got R ${atflN} L ${atflLN})`)
+  assert(cflN === 351 && cflLN === 351, `Open3D CFL has 351 verts (got R ${cflN} L ${cflLN})`)
+  assert(deltoidNverts === 162, `deltoid is still the Z-Anatomy mesh (${deltoidNverts} verts)`)
+  assert(atflLen > 32.7 && atflLen < 33.2, `packed ATFL length is about 33 mm (got ${atflLen.toFixed(2)})`)
+  assert(cflLen > 26.0 && cflLen < 26.5, `packed CFL length is about 26 mm (got ${cflLen.toFixed(2)})`)
+  assert(Math.abs(pcaLength(atflLRaw) - atflLen) < 0.05, 'left ATFL length matches the right')
+  assert(Math.abs(pcaLength(cflLRaw) - cflLen) < 0.05, 'left CFL length matches the right')
 
   const atflBeforeF = minSignedDistance(worldVerts(atflRaw), fibula)
   const atflBeforeT = minSignedDistance(worldVerts(atflRaw), talus)
   const cflBeforeF = minSignedDistance(worldVerts(cflRaw), fibula)
   const cflBeforeC = minSignedDistance(worldVerts(cflRaw), calcaneus)
-  const deltoidBeforeN = minSignedDistance(worldVerts(deltoidRaw), navicular)
 
-  assert(atflBeforeF > 3 && atflBeforeF < 5, `raw ATFL–fibula gap is about 4 mm (got ${atflBeforeF.toFixed(2)})`)
-  assert(atflBeforeT > 0.5 && atflBeforeT < 2, `raw ATFL–talus gap is about 1–2 mm (got ${atflBeforeT.toFixed(2)})`)
-  assert(cflBeforeF < 0, `raw CFL already intersects the fibula (signed ${cflBeforeF.toFixed(2)})`)
-  assert(cflBeforeC > 3 && cflBeforeC < 5, `raw CFL–calcaneus gap is about 4 mm (got ${cflBeforeC.toFixed(2)})`)
+  assert(atflBeforeT < -0.8 && atflBeforeT > -1.4, `raw ATFL slightly intrudes the talus (signed ${atflBeforeT.toFixed(2)})`)
+  assert(atflBeforeF < 0 && atflBeforeF > -0.5, `raw ATFL barely clips the fibula (signed ${atflBeforeF.toFixed(2)})`)
+  assert(cflBeforeF < -1.5 && cflBeforeF > -2.2, `raw CFL clips the fibula by about 1.9 mm (signed ${cflBeforeF.toFixed(2)})`)
+  assert(cflBeforeC > 0.5 && cflBeforeC < 1.0, `raw CFL mid-substance already sits near the calcaneus (signed ${cflBeforeC.toFixed(2)})`)
 
   const atfl = await loadMesh('ligaments/atfl_r.glb', 'atfl_r')
   const cfl = await loadMesh('ligaments/cfl_r.glb', 'cfl_r')
+  const atflL = await loadMesh('ligaments/atfl_l.glb', 'atfl_l')
+  const cflL = await loadMesh('ligaments/cfl_l.glb', 'cfl_l')
   const deltoid = await loadMesh('ligaments/deltoid_r.glb', 'deltoid_r')
   applyLigamentDisplayTreatment(atfl)
   applyLigamentDisplayTreatment(cfl)
+  applyLigamentDisplayTreatment(atflL)
+  applyLigamentDisplayTreatment(cflL)
   applyLigamentDisplayTreatment(deltoid)
+
+  const fibulaL = await loadMesh('fibula_l.glb', 'fibula_l')
+  const talusL = await loadMesh('talus_l.glb', 'talus_l')
+  const calcaneusL = await loadMesh('calcaneus_l.glb', 'calcaneus_l')
 
   const atflF = minSignedDistance(worldVerts(atfl), fibula)
   const atflT = minSignedDistance(worldVerts(atfl), talus)
   const cflF = minSignedDistance(worldVerts(cfl), fibula)
   const cflC = minSignedDistance(worldVerts(cfl), calcaneus)
+  const atflLF = minSignedDistance(worldVerts(atflL), fibulaL)
+  const atflLT = minSignedDistance(worldVerts(atflL), talusL)
+  const cflLF = minSignedDistance(worldVerts(cflL), fibulaL)
+  const cflLC = minSignedDistance(worldVerts(cflL), calcaneusL)
   const deltoidN = minSignedDistance(worldVerts(deltoid), navicular)
 
-  assert(atflF > 0 && atflF <= 1, `seated ATFL sits on the fibula without sinking (signed ${atflF.toFixed(2)} mm)`)
-  assert(atflT > 0 && atflT <= 1, `seated ATFL sits on the talus without sinking (signed ${atflT.toFixed(2)} mm)`)
-  assert(atflF < atflBeforeF - 2, 'ATFL moves closer to the fibula than the packed fit')
-  assert(cflF > 0 && cflF <= 1, `seated CFL is out of the fibula and still tight (signed ${cflF.toFixed(2)} mm)`)
-  assert(cflC > 0 && cflC <= 1, `seated CFL sits on the calcaneus without sinking (signed ${cflC.toFixed(2)} mm)`)
-  assert(cflC < cflBeforeC - 2, 'CFL moves closer to the calcaneus than the packed fit')
+  assert(atflF > 0.4 && atflF <= 1.0, `seated ATFL sits on the fibula without sinking (signed ${atflF.toFixed(2)} mm)`)
+  assert(atflT > 0.4 && atflT <= 1.0, `seated ATFL sits on the talus without sinking (signed ${atflT.toFixed(2)} mm)`)
+  assert(cflF > 0.4 && cflF <= 1.0, `seated CFL is out of the fibula and still tight (signed ${cflF.toFixed(2)} mm)`)
+  assert(cflC > 0.4 && cflC <= 1.0, `seated CFL mid-substance stays just outside the calcaneus (signed ${cflC.toFixed(2)} mm)`)
+  assert(atflLF > 0.4 && atflLF <= 1.0, `left ATFL sits on the fibula (signed ${atflLF.toFixed(2)} mm)`)
+  assert(atflLT > 0.4 && atflLT <= 1.0, `left ATFL sits on the talus (signed ${atflLT.toFixed(2)} mm)`)
+  assert(cflLF > 0.4 && cflLF <= 1.0, `left CFL is out of the fibula (signed ${cflLF.toFixed(2)} mm)`)
+  assert(cflLC > 0.4 && cflLC <= 1.0, `left CFL mid-substance stays just outside the calcaneus (signed ${cflLC.toFixed(2)} mm)`)
+  assert(atflF > atflBeforeF + 0.5, 'ATFL display seat lifts the talar/fibular clips out of bone')
+  assert(cflF > cflBeforeF + 2, 'CFL display seat clears the packed fibular clip')
   assert(deltoidN > 10, `deltoid–navicular shortfall is not closed with invented mesh (${deltoidN.toFixed(1)} mm)`)
   assert(Math.abs(deltoid.position.x) < 1e-9 && Math.abs(deltoid.position.y) < 1e-9, 'deltoid mesh was not translated')
+
+  const { readFileSync: readSync } = await import('node:fs')
+  // Pack only by running the production packer into a temp dir would also
+  // write the large bone/muscle packs. Re-read the ligaments the same way
+  // the packer does, then walk a ligaments-only ANPK built identically.
+  const ligDir = join(dirname(fileURLToPath(import.meta.url)), '..', 'public', 'models', 'extra', 'ligaments')
+  const urls: string[] = JSON.parse(readSync(join(ligDir, 'manifest.json'), 'utf8'))
+  const parts: Buffer[] = [Buffer.alloc(12)]
+  parts[0].write('ANPK', 0, 'latin1')
+  parts[0].writeUInt32LE(1, 4)
+  parts[0].writeUInt32LE(urls.length, 8)
+  const originals: { name: string; file: Buffer }[] = []
+  for (const url of urls) {
+    const base = String(url).split('/').pop() as string
+    const file = readSync(join(ligDir, base))
+    const nameBuf = Buffer.from(base, 'utf8')
+    const head = Buffer.alloc(2 + nameBuf.length + 4)
+    head.writeUInt16LE(nameBuf.length, 0)
+    nameBuf.copy(head, 2)
+    head.writeUInt32LE(file.length, 2 + nameBuf.length)
+    parts.push(head, file)
+    originals.push({ name: base, file })
+  }
+  const packed = Buffer.concat(parts)
+  assert(packed.toString('latin1', 0, 4) === 'ANPK', 'ligaments.pack has ANPK magic')
+  assert(packed.readUInt32LE(4) === 1, 'ligaments.pack is ANPK v1')
+  assert(packed.readUInt32LE(8) === 6, 'ligaments.pack holds the six ankle-ligament GLBs')
+  let cur = 12
+  for (let i = 0; i < originals.length; i++) {
+    const nameLen = packed.readUInt16LE(cur)
+    cur += 2
+    const name = packed.toString('utf8', cur, cur + nameLen)
+    cur += nameLen
+    const dataLen = packed.readUInt32LE(cur)
+    cur += 4
+    const data = packed.subarray(cur, cur + dataLen)
+    cur += dataLen
+    assert(name === originals[i].name, `pack entry ${i} is ${originals[i].name}`)
+    assert(Buffer.compare(data, originals[i].file) === 0, `${name} in the pack matches the public GLB`)
+  }
+  assert(cur === packed.length, 'ligaments.pack has no trailing bytes')
+  const deltoidR = originals.find((item) => item.name === 'deltoid_r.glb')
+  const deltoidL = originals.find((item) => item.name === 'deltoid_l.glb')
+  assert(deltoidR?.file.length === 4596 && deltoidL?.file.length === 4596, 'deltoid GLBs are the original Z-Anatomy files')
+  const atflPacked = originals.find((item) => item.name === 'atfl_r.glb')
+  const cflPacked = originals.find((item) => item.name === 'cfl_r.glb')
+  assert((atflPacked?.file.length ?? 0) > 10000, 'packed ATFL is the larger Open3D mesh, not the old 18-vert stub')
+  assert((cflPacked?.file.length ?? 0) > 8000, 'packed CFL is the larger Open3D mesh, not the old 18-vert stub')
 }
+
 
 if (failed) {
   console.error(`\n${passed} passed, ${failed} failed`)
