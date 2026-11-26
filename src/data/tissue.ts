@@ -5,11 +5,12 @@
 
 export type TissueKind = 'ligament' | 'tendon' | 'fascia'
 
-export type TissueRegion = 'ankle' | 'foot' | 'leg' | 'wrist'
+export type TissueRegion = 'ankle' | 'foot' | 'knee' | 'leg' | 'wrist'
 
 export const TISSUE_REGIONS: { id: TissueRegion; label: string }[] = [
   { id: 'ankle', label: 'Ankle' },
   { id: 'foot', label: 'Foot' },
+  { id: 'knee', label: 'Knee' },
   { id: 'leg', label: 'Leg' },
   { id: 'wrist', label: 'Wrist' },
 ]
@@ -99,12 +100,103 @@ export const TISSUE: TissueItem[] = [
     'left deltoid ligament',
     'right deltoid ligament',
   ]),
+  item('cervical_ligament', 'ligament', 'ankle', LR('cervical_talocalc'), 'cervical ligament', [
+    'cervical ligament',
+    'anterior talocalcaneal ligament',
+    'cervical ligament of ankle',
+    'cervical talocalcaneal ligament',
+    'left cervical ligament',
+    'right cervical ligament',
+  ]),
+  item('interosseous_talocalcaneal', 'ligament', 'ankle', LR('io_talocalc'), 'interosseous talocalcaneal ligament', [
+    'interosseous talocalcaneal ligament',
+    'interosseus talocalcaneal ligament',
+    'ligament of the sinus tarsi',
+    'left interosseous talocalcaneal ligament',
+    'right interosseous talocalcaneal ligament',
+  ]),
+  item('flexor_retinaculum_ankle', 'fascia', 'ankle', LR('flex_retinac_ankle'), 'flexor retinaculum of ankle', [
+    'flexor retinaculum of ankle',
+    'flexor retinaculum of the ankle',
+    'laciniate ligament',
+    'medial retinaculum of ankle',
+    'left flexor retinaculum of ankle',
+    'right flexor retinaculum of ankle',
+  ]),
   item('long_plantar', 'ligament', 'foot', LR('long_plantar'), 'long plantar ligament', [
     'long plantar ligament',
     'long plantar',
     'plantar tarsal ligament',
     'left long plantar ligament',
     'right long plantar ligament',
+  ]),
+  item('spring_ligament', 'ligament', 'foot', LR('spring'), 'plantar calcaneonavicular ligament', [
+    'plantar calcaneonavicular ligament',
+    'spring ligament',
+    'spring ligament of the foot',
+    'calcaneonavicular ligament',
+    'left plantar calcaneonavicular ligament',
+    'right plantar calcaneonavicular ligament',
+    'left spring ligament',
+    'right spring ligament',
+  ]),
+  item('bifurcate', 'ligament', 'foot', LR('bifurcate'), 'bifurcate ligament', [
+    'bifurcate ligament',
+    'bifurcated ligament',
+    'Chopart ligament',
+    'ligamentum bifurcatum',
+    'left bifurcate ligament',
+    'right bifurcate ligament',
+  ]),
+  item('dorsal_tarsometatarsal', 'ligament', 'foot', LR('dorsal_tmt'), 'dorsal tarsometatarsal ligaments', [
+    'dorsal tarsometatarsal ligaments',
+    'dorsal tarsometatarsal ligament',
+    'dorsal Lisfranc ligaments',
+    'Lisfranc ligaments',
+    'Lisfranc complex',
+    'left dorsal tarsometatarsal ligaments',
+    'right dorsal tarsometatarsal ligaments',
+  ]),
+  item('plantar_tarsometatarsal', 'ligament', 'foot', LR('plantar_tmt'), 'plantar tarsometatarsal ligaments', [
+    'plantar tarsometatarsal ligaments',
+    'plantar tarsometatarsal ligament',
+    'plantar Lisfranc ligaments',
+    'left plantar tarsometatarsal ligaments',
+    'right plantar tarsometatarsal ligaments',
+  ]),
+  item('cuneometatarsal_interosseous', 'ligament', 'foot', LR('cuneometatarsal_io'), 'cuneometatarsal interosseous ligaments', [
+    'cuneometatarsal interosseous ligaments',
+    'cuneometatarsal interosseus ligaments',
+    'Lisfranc interosseous ligaments',
+    'interosseous tarsometatarsal ligaments',
+    'Lisfranc ligament',
+    'left cuneometatarsal interosseous ligaments',
+    'right cuneometatarsal interosseous ligaments',
+  ]),
+  item('acl', 'ligament', 'knee', LR('acl'), 'anterior cruciate ligament', [
+    'anterior cruciate ligament',
+    'ACL',
+    'anterior cruciate',
+    'left anterior cruciate ligament',
+    'right anterior cruciate ligament',
+  ]),
+  item('pcl', 'ligament', 'knee', LR('pcl'), 'posterior cruciate ligament', [
+    'posterior cruciate ligament',
+    'PCL',
+    'posterior cruciate',
+    'left posterior cruciate ligament',
+    'right posterior cruciate ligament',
+  ]),
+  item('lcl', 'ligament', 'knee', LR('lcl'), 'fibular collateral ligament', [
+    'fibular collateral ligament',
+    'lateral collateral ligament',
+    'LCL',
+    'lateral collateral ligament of knee',
+    'fibular collateral',
+    'left fibular collateral ligament',
+    'right fibular collateral ligament',
+    'left lateral collateral ligament',
+    'right lateral collateral ligament',
   ]),
   item('calcaneal_tendon', 'tendon', 'leg', LR('calcaneal'), 'calcaneal tendon', [
     'calcaneal tendon',

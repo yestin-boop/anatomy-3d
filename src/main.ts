@@ -115,11 +115,13 @@ const CARTILAGE_REGION_LABEL: Record<CartilageRegion, string> = {
   spine: 'SPINE',
   nose: 'NOSE',
   larynx: 'LARYNX',
+  knee: 'KNEE',
 }
 
 const TISSUE_REGION_LABEL: Record<TissueRegion, string> = {
   ankle: 'ANKLE',
   foot: 'FOOT',
+  knee: 'KNEE',
   leg: 'LEG',
   wrist: 'WRIST',
 }
@@ -3346,7 +3348,21 @@ caseReplay.addEventListener('click', () => {
   else scene.replayAnkleMotion()
 })
 
-function qaEntry(subject: 'bones' | 'muscles' | 'tissue', id: string): ViewSelection {
+function qaEntry(subject: 'bones' | 'muscles' | 'tissue' | 'cartilage', id: string): ViewSelection {
+  if (subject === 'cartilage') {
+    const row = CARTILAGE.find((c) => c.id === id)
+    if (!row) throw new Error(`unknown cartilage ${id}`)
+    const clicked = row.meshNames.find((n) => meshSide(n) === 'r') ?? row.meshNames[0]!
+    return {
+      kind: 'cartilage',
+      id,
+      displayName: row.displayName,
+      regionLabel: CARTILAGE_REGION_LABEL[row.region],
+      meshNames: row.meshNames,
+      side: meshSide(clicked),
+      clickedMesh: clicked,
+    }
+  }
   if (subject === 'tissue') {
     const row = TISSUE.find((t) => t.id === id)
     if (!row) throw new Error(`unknown tissue ${id}`)
@@ -3448,7 +3464,7 @@ async function qaShowQuiz(
   return scene.getFramingReport()
 }
 
-async function qaShowView(subject: 'bones' | 'muscles' | 'tissue', id: string): Promise<FramingReport> {
+async function qaShowView(subject: 'bones' | 'muscles' | 'tissue' | 'cartilage', id: string): Promise<FramingReport> {
   pinForcedKeyboard(0)
   scene.setLook('solid')
   if (!state.viewing) await startView()
@@ -3456,6 +3472,10 @@ async function qaShowView(subject: 'bones' | 'muscles' | 'tissue', id: string): 
   syncLookButtons()
   if (subject === 'tissue') {
     viewTissueVisible = true
+    applyViewDisplay()
+  }
+  if (subject === 'cartilage') {
+    viewCartilageVisible = true
     applyViewDisplay()
   }
   const sel = qaEntry(subject, id)

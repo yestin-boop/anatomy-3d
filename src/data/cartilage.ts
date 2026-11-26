@@ -1,12 +1,13 @@
 /** View-only cartilage set — BodyParts3D meshes (CC BY 4.0). Not a quiz subject. */
 
-export type CartilageRegion = 'thorax' | 'spine' | 'nose' | 'larynx'
+export type CartilageRegion = 'thorax' | 'spine' | 'nose' | 'larynx' | 'knee'
 
 export const CARTILAGE_REGIONS: { id: CartilageRegion; label: string }[] = [
   { id: 'thorax', label: 'Ribs' },
   { id: 'spine', label: 'Spine' },
   { id: 'nose', label: 'Nose' },
   { id: 'larynx', label: 'Larynx' },
+  { id: 'knee', label: 'Knee' },
 ]
 
 export type CartilageItem = {
@@ -215,6 +216,30 @@ export const CARTILAGE: CartilageItem[] = [
     meshNames: ['epiglottis'],
     displayName: 'epiglottis',
     aliases: ['epiglottis', 'epiglottic cartilage'],
+  },
+  {
+    id: 'medial_meniscus',
+    region: 'knee',
+    meshNames: ['med_meniscus_l', 'med_meniscus_r'],
+    displayName: 'medial meniscus',
+    aliases: [
+      'medial meniscus',
+      'medial meniscus of knee',
+      'left medial meniscus',
+      'right medial meniscus',
+    ],
+  },
+  {
+    id: 'lateral_meniscus',
+    region: 'knee',
+    meshNames: ['lat_meniscus_l', 'lat_meniscus_r'],
+    displayName: 'lateral meniscus',
+    aliases: [
+      'lateral meniscus',
+      'lateral meniscus of knee',
+      'left lateral meniscus',
+      'right lateral meniscus',
+    ],
   },
 ]
 

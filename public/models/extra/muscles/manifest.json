@@ -326,5 +326,7 @@
   "/models/extra/muscles/vastus_lat_l.glb",
   "/models/extra/muscles/vastus_lat_r.glb",
   "/models/extra/muscles/vastus_med_l.glb",
-  "/models/extra/muscles/vastus_med_r.glb"
+  "/models/extra/muscles/vastus_med_r.glb",
+  "/models/extra/muscles/edb_r.glb",
+  "/models/extra/muscles/edb_l.glb"
 ]

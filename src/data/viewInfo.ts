@@ -2295,7 +2295,7 @@ export const MUSCLE_VIEW: Record<string, MuscleViewInfo> = {
   extensor_hallucis_brevis: {
     id: 'extensor_hallucis_brevis',
     description:
-      'A muscle of the dorsum of the foot, essentially the medial slip of extensor digitorum brevis (which is not a separately named mesh in this pack) going to the hallux. It is relatively superficial on the dorsal foot, under the inferior extensor retinaculum and the long extensor tendons.',
+      'A muscle of the dorsum of the foot, essentially the medial slip of extensor digitorum brevis (extensor digitorum brevis is packed as a separate View-only Open3D mesh) going to the hallux. It is relatively superficial on the dorsal foot, under the inferior extensor retinaculum and the long extensor tendons.',
     origin:
       'The dorsal and lateral surfaces of the anterior part of the calcaneus, and the adjacent inferior extensor retinaculum (the stem of the extensor retinaculum / bifurcate ligament region).',
     insertion:
@@ -2342,6 +2342,23 @@ export const MUSCLE_VIEW: Record<string, MuscleViewInfo> = {
     ],
   },
 
+
+  extensor_digitorum_brevis: {
+    id: 'extensor_digitorum_brevis',
+    description:
+      'A short muscle on the dorsum of the foot that arises from the superolateral calcaneus and sends tendons to the second, third, and fourth toes (a separate slip to the hallux is extensor hallucis brevis). The mesh is from Open3DModel (CC BY-SA 4.0), seated with the same rigid fit as the packed ATFL and CFL. It is available in View only; it is not a quiz or Sport lesson.',
+    origin:
+      'The superolateral surface of the calcaneus, in front of the groove for the fibular tendons, and the adjacent inferior extensor retinaculum.',
+    insertion:
+      'The tendons join the lateral sides of the extensor digitorum longus tendons to the second, third, and fourth toes (the extensor expansions). The hallux slip, when named separately, reaches the base of the proximal phalanx of the great toe.',
+    action:
+      'Extends the second to fourth toes at the metatarsophalangeal joints, and assists extension of the hallux when the medial slip is present. It cannot extend the ankle.',
+    innervation: 'Deep fibular (peroneal) nerve (L5–S1).',
+    sitesForSide: (s) => [
+      { kind: 'origin', label: 'Origin · calcaneus', muscleMeshes: [`edb_${s}`], boneMeshes: side(s, ['calcaneus']), prefer: 'lateral' },
+      { kind: 'insertion', label: 'Insertion · toes 2–4', muscleMeshes: [`edb_${s}`], boneMeshes: side(s, ['phal_foot_prox_2', 'phal_foot_prox_3', 'phal_foot_prox_4']), prefer: 'caudal' },
+    ],
+  },
 
   masseter: {
     id: 'masseter',
@@ -3299,6 +3316,28 @@ Object.assign(CARTILAGE_VIEW, {
   },
 })
 
+
+Object.assign(CARTILAGE_VIEW, {
+  medial_meniscus: {
+    id: 'medial_meniscus',
+    description:
+      'The medial meniscus, a C-shaped fibrocartilage disc on the medial tibial plateau that deepens the joint and spreads load under the medial femoral condyle. The mesh is from Open3DModel (CC BY-SA 4.0), seated with the same rigid knee-bone registration as the packed cruciate ligaments. It is available in View only; it is not a quiz or Sport lesson.',
+    articulations:
+      'The medial tibial plateau, the medial femoral condyle, and the joint capsule (the medial meniscus is also attached to the deep fibres of the medial collateral ligament).',
+    features:
+      'It is less mobile than the lateral meniscus and is more often torn. The horns attach to the anterior and posterior intercondylar areas of the tibia. There is no new Rehab case.',
+  },
+  lateral_meniscus: {
+    id: 'lateral_meniscus',
+    description:
+      'The lateral meniscus, a more nearly circular fibrocartilage disc on the lateral tibial plateau. The mesh is from Open3DModel (CC BY-SA 4.0), seated with the same rigid knee-bone registration as the packed cruciate ligaments. It is available in View only; it is not a quiz or Sport lesson.',
+    articulations:
+      'The lateral tibial plateau and the lateral femoral condyle. It is not attached to the fibular collateral ligament, and a popliteus tendon groove separates it from the posterolateral capsule.',
+    features:
+      'It is more mobile than the medial meniscus. The posterior horn may give attachment to the posterior meniscofemoral ligament (Wrisberg) when that band is present. There is no new Rehab case.',
+  },
+})
+
 export function getCartilageView(id: string): CartilageViewInfo | undefined {
   return CARTILAGE_VIEW[id]
 }
@@ -3407,6 +3446,94 @@ export const TISSUE_VIEW: Record<string, TissueViewInfo> = {
     attachments: 'Medially, the pisiform and the hook of the hamate; laterally, the scaphoid tubercle and the ridge of the trapezium.',
     features:
       'The median nerve travels through the carpal tunnel beneath this retinaculum, with the flexor tendons in their synovial sheaths. Thickening or raised tunnel pressure here is the setting for carpal tunnel syndrome.',
+  },
+  cervical_ligament: {
+    id: 'cervical_ligament',
+    description:
+      'The cervical (anterior talocalcaneal) ligament, a strong band in the sinus tarsi from the neck of the talus down to the dorsal calcaneus. The mesh is from Open3DModel (CC BY-SA 4.0), seated with the same rigid fit as the packed ATFL and CFL.',
+    attachments: 'The inferolateral neck of the talus, to the dorsal surface of the calcaneus in the sinus tarsi.',
+    features:
+      'It is an important stabilizer of the subtalar joint. Injury here can contribute to sinus tarsi pain after an inversion sprain.',
+  },
+  interosseous_talocalcaneal: {
+    id: 'interosseous_talocalcaneal',
+    description:
+      'The interosseous talocalcaneal ligament, a short, strong band in the tarsal canal (canalis tarsi) between the talus and the calcaneus. The mesh is from Open3DModel (CC BY-SA 4.0), seated with the same rigid fit as the packed ATFL and CFL.',
+    attachments: 'The groove on the undersurface of the talus, to the corresponding groove on the upper surface of the calcaneus, in the tarsal canal.',
+    features:
+      'It is a primary bond of the subtalar joint and helps bind the two bones in the sinus and canalis tarsi.',
+  },
+  flexor_retinaculum_ankle: {
+    id: 'flexor_retinaculum_ankle',
+    description:
+      'The flexor retinaculum of the ankle (laciniate ligament), a fibrous strap on the medial ankle that roofs the tarsal tunnel and holds the tendons of tibialis posterior, flexor digitorum longus, and flexor hallucis longus. The mesh is from Open3DModel (CC BY-SA 4.0), seated with the same rigid fit as the packed ATFL and CFL.',
+    attachments: 'The medial malleolus of the tibia, down and back to the medial calcaneus (and adjacent plantar aponeurosis in life).',
+    features:
+      'The tibial nerve and posterior tibial vessels travel with the flexor tendons under this retinaculum. Compression here is the setting for tarsal tunnel syndrome. Mid-substance stands off the bones to leave room for those tendons.',
+  },
+  spring_ligament: {
+    id: 'spring_ligament',
+    description:
+      'The plantar calcaneonavicular (spring) ligament, a strong sheet on the medial sole from the sustentaculum tali to the navicular. It supports the head of the talus and the medial longitudinal arch. The mesh is from Open3DModel (CC BY-SA 4.0), seated with the same rigid fit as the packed ATFL and CFL.',
+    attachments: 'The anterior margin of the sustentaculum tali of the calcaneus, to the plantar surface of the navicular.',
+    features:
+      'The talar head rests on this ligament. Laxity or tear can allow the head to drop and contribute to a flatfoot deformity. It is distinct from the long and short plantar ligaments on the lateral column.',
+  },
+  bifurcate: {
+    id: 'bifurcate',
+    description:
+      'The bifurcate ligament, a Y-shaped band on the dorsolateral midfoot that splits from the calcaneus to the cuboid and the navicular. It is an important stabilizer of the midtarsal (Chopart) joint. The mesh is from Open3DModel (CC BY-SA 4.0), seated with the same rigid fit as the packed ATFL and CFL.',
+    attachments: 'The dorsal anterior process of the calcaneus, dividing into calcaneocuboid and calcaneonavicular bands.',
+    features:
+      'Avulsion of the anterior process of the calcaneus can take this attachment with it. It is sometimes called Chopart’s ligament.',
+  },
+  dorsal_tarsometatarsal: {
+    id: 'dorsal_tarsometatarsal',
+    description:
+      'The dorsal tarsometatarsal ligaments, a set of short bands on the dorsum of the midfoot that join the cuneiforms and cuboid to the bases of the metatarsals. They form the dorsal part of the Lisfranc (tarsometatarsal) complex. The mesh is from Open3DModel (CC BY-SA 4.0), seated with the same rigid fit as the packed ATFL and CFL.',
+    attachments: 'The dorsal surfaces of the three cuneiforms and the cuboid, to the dorsal bases of the five metatarsals.',
+    features:
+      'They are thinner than the plantar and interosseous Lisfranc ligaments. Injury here is part of a Lisfranc injury of the midfoot.',
+  },
+  plantar_tarsometatarsal: {
+    id: 'plantar_tarsometatarsal',
+    description:
+      'The plantar tarsometatarsal ligaments, strong bands on the sole that join the cuneiforms and cuboid to the metatarsal bases. They form the plantar part of the Lisfranc complex. The mesh is from Open3DModel (CC BY-SA 4.0), seated with the same rigid fit as the packed ATFL and CFL.',
+    attachments: 'The plantar surfaces of the cuneiforms and cuboid, to the plantar bases of the metatarsals.',
+    features:
+      'They are stronger than the dorsal tarsometatarsal ligaments and help hold the transverse arch at the tarsometatarsal joints.',
+  },
+  cuneometatarsal_interosseous: {
+    id: 'cuneometatarsal_interosseous',
+    description:
+      'The cuneometatarsal interosseous ligaments, short ligaments in the intervals between the cuneiforms and the medial metatarsal bases. They include the key interosseous band often singled out as the Lisfranc ligament. The mesh is from Open3DModel (CC BY-SA 4.0), seated with the same rigid fit as the packed ATFL and CFL.',
+    attachments: 'The lateral surface of the medial cuneiform and the adjacent cuneiforms, to the bases of the second and neighbouring metatarsals.',
+    features:
+      'The ligament from the medial cuneiform to the second metatarsal base is the most important interosseous stabilizer of the Lisfranc joint. Rupture or bony avulsion here is the hallmark of a Lisfranc injury.',
+  },
+  acl: {
+    id: 'acl',
+    description:
+      'The anterior cruciate ligament (ACL), a strong intra-articular band from the anterior tibial plateau up, back, and slightly laterally to the medial aspect of the lateral femoral condyle. The mesh is from Open3DModel (CC BY-SA 4.0), seated with a documented rigid registration of the Open3D distal femur and proximal tibia onto the packed BodyParts3D knee.',
+    attachments: 'The anterior intercondylar area of the tibia, just in front of the medial intercondylar tubercle, to the posteromedial aspect of the lateral femoral condyle in the intercondylar notch.',
+    features:
+      'It resists anterior translation of the tibia on the femur and helps control rotation. It is commonly torn in non-contact cutting and landing injuries. The packed mesh is View only; there is no new Rehab case.',
+  },
+  pcl: {
+    id: 'pcl',
+    description:
+      'The posterior cruciate ligament (PCL), a strong intra-articular band from the posterior tibial plateau up and slightly medially to the lateral aspect of the medial femoral condyle. The mesh is from Open3DModel (CC BY-SA 4.0), seated with the same rigid knee-bone registration as the packed anterior cruciate ligament.',
+    attachments: 'The posterior intercondylar area of the tibia, to the anterolateral aspect of the medial femoral condyle in the intercondylar notch.',
+    features:
+      'It is stronger and thicker than the ACL and resists posterior translation of the tibia. It may be injured in a dashboard-type blow to the front of a flexed knee. The packed mesh is View only; there is no new Rehab case.',
+  },
+  lcl: {
+    id: 'lcl',
+    description:
+      'The fibular (lateral) collateral ligament of the knee, a rounded cord from the lateral femoral epicondyle down to the head of the fibula. It does not attach to the lateral meniscus. The mesh is from Open3DModel (CC BY-SA 4.0), seated with the same rigid knee-bone registration as the packed cruciate ligaments.',
+    attachments: 'The lateral epicondyle of the femur, to the head of the fibula, just in front of the apex (styloid).',
+    features:
+      'It resists varus force at the knee and is part of the posterolateral corner. Mid-substance stands off the bones as a cord across the joint. The packed mesh is View only; there is no new Rehab case.',
   },
 }
 
