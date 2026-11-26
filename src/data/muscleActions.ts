@@ -98,6 +98,25 @@ const DELTOID = focus('deltoid', 'posterior', 'arm-abduct', [], ARM)
 const BICEPS = focus('biceps_brachii', 'lateral', 'elbow-flex', [], ARM)
 const TRICEPS = focus('triceps_brachii', 'lateral', 'elbow-extend', [], ARM)
 
+function focusMany(
+  ids: readonly string[],
+  view: AnatomicalView,
+  cue: LimbCue,
+  hide: readonly string[] = [],
+  context: readonly string[] = THIGH,
+): StudyFocus {
+  const meshes = ids.flatMap((id) => rightMeshes(id))
+  return { highlight: meshes, frame: meshes, hide, context, view, cue }
+}
+
+const ILIOPSOAS = focusMany(
+  ['iliacus', 'psoas_major'],
+  'anterior',
+  'hip-flex',
+  ['rectus_abd_r', 'ext_oblique_r', 'int_oblique_r', 'sartorius_r', 'pectineus_r'],
+  HIP,
+)
+
 export const ACTION_LEARN: readonly ActionLearnCard[] = [
   {
     id: 'pull',
@@ -119,6 +138,17 @@ export const ACTION_LEARN: readonly ActionLearnCard[] = [
     paragraphs: [
       'Gluteus medius abducts the hip.',
       'Gluteus maximus extends the thigh. It is the chief extensor of the flexed thigh, in rising, climbing, and sprinting.',
+    ],
+  },
+  {
+    id: 'iliopsoas',
+    kicker: 'Hip',
+    title: 'The chief flexor',
+    motion: true,
+    focus: ILIOPSOAS,
+    paragraphs: [
+      'Iliacus and psoas major form iliopsoas, the chief flexor of the hip. The two muscles remain separate on the model. Iliopsoas names the combined unit, not either muscle alone.',
+      'Iliacus fills the iliac fossa. Psoas major runs from the lumbar spine to the proximal femur. Together they flex the thigh at the hip.',
     ],
   },
   {
@@ -216,6 +246,47 @@ export const ACTION_QUIZ: readonly ActionQuizStep[] = [
     hint: 'Chief extensor of the flexed thigh: rising, climbing, sprinting.',
     reveal: 'Gluteus maximus extends the thigh. It is the chief extensor of the flexed thigh.',
     focus: GLUT_MAX,
+  },
+  {
+    kind: 'type',
+    id: 'type-iliopsoas',
+    region: 'ILIOPSOAS',
+    prompt: 'What does iliopsoas do at the hip?',
+    official: 'flexes the thigh at the hip',
+    aliases: [
+      'flexes the thigh at the hip',
+      'flexes the hip',
+      'flex the hip',
+      'hip flexion',
+      'flexion of the hip',
+      'flexes the thigh',
+      'chief flexor of the hip',
+      'principal hip flexor',
+      'the chief flexor of the hip',
+      'chief flexor',
+    ],
+    hint: 'Iliacus and psoas major together. The chief flexor of the hip.',
+    reveal: 'Iliacus and psoas major form iliopsoas, the chief flexor of the hip. Together they flex the thigh at the hip.',
+    focus: ILIOPSOAS,
+  },
+  {
+    kind: 'tap',
+    id: 'tap-iliopsoas',
+    region: 'ILIOPSOAS',
+    prompt: 'Tap iliopsoas, the chief flexor of the hip.',
+    accept: ['iliacus', 'psoas_major'],
+    revealName: 'iliopsoas',
+    correct: 'Iliacus and psoas major form iliopsoas, the chief flexor of the hip.',
+    wrong: {
+      other: TAP_OTHER,
+      'other-side': 'That is the other side. This one is on the right.',
+      bone: 'That is bone. Iliopsoas is iliacus in the iliac fossa and psoas major beside the lumbar spine.',
+      rectus_femoris: 'That is rectus femoris. It also flexes the hip, but iliopsoas is the chief flexor: iliacus and psoas major.',
+      sartorius: 'That is sartorius. Iliopsoas is iliacus and psoas major, deeper in the iliac fossa and along the lumbar spine.',
+      pectineus: 'That is pectineus. Iliopsoas is the combined iliacus and psoas major.',
+      gluteus_maximus: 'That is gluteus maximus. It extends the thigh. Iliopsoas flexes the hip.',
+    },
+    focus: ILIOPSOAS,
   },
   {
     kind: 'type',

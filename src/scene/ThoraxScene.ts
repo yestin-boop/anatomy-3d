@@ -1860,7 +1860,7 @@ export class ThoraxScene {
       ? posing.endPos.clone().sub(posing.endTarget)
       : this.camera.position.clone().sub(this.controls.target)
     if (from.lengthSq() < 1e-8) from.set(0, 0.12, 1)
-    const dist = this.distanceForBox(box, from.clone().normalize(), this.studyFrameLocked ? 0.58 : undefined)
+    const dist = this.distanceForBox(box, from.clone().normalize(), this.studyFrameLocked ? 0.78 : undefined)
     const pivot = posing ? posing.endTarget : this.controls.target
     from.setLength(dist)
     const endPos = pivot.clone().add(from)
@@ -2003,7 +2003,8 @@ export class ThoraxScene {
     this.spin.rotation.y = 0
     this.viewMode = false
     this.targetIds = new Set()
-    this.controls.enablePan = false
+    this.controls.enablePan = true
+    this.controls.screenSpacePanning = true
     this.controls.minDistance = VIEW_MIN_DISTANCE
     this.buildAnklePivot()
     this.ankleEmphasis = 'both'
@@ -2033,6 +2034,10 @@ export class ThoraxScene {
     this.framedBox = null
     this.framedExtents = null
     this.cancelViewFrame()
+    if (!this.viewMode) {
+      this.controls.enablePan = false
+      this.controls.minDistance = DEFAULT_MIN_DISTANCE
+    }
     this.applySubjectVisibility()
   }
 
@@ -2154,6 +2159,7 @@ export class ThoraxScene {
     pose: { plantar: number; invert: number } | null
     camera: { x: number; y: number; z: number }
     target: { x: number; y: number; z: number }
+    pan: boolean
     viewId: string
     points: Record<string, { x: number; y: number; z: number } | null>
     picks: Record<string, string | null>
@@ -2209,6 +2215,7 @@ export class ThoraxScene {
         : null,
       camera: round(this.camera.position),
       target: round(this.controls.target),
+      pan: this.controls.enablePan,
       viewId: this.lastViewId,
       points,
       picks,
@@ -2479,7 +2486,8 @@ export class ThoraxScene {
     this.spin.rotation.y = 0
     this.viewMode = false
     this.targetIds = new Set()
-    this.controls.enablePan = false
+    this.controls.enablePan = true
+    this.controls.screenSpacePanning = true
     this.controls.minDistance = VIEW_MIN_DISTANCE
     await this.ensureMusclesLoaded()
     if (!this.studyCase || this.disposed) return
@@ -2498,6 +2506,10 @@ export class ThoraxScene {
     this.framedBox = null
     this.framedExtents = null
     this.cancelViewFrame()
+    if (!this.viewMode) {
+      this.controls.enablePan = false
+      this.controls.minDistance = DEFAULT_MIN_DISTANCE
+    }
     this.applySubjectVisibility()
   }
 
@@ -2585,6 +2597,7 @@ export class ThoraxScene {
     highlighted: string[]
     camera: { x: number; y: number; z: number }
     target: { x: number; y: number; z: number }
+    pan: boolean
     viewId: string
     points: Record<string, { x: number; y: number; z: number } | null>
     screen: Record<string, { x: number; y: number; inFrame: boolean } | null>
@@ -2670,6 +2683,7 @@ export class ThoraxScene {
       highlighted: [...this.studyHighlight].sort(),
       camera: round(this.camera.position),
       target: round(this.controls.target),
+      pan: this.controls.enablePan,
       viewId: this.lastViewId,
       points,
       screen,
@@ -2980,7 +2994,7 @@ export class ThoraxScene {
     const dir = new THREE.Vector3(toward.x, toward.y, toward.z)
     this.occluderIds = new Set()
     this.lastViewId = view
-    const dist = this.distanceForBox(box, dir, 0.58)
+    const dist = this.distanceForBox(box, dir, 0.78)
     const endPos = center.clone().addScaledVector(dir, dist)
     this.focusTarget.copy(center)
     this.focusDist = dist

@@ -176,7 +176,7 @@ for (const selector of SELECTED) {
 
 assert(block('.start-btn').includes('background: var(--accent)'), 'Start is filled with --accent')
 assert(block('.start-btn').includes('color: var(--text-on-accent)'), 'Start text is the accent ink')
-assert(block('.case-btn').includes('background: var(--accent)'), 'Next / Start quiz is filled with --accent')
+assert(block('.case-btn').includes('background: var(--accent)'), 'Next is filled with --accent')
 assert(block('.case-btn').includes('color: var(--text-on-accent)'), 'primary lesson action uses accent ink')
 assert(block('.case-btn--ghost').includes('background: transparent'), 'Back and Replay stay unfilled')
 assert(
