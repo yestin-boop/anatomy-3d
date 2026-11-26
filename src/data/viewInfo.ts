@@ -2342,6 +2342,41 @@ export const MUSCLE_VIEW: Record<string, MuscleViewInfo> = {
     ],
   },
 
+
+  masseter: {
+    id: 'masseter',
+    description:
+      'A thick, quadrilateral muscle of mastication on the side of the face, with a larger superficial part and a smaller deep part. It covers the ramus of the mandible and raises the mandible to close the jaw. The mesh is from Écorché (Z-Anatomy, CC BY-SA 4.0), aligned to this BodyParts3D body. It is available in View only; it is not a quiz or Sport lesson.',
+    origin:
+      'Superficial part: the zygomatic process of the maxilla and the anterior two-thirds of the inferior border of the zygomatic arch. Deep part: the deep surface of the zygomatic arch and the zygomatic process of the temporal bone.',
+    insertion:
+      'Superficial fibers insert on the angle and the lower lateral surface of the ramus of the mandible. Deep fibers insert higher on the ramus and the coronoid process.',
+    action:
+      'Elevates the mandible (jaw closing). The superficial part also helps protrude the mandible; the deep part helps retract it slightly. Unilateral contraction can contribute to ipsilateral excursion of the jaw.',
+    innervation: 'Masseteric nerve, a branch of the mandibular division of the trigeminal nerve (CN V3).',
+    sitesForSide: (s) => [
+      { kind: 'origin', label: 'Origin · zygomatic arch', muscleMeshes: side(s, ['masseter_sup', 'masseter_deep']), boneMeshes: side(s, ['zygomatic', 'temporal']), prefer: 'lateral' },
+      { kind: 'insertion', label: 'Insertion · mandible', muscleMeshes: side(s, ['masseter_sup', 'masseter_deep']), boneMeshes: ['mandible'], prefer: 'lateral' },
+    ],
+  },
+
+  temporalis: {
+    id: 'temporalis',
+    description:
+      'A fan-shaped muscle of mastication that fills the temporal fossa, passing deep to the zygomatic arch to the coronoid process of the mandible. The mesh is from Écorché (Z-Anatomy, CC BY-SA 4.0), aligned to this BodyParts3D body. It is available in View only; it is not a quiz or Sport lesson.',
+    origin:
+      'The floor of the temporal fossa (temporal, parietal, frontal, and sphenoid bones where present) and the deep surface of the temporal fascia, up to the inferior temporal line.',
+    insertion:
+      'The coronoid process of the mandible and the anterior border of the ramus, almost as far as the last molar. The tendon passes deep to the zygomatic arch.',
+    action:
+      'Elevates the mandible (jaw closing). Posterior fibers retract the mandible after protrusion. It also helps maintain the resting position of the jaw.',
+    innervation: 'Deep temporal nerves, branches of the mandibular division of the trigeminal nerve (CN V3).',
+    sitesForSide: (s) => [
+      { kind: 'origin', label: 'Origin · temporal fossa', muscleMeshes: side(s, ['temporalis']), boneMeshes: [...side(s, ['temporal', 'parietal']), 'frontal'], prefer: 'lateral' },
+      { kind: 'insertion', label: 'Insertion · coronoid process', muscleMeshes: side(s, ['temporalis']), boneMeshes: ['mandible'], prefer: 'lateral' },
+    ],
+  },
+
 }
 
 const ORD = [
@@ -3274,4 +3309,107 @@ export function getMuscleView(id: string): MuscleViewInfo | undefined {
 
 export function getBoneView(id: string): BoneViewInfo | undefined {
   return BONE_VIEW[id]
+}
+
+
+export type TissueViewInfo = {
+  id: string
+  description: string
+  attachments?: string
+  features?: string
+}
+
+export const TISSUE_VIEW: Record<string, TissueViewInfo> = {
+  atfl: {
+    id: 'atfl',
+    description:
+      'A short, broad ligament of the lateral ankle that runs from the anterior border of the lateral malleolus to the neck of the talus. It is the ligament most often injured in an inversion sprain. The mesh is from Open3DModel (CC BY-SA 4.0), seated with the same rigid fit as the packed calcaneofibular ligament.',
+    attachments: 'Anterior border of the lateral malleolus of the fibula, to the neck of the talus just in front of the lateral articular facet.',
+    features:
+      'It is a relatively thin sheet and is taut in plantarflexion. Isolated injury is common; further inversion can also involve the calcaneofibular ligament.',
+  },
+  cfl: {
+    id: 'cfl',
+    description:
+      'A rounded cord of the lateral ankle that passes from the tip of the lateral malleolus down and back to the lateral surface of the calcaneus. It is the second lateral ligament injured in a typical inversion sprain. The mesh is from Open3DModel (CC BY-SA 4.0), seated with the same rigid fit as the packed anterior talofibular ligament.',
+    attachments: 'Tip of the lateral malleolus of the fibula, to a small tubercle on the lateral calcaneus.',
+    features:
+      'It is the only lateral ankle ligament that crosses both the talocrural and the subtalar joints. It is taut in dorsiflexion.',
+  },
+  ptfl: {
+    id: 'ptfl',
+    description:
+      'A strong, thick ligament of the lateral ankle that runs from the posterior edge of the lateral malleolus to the posterior tubercle of the talus. It is the deepest and least often injured of the three lateral ligaments. The mesh is from Open3DModel (CC BY-SA 4.0), seated with the same rigid fit as the packed ATFL and CFL.',
+    attachments: 'Malleolar fossa on the posterior medial surface of the lateral malleolus, to the posterolateral tubercle of the talus.',
+    features:
+      'It is taut in dorsiflexion and helps prevent posterior displacement of the talus. Isolated rupture is uncommon.',
+  },
+  aitfl: {
+    id: 'aitfl',
+    description:
+      'The anterior ligament of the distal tibiofibular syndesmosis, a short band from the anterior distal tibia to the anterior distal fibula. Injury here is the classic “high ankle” sprain. The mesh is from Open3DModel (CC BY-SA 4.0), seated with the same rigid fit as the packed ATFL and CFL.',
+    attachments: 'Anterior border of the lateral distal tibia (Chaput’s tubercle), to the anterior distal fibula (Wagstaffe’s tubercle).',
+    features:
+      'Together with the posterior and transverse tibiofibular ligaments and the interosseous ligament, it holds the ankle mortise. It is not part of the lateral collateral (ATFL/CFL/PTFL) complex.',
+  },
+  pitfl: {
+    id: 'pitfl',
+    description:
+      'The posterior ligament of the distal tibiofibular syndesmosis, a strong band on the back of the ankle mortise. The mesh is from Open3DModel (CC BY-SA 4.0), seated with the same rigid fit as the packed ATFL and CFL.',
+    attachments: 'Posterior distal tibia (Volkmann’s / posterior malleolar region), to the posterior distal fibula.',
+    features:
+      'It is stronger than the anterior tibiofibular ligament and is less often torn in isolation. Avulsion of the posterior malleolus can take its tibial attachment with it.',
+  },
+  trans_tibfib: {
+    id: 'trans_tibfib',
+    description:
+      'The transverse (inferior) tibiofibular ligament, a deep posterior band of the syndesmosis that forms a labrum-like lip under the posterior tibial plafond and deepens the ankle mortise. The mesh is from Open3DModel (CC BY-SA 4.0), seated with the same rigid fit as the packed ATFL and CFL.',
+    attachments: 'The posterior distal tibia, across to the distal fibula, just below the posterior tibiofibular ligament.',
+    features:
+      'It helps prevent posterior escape of the talus and completes the posterior wall of the mortise.',
+  },
+  deltoid_ligament: {
+    id: 'deltoid_ligament',
+    description:
+      'The strong medial (deltoid) ligament of the ankle, a fan from the medial malleolus to the talus, calcaneus, and navicular. The mesh is a Z-Anatomy merge of the tibionavicular, tibiocalcaneal, and posterior tibiotalar parts (CC BY-SA 4.0). On this skeleton the tibionavicular part sits nearer the talar neck than the navicular tuberosity, a documented shortfall of about 12 mm; it was not reshaped.',
+    attachments: 'Medial malleolus of the tibia, to the talus, sustentaculum tali of the calcaneus, and (in life) the navicular.',
+    features:
+      'It resists eversion and lateral displacement of the talus. It is much stronger than the lateral ligaments and is less often torn; eversion injuries more often fracture the medial malleolus.',
+  },
+  long_plantar: {
+    id: 'long_plantar',
+    description:
+      'A long, strong ligament on the sole of the foot, running from the plantar calcaneus toward the bases of the lateral metatarsals and the cuboid. It is a main support of the lateral longitudinal arch. The mesh is BodyParts3D (CC BY 4.0), in the same frame as the packed foot bones.',
+    attachments: 'Plantar surface of the calcaneus, to the cuboid and the bases of the second to fifth metatarsals. The tendon of fibularis longus runs in a groove deep to its distal fibers.',
+    features:
+      'It is the longest of the plantar tarsal ligaments. With the short plantar (plantar calcaneocuboid) and the plantar calcaneonavicular (spring) ligaments it supports the arches of the foot.',
+  },
+  calcaneal_tendon: {
+    id: 'calcaneal_tendon',
+    description:
+      'The calcaneal (Achilles) tendon, the thickest and strongest tendon in the body, formed from gastrocnemius and soleus (with a variable plantaris contribution) and inserting on the posterior calcaneus. The mesh is BodyParts3D (CC BY 4.0), in the same frame as the packed leg and heel.',
+    attachments: 'The distal gastrocnemius and soleus form the tendon in the lower calf; it inserts on the middle of the posterior surface of the calcaneus, separated from the upper calcaneus by the retrocalcaneal bursa.',
+    features:
+      'The tendon fibers spiral as they descend, and the insertion is slightly wider than the mid-portion. It is a common site of tendinopathy and of rupture, usually a few centimetres above the calcaneus.',
+  },
+  it_tract: {
+    id: 'it_tract',
+    description:
+      'The iliotibial tract (IT band), a thickened longitudinal band of the fascia lata on the lateral thigh, from the iliac crest and tensor fasciae latae down to the lateral tibia (Gerdy’s tubercle). The mesh is BodyParts3D (CC BY 4.0), in the same frame as the packed hip, femur, and tibia.',
+    attachments: 'Iliac crest and the deep surface / insertion of tensor fasciae latae (with a contribution from gluteus maximus), to Gerdy’s tubercle on the anterolateral proximal tibia. It also has a firm attachment to the lateral femoral epicondyle.',
+    features:
+      'It is a lateral stabilizer of the hip and the knee. Tightness or friction over the lateral femoral epicondyle is a common cause of lateral knee pain in runners and cyclists.',
+  },
+  flexor_retinaculum_wrist: {
+    id: 'flexor_retinaculum_wrist',
+    description:
+      'The flexor retinaculum of the wrist (transverse carpal ligament), a strong fibrous sheet that roofs the carpal tunnel and holds the digital flexor tendons and flexor pollicis longus in place. The mesh is BodyParts3D (CC BY 4.0), in the same frame as the packed carpus.',
+    attachments: 'Medially, the pisiform and the hook of the hamate; laterally, the scaphoid tubercle and the ridge of the trapezium.',
+    features:
+      'The median nerve travels through the carpal tunnel beneath this retinaculum, with the flexor tendons in their synovial sheaths. Thickening or raised tunnel pressure here is the setting for carpal tunnel syndrome.',
+  },
+}
+
+export function getTissueView(id: string): TissueViewInfo | undefined {
+  return TISSUE_VIEW[id]
 }

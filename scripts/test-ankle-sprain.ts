@@ -423,7 +423,11 @@ function minSignedDistance(verts: THREE.Vector3[], bone: THREE.Mesh): number {
   const packed = Buffer.concat(parts)
   assert(packed.toString('latin1', 0, 4) === 'ANPK', 'ligaments.pack has ANPK magic')
   assert(packed.readUInt32LE(4) === 1, 'ligaments.pack is ANPK v1')
-  assert(packed.readUInt32LE(8) === 6, 'ligaments.pack holds the six ankle-ligament GLBs')
+  assert(packed.readUInt32LE(8) === urls.length, 'ligaments.pack holds every manifest GLB')
+  assert(urls.length >= 6, 'ligaments manifest still includes the original ankle set')
+  for (const need of ['atfl_r.glb', 'atfl_l.glb', 'cfl_r.glb', 'cfl_l.glb', 'deltoid_r.glb', 'deltoid_l.glb']) {
+    assert(originals.some((item) => item.name === need), `ligaments pack includes ${need}`)
+  }
   let cur = 12
   for (let i = 0; i < originals.length; i++) {
     const nameLen = packed.readUInt16LE(cur)

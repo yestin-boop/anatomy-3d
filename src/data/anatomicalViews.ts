@@ -1,5 +1,6 @@
 import { AXIAL_BONES, type AxialBone } from './axialBones'
-import { MUSCLES, type Muscle, type MuscleRegion } from './muscles'
+import { MUSCLES, allViewMuscles, type Muscle, type MuscleRegion, type ViewOnlyMuscle } from './muscles'
+import { TISSUE, type TissueItem } from './tissue'
 
 /**
  * The face the camera uses for a quiz or View target.
@@ -123,7 +124,9 @@ const MUSCLE_VIEW: Record<string, AnatomicalView> = {
 }
 
 /** Face for one muscle. Region default, then an explicit override. */
-export function viewForMuscle(muscle: Muscle): AnatomicalView {
+export function viewForMuscle(muscle: Muscle | ViewOnlyMuscle): AnatomicalView {
+  if (muscle.id === 'masseter' || muscle.id === 'temporalis') return 'lateral'
+  if (muscle.region === 'head') return 'lateral'
   return MUSCLE_VIEW[muscle.id] ?? MUSCLE_REGION_VIEW[muscle.region]
 }
 
@@ -141,7 +144,7 @@ export function viewForBone(bone: AxialBone): AnatomicalView {
 }
 
 export function viewForMuscleId(id: string): AnatomicalView {
-  const muscle = MUSCLES.find((m) => m.id === id)
+  const muscle = allViewMuscles().find((m) => m.id === id)
   return muscle ? viewForMuscle(muscle) : 'anterior'
 }
 
@@ -151,8 +154,31 @@ export function viewForBoneId(id: string): AnatomicalView {
 }
 
 /** Every catalog id resolves. Used by the framing tests. */
+const TISSUE_VIEW_FACE: Record<string, AnatomicalView> = {
+  atfl: 'lateral',
+  cfl: 'lateral',
+  ptfl: 'posterior-lateral',
+  aitfl: 'anterior-lateral',
+  pitfl: 'posterior-lateral',
+  trans_tibfib: 'posterior-lateral',
+  deltoid_ligament: 'anterior-medial',
+  long_plantar: 'posterior',
+  calcaneal_tendon: 'posterior',
+  it_tract: 'lateral',
+  flexor_retinaculum_wrist: 'anterior',
+}
+
+export function viewForTissue(item: TissueItem): AnatomicalView {
+  return TISSUE_VIEW_FACE[item.id] ?? 'lateral'
+}
+
+export function viewForTissueId(id: string): AnatomicalView {
+  const item = TISSUE.find((row) => row.id === id)
+  return item ? viewForTissue(item) : 'lateral'
+}
+
 export function catalogCoverage(): { muscles: number; bones: number; unknownOverrides: string[] } {
-  const ids = new Set(MUSCLES.map((m) => m.id))
+  const ids = new Set(allViewMuscles().map((m) => m.id))
   const unknownOverrides = Object.keys(MUSCLE_VIEW).filter((id) => !ids.has(id))
   return { muscles: MUSCLES.length, bones: AXIAL_BONES.length, unknownOverrides }
 }

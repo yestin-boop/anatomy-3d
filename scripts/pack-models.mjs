@@ -24,6 +24,8 @@ const GROUPS = [
   { name: 'muscles', manifest: 'models/extra/muscles/manifest.json' },
   { name: 'cartilage', manifest: 'models/extra/cartilage/manifest.json' },
   { name: 'ligaments', manifest: 'models/extra/ligaments/manifest.json' },
+  { name: 'tendons', manifest: 'models/extra/tendons/manifest.json' },
+  { name: 'tissue', manifest: 'models/extra/tissue/manifest.json' },
 ]
 
 function readPack(buf) {
