@@ -942,13 +942,25 @@ html.touch-quiz.phone-landscape.keyboard-open .view-filters.is-quiz {
   #app:has(#view-panel:not([hidden])) .footer-bar {
     display: none;
   }
+  /* Quiet, tucked under the menu on the right; two short lines, full credit visible. */
   #app:has(#view-panel:not([hidden])) .footer-attr {
-    top: calc(env(safe-area-inset-top) + var(--target-min) + var(--space-3) + var(--space-2));
+    top: calc(max(var(--space-2), env(safe-area-inset-top)) + var(--target-compact) + var(--space-1));
     bottom: auto;
+    left: auto;
+    right: max(var(--space-3), env(safe-area-inset-right));
+    width: min(280px, 72vw);
+    max-width: min(280px, 72vw);
+    max-height: 2.7em;
+    overflow: hidden;
     display: block;
-    font-size: var(--type-caption);
+    text-align: right;
+    font-size: var(--type-quiet);
+    line-height: 1.25;
+    letter-spacing: 0;
+    opacity: 0.4;
   }
-  #app:has(#view-panel:not([hidden])) .footer-attr-sep { display: inline; }
+  #app:has(#view-panel:not([hidden])) .footer-attr > span:not(.footer-attr-sep) { display: block; }
+  #app:has(#view-panel:not([hidden])) .footer-attr > .footer-attr-sep { display: none; }
   .side-views { display: none; }
   .menu-overlay {
     justify-content: center;
@@ -1107,17 +1119,32 @@ html.touch-quiz.phone-landscape.keyboard-open .view-filters.is-quiz {
     justify-content: center;
     justify-items: center;
     align-items: center;
-    column-gap: 6px;
-    row-gap: 5px;
-    padding: 0 var(--space-3) var(--space-1);
+    column-gap: 4px;
+    row-gap: 4px;
+    padding: 0 var(--space-2) var(--space-1);
     overflow: visible;
   }
-  .view-filters:not(.is-quiz) .view-filter-group { flex: 0 0 auto; }
+  .view-filters:not(.is-quiz) .view-filter-group {
+    flex: 0 0 auto;
+    padding: 2px;
+    gap: 1px;
+  }
   .view-filters:not(.is-quiz) .view-filter-btn {
-    min-width: var(--target-min);
-    min-height: var(--target-min);
-    padding: var(--space-2) var(--space-3);
-    font-size: var(--type-label);
+    min-width: 0;
+    min-height: var(--target-compact);
+    padding: 4px 8px;
+    font-size: var(--type-caption);
+    letter-spacing: 0.03em;
+  }
+  .view-filters:not(.is-quiz) .view-filter-btn--on::before {
+    font-size: var(--type-caption);
+  }
+  /* Menu pill matches the tighter View chips. Quiz keeps the 44px target. */
+  .chrome--top.is-view .pill {
+    min-height: var(--target-compact);
+    min-width: var(--target-compact);
+    padding: 4px 10px;
+    font-size: var(--type-caption);
     letter-spacing: 0.04em;
   }
   #app:has(#view-pick-stack:not([hidden])) .view-filters:not(.is-quiz) {

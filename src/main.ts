@@ -416,11 +416,9 @@ app.innerHTML = `
       <span class="footer-meta" id="footer-meta">MODELS: PROCEDURAL · BODY PARTS 3D</span>
     </div>
     <div class="footer-attr">
-      <span>BodyParts3D, © The Database Center for Life Science / CC BY 4.0</span>
+      <span>BodyParts3D, © DBCLS / CC BY 4.0</span>
       <span class="footer-attr-sep"> · </span>
-      <span>Some trunk muscles from Z-Anatomy / Écorché, CC BY-SA 4.0</span>
-      <span class="footer-attr-sep"> · </span>
-      <span>Ankle ligaments from Z-Anatomy, CC BY-SA 4.0</span>
+      <span>Z-Anatomy / Écorché and Open3D, CC BY-SA 4.0</span>
     </div>
   </div>
 `
@@ -3885,11 +3883,18 @@ function qaViewChrome(): Record<string, unknown> {
   const handle = document.querySelector('#view-panel-handle-label')
   const panel = document.querySelector('#view-panel')
   const tissueBtn = document.querySelector('#btn-view-tissue')
+  const menuBtn = document.querySelector('#btn-menu-top')
+  const licence = document.querySelector<HTMLElement>('.footer-attr')
+  const licenceStyle = licence ? getComputedStyle(licence) : null
+  const licenceBox = box(licence)
+  const deepBtn = btns.find((b) => /deep/i.test((b.textContent || '').trim()))
+  const deepBox = box(deepBtn ?? null)
   return {
     groupCount: groups.length,
     groupLabels: groups.map((g) => g.getAttribute('aria-label')),
     btnLabels: btns.map((b) => (b.textContent || '').replace(/\s+/g, ' ').trim()),
     btnHeights: btns.map((b) => Math.round(b.getBoundingClientRect().height)),
+    btnWidths: btns.map((b) => Math.round(b.getBoundingClientRect().width)),
     uniqueChipRows: uniqueYs.length,
     filtersRect: box(filters),
     filtersDisplay: filters ? getComputedStyle(filters).display : null,
@@ -3898,6 +3903,15 @@ function qaViewChrome(): Record<string, unknown> {
     handleRect: box(handle),
     handleText: handle?.textContent ?? null,
     panelExpanded: panel?.classList.contains('is-expanded') ?? false,
+    menuRect: box(menuBtn),
+    menuHeight: menuBtn ? Math.round(menuBtn.getBoundingClientRect().height) : 0,
+    licenceRect: licenceBox,
+    licenceFontSize: licenceStyle ? Number.parseFloat(licenceStyle.fontSize) : 0,
+    licenceOpacity: licenceStyle ? Number.parseFloat(licenceStyle.opacity) : 1,
+    licenceText: (licence?.textContent ?? '').replace(/\s+/g, ' ').trim(),
+    licenceDisplay: licenceStyle?.display ?? '',
+    deepRect: deepBox,
+    deepClipped: deepBox ? deepBox.x + deepBox.w > window.innerWidth - 1 : false,
     innerWidth: window.innerWidth,
     innerHeight: window.innerHeight,
   }
@@ -3907,6 +3921,7 @@ function installQaHooks(): void {
   const api = {
     showQuiz: qaShowQuiz,
     showView: qaShowView,
+    startView,
     setViewDisplay: qaSetViewDisplay,
     viewChrome: qaViewChrome,
     showCommonBones: qaShowCommonBones,
