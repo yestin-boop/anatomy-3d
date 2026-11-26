@@ -2,5 +2,7 @@
   "/models/extra/tissue/it_tract_r.glb",
   "/models/extra/tissue/it_tract_l.glb",
   "/models/extra/tissue/flex_retinac_r.glb",
-  "/models/extra/tissue/flex_retinac_l.glb"
+  "/models/extra/tissue/flex_retinac_l.glb",
+  "/models/extra/tissue/flex_retinac_ankle_r.glb",
+  "/models/extra/tissue/flex_retinac_ankle_l.glb"
 ]
