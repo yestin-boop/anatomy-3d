@@ -239,6 +239,30 @@ const VIEW_CARTILAGE_SELECTED = {
   metalness: 0.04,
   opacity: 0.92,
 }
+const VIEW_TISSUE = {
+  color: 0xc9a36a,
+  emissive: 0x3a2810,
+  emissiveIntensity: 0.08,
+  roughness: 0.56,
+  metalness: 0.05,
+  opacity: 0.96,
+}
+const VIEW_TISSUE_SELECTED = {
+  color: 0xe4b56a,
+  emissive: 0x6a4010,
+  emissiveIntensity: 0.22,
+  roughness: 0.48,
+  metalness: 0.06,
+  opacity: 1,
+}
+const VIEW_TISSUE_XRAY = {
+  color: 0xc9a36a,
+  emissive: 0x5a3810,
+  emissiveIntensity: 0.12,
+  roughness: 0.5,
+  metalness: 0.04,
+  opacity: 0.55,
+}
 const VIEW_DIM_OPACITY_BONE = 0.13
 const VIEW_DIM_OPACITY_MUSCLE = 0.1
 /** Non-target muscles that sit in front of the quiz target. Low enough that a solid target still reads. */
@@ -282,7 +306,11 @@ export type ThoraxSceneOptions = {
   sideCanvases?: HTMLCanvasElement[]
 }
 
-export type MeshKind = 'bone' | 'muscle' | 'cartilage' | 'ligament'
+export type MeshKind = 'bone' | 'muscle' | 'cartilage' | 'ligament' | 'tendon' | 'fascia'
+
+export function isTissueKind(kind: MeshKind): boolean {
+  return kind === 'ligament' || kind === 'tendon' || kind === 'fascia'
+}
 
 export type ViewPickHit = {
   meshName: string
@@ -389,6 +417,7 @@ export class ThoraxScene {
   private viewSubjectFilter: ViewSubjectFilter = 'both'
   private muscleLayerFilter: MuscleLayerFilter = 'all'
   private cartilageVisible = true
+  private tissueVisible = true
   private raycaster = new THREE.Raycaster()
   private pointerNdc = new THREE.Vector2()
   private _scratchA = new THREE.Vector3()
@@ -657,21 +686,20 @@ export class ThoraxScene {
 
       const isDiaphragm = name === 'diaphragm'
       const tagged = (obj.userData as { kind?: MeshKind }).kind
+      const taggedKind = tagged && (tagged === 'muscle' || tagged === 'cartilage' || isTissueKind(tagged)) ? tagged : null
       const meshKind: MeshKind =
-        kind === 'muscle' || kind === 'cartilage' || kind === 'ligament'
+        kind === 'muscle' || kind === 'cartilage' || isTissueKind(kind)
           ? kind
-          : tagged === 'muscle' || tagged === 'cartilage' || tagged === 'ligament'
-            ? tagged
-            : 'bone'
+          : (taggedKind ?? 'bone')
       const base =
         meshKind === 'muscle'
           ? MUSCLE_GHOST
-          : meshKind === 'ligament'
+          : isTissueKind(meshKind)
             ? LIGAMENT_BASE
             : meshKind === 'cartilage' || isDiaphragm
               ? CARTILAGE
               : GHOST
-      const muscleOpaque = meshKind === 'muscle' || meshKind === 'ligament'
+      const muscleOpaque = meshKind === 'muscle' || isTissueKind(meshKind)
       const mat = new THREE.MeshStandardMaterial({
         color: base.color,
         emissive: base.emissive,
@@ -693,7 +721,7 @@ export class ThoraxScene {
         this.meshByName.set(name, obj)
         this.materials.set(name, mat)
         this.kindByName.set(name, meshKind)
-        if (meshKind === 'ligament') {
+        if (isTissueKind(meshKind)) {
           obj.visible = false
           mat.polygonOffset = true
           mat.polygonOffsetFactor = -2
@@ -812,7 +840,7 @@ export class ThoraxScene {
       const kind = this.kindByName.get(name) ?? 'bone'
       const mesh = this.meshByName.get(name)
       if (!mesh) continue
-      if (kind === 'ligament') {
+      if (isTissueKind(kind)) {
         mesh.visible = false
         continue
       }
@@ -1156,6 +1184,8 @@ export class ThoraxScene {
     this.applyViewLighting(this.look === 'solid')
     await this.ensureMusclesLoaded()
     if (!this.viewMode || this.disposed) return
+    await this.ensureTissueLoaded()
+    if (!this.viewMode || this.disposed) return
     this.applyViewPresentation()
     this.frameFullBody()
   }
@@ -1237,7 +1267,8 @@ export class ThoraxScene {
       if (!name || seen.has(name)) continue
       if (name === 'diaphragm') continue
       const kind = this.kindByName.get(name)
-      if (kind !== 'bone' && kind !== 'muscle' && kind !== 'cartilage') continue
+      if (!kind) continue
+      if (kind !== 'bone' && kind !== 'muscle' && kind !== 'cartilage' && !isTissueKind(kind)) continue
       seen.add(name)
       unique.push({ meshName: name, kind, distance: hit.distance })
     }
@@ -1326,10 +1357,12 @@ export class ThoraxScene {
     subjectFilter?: ViewSubjectFilter
     muscleLayer?: MuscleLayerFilter
     cartilageVisible?: boolean
+    tissueVisible?: boolean
   }): void {
     if (opts.subjectFilter) this.viewSubjectFilter = opts.subjectFilter
     if (opts.muscleLayer) this.muscleLayerFilter = opts.muscleLayer
     if (opts.cartilageVisible !== undefined) this.cartilageVisible = opts.cartilageVisible
+    if (opts.tissueVisible !== undefined) this.tissueVisible = opts.tissueVisible
     if (this.viewMode) this.applyViewPresentation()
   }
 
@@ -1346,6 +1379,10 @@ export class ThoraxScene {
 
   isCartilageVisible(): boolean {
     return this.cartilageVisible
+  }
+
+  isTissueVisible(): boolean {
+    return this.tissueVisible
   }
 
   getViewSubjectFilter(): ViewSubjectFilter {
@@ -1368,6 +1405,7 @@ export class ThoraxScene {
 
   private meshShownInView(name: string, kind: MeshKind): boolean {
     if (kind === 'cartilage') return this.cartilageVisible
+    if (isTissueKind(kind)) return this.tissueVisible
     if (kind === 'bone') return this.viewSubjectFilter !== 'muscles'
     if (this.viewSubjectFilter === 'bones') return false
     return muscleVisibleAtLayer(name, this.muscleLayerFilter)
@@ -1386,9 +1424,41 @@ export class ThoraxScene {
       const isCartilage = kind === 'cartilage'
       const isDiaphragm = name === 'diaphragm'
       const selected = hasSel && this.viewSelected.has(name)
+      const dim = hasSel && !selected
 
-      if (kind === 'ligament') {
-        mesh.visible = false
+      if (isTissueKind(kind)) {
+        const shown = this.meshShownInView(name, kind)
+        mesh.visible = shown
+        if (!shown) {
+          mat.needsUpdate = true
+          continue
+        }
+        if (this.look === 'xray') {
+          this.applyPalette(mat, selected ? VIEW_TISSUE_SELECTED : VIEW_TISSUE_XRAY, {
+            transparent: !selected,
+            depthWrite: selected,
+          })
+          if (dim) {
+            mat.opacity = this.fadedOpacity(name, 0.08)
+            mat.transparent = true
+            mat.depthWrite = false
+          }
+        } else {
+          const pal = selected ? VIEW_TISSUE_SELECTED : VIEW_TISSUE
+          mat.color.setHex(pal.color)
+          mat.emissive.setHex(pal.emissive)
+          mat.emissiveIntensity = pal.emissiveIntensity
+          mat.roughness = pal.roughness
+          mat.metalness = pal.metalness
+          mat.transparent = dim || pal.opacity < 1
+          mat.opacity = dim ? this.fadedOpacity(name, 0.08) : pal.opacity
+          mat.depthWrite = selected || !dim
+        }
+        mesh.renderOrder = selected ? 10 : 3
+        mat.polygonOffset = true
+        mat.polygonOffsetFactor = -2
+        mat.polygonOffsetUnits = -2
+        mat.needsUpdate = true
         continue
       }
 
@@ -1414,7 +1484,6 @@ export class ThoraxScene {
         mat.needsUpdate = true
         continue
       }
-      const dim = hasSel && !selected
 
       if (this.look === 'xray') {
         if (kind === 'muscle') {
@@ -2288,14 +2357,24 @@ export class ThoraxScene {
     await this.ligamentsLoading
   }
 
+  private async ensureTissueLoaded(): Promise<void> {
+    return this.ensureLigamentsLoaded()
+  }
+
   private async loadLigamentsInternal(): Promise<void> {
-    const urls = await fetchManifest('models/extra/ligaments/manifest.json')
-    if (urls.length === 0) {
-      this.ligamentsLoaded = true
-      return
-    }
     const loader = new GLTFLoader()
-    await this.loadGroup(loader, urls, 'ligament', 'ligaments', 'bones')
+    const ligamentUrls = await fetchManifest('models/extra/ligaments/manifest.json')
+    if (ligamentUrls.length > 0) {
+      await this.loadGroup(loader, ligamentUrls, 'ligament', 'ligaments', 'bones')
+    }
+    const tendonUrls = await fetchManifest('models/extra/tendons/manifest.json')
+    if (tendonUrls.length > 0) {
+      await this.loadGroup(loader, tendonUrls, 'tendon', 'tendons', 'bones')
+    }
+    const fasciaUrls = await fetchManifest('models/extra/tissue/manifest.json')
+    if (fasciaUrls.length > 0) {
+      await this.loadGroup(loader, fasciaUrls, 'fascia', 'tissue', 'bones')
+    }
     this.inflateLoadedLigaments()
     this.ligamentsLoaded = true
   }
@@ -2379,9 +2458,10 @@ export class ThoraxScene {
         mesh.visible = false
         continue
       }
-      if (kind === 'ligament') {
+      if (isTissueKind(kind)) {
+        const ankleLig = (ANKLE_LIGAMENT_MESHES as readonly string[]).includes(name)
         const right = name.endsWith('_r')
-        mesh.visible = right && this.ankleLigamentsVisible
+        mesh.visible = ankleLig && right && this.ankleLigamentsVisible
         const hot = emphasized.size === 0 || emphasized.has(name)
         const role = ligamentRole(name)
         const pal = role === 'other' ? LIGAMENT_LOOK.atfl : LIGAMENT_LOOK[role]
@@ -3012,7 +3092,7 @@ export class ThoraxScene {
       const mesh = this.meshByName.get(name)
       if (!mesh) continue
       const kind = this.kindByName.get(name) ?? 'bone'
-      if (kind === 'ligament' || kind === 'cartilage' || name === 'diaphragm') {
+      if (isTissueKind(kind) || kind === 'cartilage' || name === 'diaphragm') {
         mesh.visible = false
         continue
       }

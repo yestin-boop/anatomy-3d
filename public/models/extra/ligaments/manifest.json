@@ -4,5 +4,15 @@
   "/models/extra/ligaments/deltoid_r.glb",
   "/models/extra/ligaments/atfl_l.glb",
   "/models/extra/ligaments/cfl_l.glb",
-  "/models/extra/ligaments/deltoid_l.glb"
+  "/models/extra/ligaments/deltoid_l.glb",
+  "/models/extra/ligaments/long_plantar_r.glb",
+  "/models/extra/ligaments/long_plantar_l.glb",
+  "/models/extra/ligaments/ptfl_r.glb",
+  "/models/extra/ligaments/ptfl_l.glb",
+  "/models/extra/ligaments/aitfl_r.glb",
+  "/models/extra/ligaments/aitfl_l.glb",
+  "/models/extra/ligaments/pitfl_r.glb",
+  "/models/extra/ligaments/pitfl_l.glb",
+  "/models/extra/ligaments/trans_tibfib_r.glb",
+  "/models/extra/ligaments/trans_tibfib_l.glb"
 ]

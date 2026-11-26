@@ -1283,10 +1283,64 @@ export const MUSCLES: Muscle[] = [
   },
 ]
 
+/**
+ * View-only head muscles from Écorché (Z-Anatomy, CC BY-SA 4.0), aligned
+ * with the documented Écorché → packed BodyParts3D frame. They are not in
+ * the muscle quiz or Sport lessons.
+ */
+export type ViewOnlyMuscleRegion = 'head'
+
+export const VIEW_ONLY_MUSCLE_REGIONS: { id: ViewOnlyMuscleRegion; label: string }[] = [
+  { id: 'head', label: 'Head' },
+]
+
+export type ViewOnlyMuscle = Omit<Muscle, 'region'> & { region: ViewOnlyMuscleRegion }
+
+export const VIEW_ONLY_MUSCLES: ViewOnlyMuscle[] = [
+  {
+    id: 'masseter',
+    region: 'head',
+    meshNames: ['masseter_sup_l', 'masseter_sup_r', 'masseter_deep_l', 'masseter_deep_r'],
+    displayName: 'masseter',
+    aliases: [
+      'masseter',
+      'masseter muscle',
+      'left masseter',
+      'right masseter',
+      'superficial masseter',
+      'deep masseter',
+    ],
+    hint: 'masseter · zygomatic arch to the mandible, a muscle of mastication',
+    layer: 'superficial',
+  },
+  {
+    id: 'temporalis',
+    region: 'head',
+    meshNames: ['temporalis_l', 'temporalis_r'],
+    displayName: 'temporalis',
+    aliases: [
+      'temporalis',
+      'temporalis muscle',
+      'temporal muscle',
+      'left temporalis',
+      'right temporalis',
+    ],
+    hint: 'temporalis · temporal fossa to the coronoid process of the mandible',
+    layer: 'superficial',
+  },
+]
+
+export function allViewMuscles(): Array<Muscle | ViewOnlyMuscle> {
+  return [...MUSCLES, ...VIEW_ONLY_MUSCLES]
+}
+
 const MESH_LAYER = new Map<string, MuscleLayer>()
-for (const m of MUSCLES) {
+for (const m of allViewMuscles()) {
   for (const name of m.meshNames) MESH_LAYER.set(name, m.layer)
 }
+// Deep head of masseter peels with the Deep layer chip.
+MESH_LAYER.set('masseter_deep_l', 'deep')
+MESH_LAYER.set('masseter_deep_r', 'deep')
 
 export function muscleLayerForMesh(meshName: string): MuscleLayer | null {
   return MESH_LAYER.get(meshName) ?? null
@@ -1386,8 +1440,8 @@ export function filterCommonMuscles(): Muscle[] {
  * Hip remains a single fused os coxae mesh per side.
  */
 export const MUSCLES_DEFERRED = [
-  'masseter — not in this OBJ pack',
-  'temporalis — not in this OBJ pack',
+  'masseter — View only, from Écorché (Z-Anatomy); not a quiz or Sport lesson',
+  'temporalis — View only, from Écorché (Z-Anatomy); not a quiz or Sport lesson',
   'psoas minor — not in this OBJ pack',
   'rotatores — present in Écorché (Z-Anatomy) but skipped (a long combined set; not visually reviewed as a clean single muscle)',
   'extensor digitorum brevis — not in this OBJ pack',

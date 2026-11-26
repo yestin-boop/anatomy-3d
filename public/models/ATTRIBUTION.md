@@ -166,8 +166,9 @@ except neck muscles that use a separate FJ number on each side (no `M` suffix).
 | `odm_foot_l/r` | FJ1399M / FJ1399 | opponens digiti minimi of foot |
 
 Those BodyParts3D gaps are partly filled from Z-Anatomy (see below). Still not
-in either pack used here: masseter, temporalis, psoas minor, rotatores (present
-in Écorché but not imported), extensor digitorum brevis, palmaris brevis. The hip
+in either pack used here at the time of this fill: psoas minor, rotatores (present
+in Écorché but not imported), extensor digitorum brevis, palmaris brevis.
+Masseter and temporalis were added later in View from Écorché (see below). The hip
 remains a single os coxae mesh per side (FJ3152 right, FJ3288 left). There is no
 hyoid mesh.
 
@@ -325,9 +326,10 @@ against psoas, iliacus, iliocostalis, and the lumbar/cervical vertebrae.
   already have from BodyParts3D). Not invented.
 - **Rotatores:** present in Écorché, skipped (a long combined set, not
   visually reviewed as a clean single muscle).
-- **Thoracolumbar fascia, masseter, temporalis, and facial muscles:** present
-  in Écorché; out of scope for this trunk-muscle fill (fascia is not a
-  muscle; face/jaw were not part of the missing-trunk brief).
+- **Thoracolumbar fascia and facial muscles:** present in Écorché; out of
+  scope for this trunk-muscle fill (fascia is not a muscle; facial expression
+  muscles were not part of the missing-trunk brief). Masseter and temporalis
+  were later added in View from this source (see below).
 - **nqwrc/3d-anatomy** and other CC BY-NC packs were not used.
 
 ## Ankle ligaments (2026-11-25)
@@ -419,3 +421,82 @@ Eungyeol Lee, LUMC et al. Deltoid, CC BY-SA 4.0, Z-Anatomy by Gauthier Kervyn;
 BodyParts3D © The Database Center for Life Science, CC BY-SA 2.1 Japan; this
 derivative CC BY-SA 4.0. The rest of the skeleton remains the BodyParts3D
 CC BY 4.0 pack described above.
+
+## View tissue and jaw muscles (2026-11-26)
+
+Added for View only: more seated soft tissue, a Tissue chip that shows or hides
+it (the way Cartilage already works), and two jaw muscles that sit on this
+skeleton. No new Rehab cases or Sport lessons.
+
+### BodyParts3D (CC BY 4.0)
+
+Converted from `isa_BP3D_4.0_obj_99` element OBJs via `obj2gltf`, same Z-up
+millimetre frame as the existing extras (no recenter, no pre-rotation). Runtime
+still applies `rotation.x = −π/2`.
+
+| GLB (left / right) | Element IDs (L / R) | Structure |
+| --- | --- | --- |
+| `extra/tendons/calcaneal_l/r` | FJ1405M / FJ1405 | calcaneal (Achilles) tendon |
+| `extra/tissue/it_tract_l/r` | FJ1423M / FJ1423 | iliotibial tract |
+| `extra/ligaments/long_plantar_l/r` | FJ1424M / FJ1424 | long plantar ligament |
+| `extra/tissue/flex_retinac_l/r` | FJ1471M / FJ1471 | flexor retinaculum of wrist |
+
+The calcaneal tendon’s distal third sits on the posterior calcaneus (vertex-to-vertex
+mean 3.64 mm, 86.8% within 5 mm) and its proximal third meets gastrocnemius / soleus
+(mean 2.23 mm, 94.9% within 5 mm). The long plantar ligament’s vertices are a mean
+3.49 mm from the plantar foot bones (79% within 5 mm), with the calcaneal end nearest
+the calcaneus and the distal end nearest the metatarsal bases. The iliotibial tract
+and flexor retinaculum are in the same native frame; mid-substance stands off the
+femur and the carpal tunnel floor the way those sheets do in life.
+
+### Open3DModel ankle ligaments (CC BY-SA 4.0)
+
+Posterior talofibular (PTFL) and the three distal tibiofibular (syndesmotic)
+ligaments were taken from the same official lower-limb OBJ as the packed ATFL
+and CFL, and seated with the same documented transform:
+
+    (x, y, z)_mm = (x_m, −z_m, y_m) × 1000
+    then scale 1 and a rigid rotation + translation
+    Euler XYZ (2.23°, 1.26°, −12.23°), translation (−9.98, −124.88, −87.51) mm
+
+The left meshes are a sagittal mirror about x = 0. Packed GLBs are not rewritten
+at runtime; the ATFL/CFL display seats are not applied to these new ligaments.
+
+| GLB | Structure | After the packed seat (unsigned vertex-to-vertex, mm) |
+| --- | --- | --- |
+| `extra/ligaments/ptfl_l/r` | posterior talofibular ligament | all-vertex mean 3.04, 85.3% within 5 mm; ends 0.28 mm from the fibula and 0.25 mm into the talus |
+| `extra/ligaments/aitfl_l/r` | anterior tibiofibular ligament | mean 2.92, 93.9% within 5 mm; fibular end mean 2.43, tibial end mean 3.17 |
+| `extra/ligaments/pitfl_l/r` | posterior tibiofibular ligament | mean 2.96, 93.2% within 5 mm; fibular end mean 1.90, proximal mean 2.98 |
+| `extra/ligaments/trans_tibfib_l/r` | transverse tibiofibular ligament | mean 2.48, 99.6% within 5 mm; fibular end mean 2.04, tibial end mean 2.75 |
+
+Credit: Open3D project, Jan Kooloos, RadboudUMC, Eungyeol Lee, LUMC et al., CC BY-SA 4.0.
+
+Held from this source, with the ankle-bone transform: ACL (all-vertex mean 8.17 mm,
+tibial end mean 9.15 mm and 0% within 5 mm) and PCL (mean 10.32 mm, proximal end
+still nearest the tibia rather than the femur). A new knee-bone registration was
+not introduced. Open3D’s calcaneal tendon was measured only as a fallback and was
+not packed; the BodyParts3D tendon above is the native-frame seat.
+
+### Écorché jaw muscles (CC BY-SA 4.0)
+
+Masseter (superficial and deep parts) and temporalis are not in the BodyParts3D
+`isa_BP3D_4.0_obj_99` pack. They were taken from Écorché (`model/ecorche.glb`),
+using the documented Écorché axis conversion and rigid offset already used for
+quadratus lumborum and multifidus:
+
+    (x, y, z)_mm = (x_m, −z_m, y_m) × 1000
+    then subtract (0, 79.3393, 78.1219) mm
+
+After that conversion, right masseter vertices are a mean 4.52 mm from the packed
+mandible / zygomatic / temporal bone (62.6% / 26.2% / 8.4% nearest-bone share).
+Right temporalis is a mean 4.01 mm from the packed temporal fossa and coronoid
+region (parietal 31.7%, temporal 22.2%, frontal 20.9%, zygomatic 12.7%, mandible 9.0%).
+They are View-only (not quiz or Sport lessons).
+
+| GLB (left / right) | Structure |
+| --- | --- |
+| `extra/muscles/masseter_sup_l/r`, `masseter_deep_l/r` | masseter (superficial and deep parts) |
+| `extra/muscles/temporalis_l/r` | temporalis |
+
+Licence: CC BY-SA 4.0. Credit: BodyParts3D © DBCLS, CC BY 4.0; Z-Anatomy by
+Gauthier Kervyn, CC BY-SA 4.0; this derivative CC BY-SA 4.0.
