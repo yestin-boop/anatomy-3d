@@ -298,6 +298,25 @@ export const HAMSTRING_QUIZ: readonly HamQuizStep[] = [
     reveal: 'If any stage reveals a problem, stop testing. Do not immediately return the athlete to play.',
     focus: ALL,
   },
+  {
+    kind: 'type',
+    id: 'type-totaps-stages',
+    region: 'TOTAPS',
+    prompt: 'Name the six TOTAPS stages.',
+    official: 'Talk, Observe, Touch, Active movement, Passive movement, and Skill test',
+    aliases: [
+      'Talk, Observe, Touch, Active movement, Passive movement, and Skill test',
+      'talk observe touch active movement passive movement skill test',
+      'talk, observe, touch, active movement, passive movement, skill test',
+      'talk observe touch active movement passive movement skill',
+      'talk observe touch active passive skill test',
+      'talk observe touch active passive skill',
+      'talk, observe, touch, active, passive, skill',
+    ],
+    hint: 'The pitch-side mnemonic: Talk, Observe, Touch, then the two movement checks, then a skill test.',
+    reveal: 'TOTAPS is Talk, Observe, Touch, Active movement, Passive movement, and Skill test. If any stage reveals a problem, stop testing.',
+    focus: ALL,
+  },
 ]
 
 export function hamstringTypeMatch(step: HamTypeStep, typed: string, mode: AnswerMatchMode = 'live'): boolean {

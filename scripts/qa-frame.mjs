@@ -1231,8 +1231,9 @@ async function assertP2(cdp) {
   await cdp.evaluate(`window.__anatomyQA.showAnkle('learn', 0)`, true)
   const lesson = await cdp.evaluate(`(() => {
     const next = document.querySelector('#case-next')
+    const titleEl = document.querySelector('#case-title')
     let guard = 0
-    while (!next.hidden && guard < 8) {
+    while ((titleEl?.textContent || '').trim() !== 'Grade II · RICE' && !next.hidden && guard < 12) {
       next.click()
       guard += 1
     }
@@ -1252,7 +1253,7 @@ async function assertP2(cdp) {
       clear: last.bottom <= actions.top + 1 && last.bottom <= bodyRect.bottom + 1,
     }
   })()`)
-  if (lesson.title !== 'Grade II · POLICE') failP2('iphone lesson', `expected the long POLICE card, got "${lesson.title}"`, lesson)
+  if (lesson.title !== 'Grade II · RICE') failP2('iphone lesson', `expected the long RICE card, got "${lesson.title}"`, lesson)
   if (!lesson.scrolled) failP2('iphone lesson', 'the lesson body did not scroll', lesson)
   if (!lesson.clear) failP2('iphone lesson', 'the last line is not fully above Back / Quiz', lesson)
   console.log(`ok lesson "${lesson.title}" last line ${lesson.lastBottom} above actions ${lesson.actionsTop}`)
@@ -1563,8 +1564,9 @@ async function assertDesktopLayout(cdp) {
   await delay(150)
   const police = await cdp.evaluate(`(() => {
     const next = document.querySelector('#case-next')
+    const titleEl = document.querySelector('#case-title')
     let guard = 0
-    while (!next.hidden && guard < 8) {
+    while ((titleEl?.textContent || '').trim() !== 'Grade II · RICE' && !next.hidden && guard < 12) {
       next.click()
       guard += 1
     }
@@ -1583,12 +1585,12 @@ async function assertDesktopLayout(cdp) {
     }
   })()`)
   const policeLayout = await readLayout(cdp)
-  if (police.title !== 'Grade II · POLICE') fail('desktop police', `title "${police.title}"`, police)
+  if (police.title !== 'Grade II · RICE') fail('desktop police', `title "${police.title}"`, police)
   if (!police.clear) fail('desktop police', 'last line is not reachable above the actions', police)
   if (policeLayout.panel.top < policeLayout.chrome.bottom - 1) {
-    fail('desktop police', 'POLICE card covers the quiz bar', policeLayout)
+    fail('desktop police', 'RICE card covers the quiz bar', policeLayout)
   }
-  console.log(`ok POLICE reachable overflow ${police.overflow}`)
+  console.log(`ok RICE reachable overflow ${police.overflow}`)
   await shotOf('1440x900-police')
 
   await cdp.evaluate(`window.__anatomyQA.showAnkle('type', 0)`, true)

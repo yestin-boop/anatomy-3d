@@ -97,6 +97,22 @@ const BICEPS_FEM = focus('biceps_femoris', 'lateral', 'knee-flex', ['glut_max_r'
 const DELTOID = focus('deltoid', 'posterior', 'arm-abduct', [], ARM)
 const BICEPS = focus('biceps_brachii', 'lateral', 'elbow-flex', [], ARM)
 const TRICEPS = focus('triceps_brachii', 'lateral', 'elbow-extend', [], ARM)
+const VASTUS_MED = focus('vastus_medialis', 'anterior-medial', 'knee-extend', ['sartorius_r'], THIGH)
+const GIRDLE = [
+  'humerus_r',
+  'scapula_r',
+  'clavicle_r',
+  'sternum_body',
+  'sternum_manubrium',
+  'rib_r5',
+  'rib_r6',
+  'rib_r7',
+  'rib_r8',
+] as const
+const DELT_HIDE = ['delt_clav_r', 'delt_acro_r', 'delt_spin_r'] as const
+const BICEPS_HIDE = ['biceps_long_r', 'biceps_short_r'] as const
+const PEC_HIDE = ['pec_clav_r', 'pec_stern_r', 'pec_abd_r'] as const
+const CUFF_HIDE = [...DELT_HIDE, 'trap_desc_r', 'trap_trans_r', 'trap_asc_r', 'lat_r'] as const
 
 function focusMany(
   ids: readonly string[],
@@ -116,6 +132,33 @@ const ILIOPSOAS = focusMany(
   ['rectus_abd_r', 'ext_oblique_r', 'int_oblique_r', 'sartorius_r', 'pectineus_r'],
   HIP,
 )
+
+const LATS = focus('latissimus_dorsi', 'posterior-lateral', 'none', [], GIRDLE)
+const PEC_MAJOR = focus('pectoralis_major', 'anterior', 'none', [], GIRDLE)
+const SERRATUS = focus('serratus_anterior', 'lateral', 'none', PEC_HIDE, GIRDLE)
+const GIRDLE_GROUP = focusMany(
+  ['latissimus_dorsi', 'pectoralis_major', 'serratus_anterior', 'trapezius', 'rhomboid_major', 'rhomboid_minor'],
+  'lateral',
+  'none',
+  [],
+  GIRDLE,
+)
+const CUFF = focusMany(
+  ['supraspinatus', 'infraspinatus', 'teres_minor', 'subscapularis'],
+  'posterior',
+  'arm-abduct',
+  CUFF_HIDE,
+  ARM,
+)
+const SUPRA = focus('supraspinatus', 'posterior', 'arm-abduct', CUFF_HIDE, ARM)
+const ELBOW_FLEX_ASSIST = focusMany(
+  ['brachialis', 'brachioradialis'],
+  'lateral',
+  'elbow-flex',
+  BICEPS_HIDE,
+  ARM,
+)
+const BRACHIALIS = focus('brachialis', 'lateral', 'elbow-flex', BICEPS_HIDE, ARM)
 
 export const ACTION_LEARN: readonly ActionLearnCard[] = [
   {
@@ -182,6 +225,41 @@ export const ACTION_LEARN: readonly ActionLearnCard[] = [
     paragraphs: [
       'Deltoid is the chief abductor of the arm.',
       'Biceps brachii flexes the elbow and is the chief supinator of the forearm. Triceps brachii is the chief extensor of the elbow.',
+    ],
+  },
+  {
+    id: 'girdle',
+    kicker: 'Shoulder girdle',
+    title: 'Pull and press',
+    motion: false,
+    focus: GIRDLE_GROUP,
+    paragraphs: [
+      'Latissimus dorsi internally rotates, adducts, and extends the shoulder. The notes place it in climbing, rowing, and swimming. Pectoralis major adducts, horizontally adducts, and medially rotates the shoulder. It is the primary pushing muscle.',
+      'Serratus anterior protracts and upwardly rotates the scapula, and holds it against the thoracic wall. That prevents scapular winging, and it is a key force-transfer muscle in pushing.',
+      'Trapezius works by part: the upper fibers elevate and upwardly rotate the scapula and extend the neck; the middle fibers retract the scapula; the lower fibers depress and upwardly rotate the scapula. The rhomboids retract the scapula and rotate it downward.',
+    ],
+  },
+  {
+    id: 'cuff',
+    kicker: 'Rotator cuff',
+    title: 'A stabilizing cuff',
+    motion: true,
+    focus: CUFF,
+    paragraphs: [
+      'The rotator cuff is four muscles that form a stabilizing cuff around the glenohumeral joint: supraspinatus, infraspinatus, teres minor, and subscapularis.',
+      'Supraspinatus initiates shoulder abduction in the first 15–30 degrees. It is the most commonly injured rotator cuff muscle. The arm lifts here so you can see that start of abduction. The mesh does not shorten fibre by fibre.',
+      'Infraspinatus and teres minor externally rotate the shoulder. Subscapularis internally rotates the shoulder.',
+    ],
+  },
+  {
+    id: 'elbow-assist',
+    kicker: 'Elbow',
+    title: 'Assist at the elbow',
+    motion: true,
+    focus: ELBOW_FLEX_ASSIST,
+    paragraphs: [
+      'Brachialis sits deep to biceps brachii. It is a powerful elbow flexor, and it inserts on the ulna, flexing the elbow. Brachioradialis helps flex the forearm.',
+      'Anconeus inserts near the olecranon and assists elbow extension.',
     ],
   },
 ]
@@ -470,6 +548,156 @@ export const ACTION_QUIZ: readonly ActionQuizStep[] = [
     hint: 'Chief extensor of the elbow.',
     reveal: 'Triceps brachii is the chief extensor of the elbow.',
     focus: TRICEPS,
+  },
+  {
+    kind: 'type',
+    id: 'type-lats',
+    region: 'LATISSIMUS DORSI',
+    prompt: 'What does this muscle do at the shoulder?',
+    official: 'internally rotates, adducts, and extends the shoulder',
+    aliases: [
+      'internally rotates, adducts, and extends the shoulder',
+      'internal rotation, adduction, and extension',
+      'shoulder internal rotation, adduction, and extension',
+      'adducts, extends, and internally rotates the shoulder',
+      'extends, adducts, and internally rotates the shoulder',
+      'internal rotation',
+      'internally rotates the shoulder',
+      'shoulder internal rotation',
+      'medial rotation',
+      'medially rotates the shoulder',
+      'adduction',
+      'adducts the shoulder',
+      'shoulder adduction',
+      'adducts the arm',
+      'extension',
+      'extends the shoulder',
+      'shoulder extension',
+      'extends the arm',
+      'climbing, rowing, and swimming',
+      'climbing',
+      'rowing',
+      'swimming',
+    ],
+    hint: 'Shoulder internal rotation, adduction, and extension. Climbing, rowing, and swimming.',
+    reveal: 'Latissimus dorsi internally rotates, adducts, and extends the shoulder. The notes place it in climbing, rowing, and swimming.',
+    focus: LATS,
+  },
+  {
+    kind: 'type',
+    id: 'type-pec-major',
+    region: 'PECTORALIS MAJOR',
+    prompt: 'What does this muscle do at the shoulder?',
+    official: 'adducts, horizontally adducts, and medially rotates the shoulder',
+    aliases: [
+      'adducts, horizontally adducts, and medially rotates the shoulder',
+      'adduction, horizontal adduction, and medial rotation',
+      'shoulder adduction, horizontal adduction, and medial rotation',
+      'adducts and medially rotates the shoulder',
+      'adducts the shoulder',
+      'shoulder adduction',
+      'adduction',
+      'horizontal adduction',
+      'horizontally adducts the shoulder',
+      'medial rotation',
+      'medially rotates the shoulder',
+      'internal rotation',
+      'internally rotates the shoulder',
+      'primary pushing muscle',
+      'the primary pushing muscle',
+    ],
+    hint: 'Adduction, horizontal adduction, and medial rotation. The primary pushing muscle.',
+    reveal: 'Pectoralis major adducts, horizontally adducts, and medially rotates the shoulder. It is the primary pushing muscle.',
+    focus: PEC_MAJOR,
+  },
+  {
+    kind: 'type',
+    id: 'type-serratus',
+    region: 'SERRATUS ANTERIOR',
+    prompt: 'What does this muscle do to the scapula?',
+    official: 'protracts and upwardly rotates the scapula',
+    aliases: [
+      'protracts and upwardly rotates the scapula',
+      'scapular protraction and upward rotation',
+      'protraction and upward rotation',
+      'protracts the scapula',
+      'scapular protraction',
+      'protraction',
+      'upward rotation',
+      'upwardly rotates the scapula',
+      'scapular upward rotation',
+      'holds the scapula against the thoracic wall',
+      'holds the scapula to the wall',
+      'holds the scapula against the wall',
+      'prevents scapular winging',
+      'prevents winging',
+    ],
+    hint: 'It protracts and upwardly rotates the scapula, and holds it against the thoracic wall.',
+    reveal: 'Serratus anterior protracts and upwardly rotates the scapula, and holds it against the thoracic wall. That prevents scapular winging.',
+    focus: SERRATUS,
+  },
+  {
+    kind: 'type',
+    id: 'type-supra',
+    region: 'SUPRASPINATUS',
+    prompt: 'What does this muscle do at the shoulder?',
+    official: 'initiates shoulder abduction',
+    aliases: [
+      'initiates shoulder abduction',
+      'initiates abduction',
+      'initiates abduction of the arm',
+      'initiates abduction of the shoulder',
+      'initiates shoulder abduction in the first 15-30 degrees',
+      'initiates shoulder abduction in the first 15 30 degrees',
+      'first 15-30 degrees of abduction',
+      'first 15 30 degrees of abduction',
+      'initiates the first 15-30 degrees of abduction',
+      'abducts the shoulder',
+      'shoulder abduction',
+      'abducts the arm',
+      'abduction',
+    ],
+    hint: 'It initiates shoulder abduction in the first 15–30 degrees.',
+    reveal: 'Supraspinatus initiates shoulder abduction in the first 15–30 degrees. It is the most commonly injured rotator cuff muscle.',
+    focus: SUPRA,
+  },
+  {
+    kind: 'type',
+    id: 'type-brachialis',
+    region: 'BRACHIALIS',
+    prompt: 'What does this muscle do at the elbow?',
+    official: 'flexes the elbow',
+    aliases: [
+      'flexes the elbow',
+      'flex the elbow',
+      'elbow flexion',
+      'flexion of the elbow',
+      'flexes the forearm',
+      'a powerful elbow flexor',
+      'powerful elbow flexor',
+    ],
+    hint: 'It sits deep to biceps brachii and is a powerful elbow flexor.',
+    reveal: 'Brachialis is a powerful elbow flexor. It sits deep to biceps brachii and inserts on the ulna, flexing the elbow.',
+    focus: BRACHIALIS,
+  },
+  {
+    kind: 'tap',
+    id: 'tap-vastus-med',
+    region: 'VASTUS MEDIALIS',
+    prompt: 'Tap the inner-thigh muscle that extends the leg at the knee.',
+    accept: ['vastus_medialis'],
+    revealName: 'vastus medialis',
+    correct: 'Vastus medialis extends the leg at the knee.',
+    wrong: {
+      other: TAP_OTHER,
+      'other-side': 'That is the other thigh. Use the right side.',
+      bone: 'That is bone. The muscle is the teardrop on the inner thigh.',
+      rectus_femoris: 'That is rectus femoris, in the midline. It also flexes the hip. Vastus medialis is on the inner thigh and acts at the knee.',
+      vastus_lateralis: 'That is vastus lateralis, on the outer side. This question is the inner thigh.',
+      vastus_intermedius: 'That is vastus intermedius, under rectus femoris. The inner thigh is vastus medialis.',
+      sartorius: 'That is sartorius, the strap across the thigh. Vastus medialis is the teardrop on the inner thigh.',
+    },
+    focus: VASTUS_MED,
   },
 ]
 
