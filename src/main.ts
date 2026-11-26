@@ -388,7 +388,6 @@ app.innerHTML = `
       <p class="tap-hint" id="tap-hint">Tap to type</p>
       <div class="answer-actions">
         <button type="button" class="skip-btn" id="skip-btn">Skip · show answer</button>
-        <button type="button" class="check-btn" id="check-btn">Check</button>
       </div>
     </div>
   </div>
@@ -433,7 +432,6 @@ const quizRound = document.querySelector<HTMLElement>('#quiz-round')!
 const menuSheet = document.querySelector<HTMLElement>('#menu-sheet')!
 const btnMenuTop = document.querySelector<HTMLButtonElement>('#btn-menu-top')!
 const startReason = document.querySelector<HTMLElement>('#start-reason')!
-const checkBtn = document.querySelector<HTMLButtonElement>('#check-btn')!
 const poolCount = document.querySelector<HTMLElement>('#pool-count')!
 const subjectCount = document.querySelector<HTMLElement>('#subject-count')!
 const footerMeta = document.querySelector<HTMLElement>('#footer-meta')!
@@ -1619,10 +1617,6 @@ function syncSkipButton(): void {
     !(state.caseActive && state.casePhase === 'learn')
   skipBtn.hidden = !show
   skipBtn.disabled = !show
-  // Phone Check is the keyboard Go key. Desktop shows the button, except on a tap step.
-  const tapStep = state.caseActive && state.casePhase === 'quiz' && currentCaseStep()?.kind === 'tap'
-  checkBtn.hidden = !show || tapStep
-  checkBtn.disabled = checkBtn.hidden
 }
 
 function revealAnswer(): void {
@@ -2356,7 +2350,7 @@ hiddenInput.addEventListener('keydown', (e) => {
 })
 
 promptBlock.addEventListener('pointerdown', (e) => {
-  if ((e.target as HTMLElement | null)?.closest('#skip-btn, #check-btn')) return
+  if ((e.target as HTMLElement | null)?.closest('#skip-btn')) return
   // Let a direct tap on the field focus it natively. preventDefault on that
   // path can cancel the focus and drop the iOS keyboard.
   if ((e.target as HTMLElement | null)?.closest('#answer')) {
@@ -2387,14 +2381,6 @@ skipBtn.addEventListener('pointerdown', (e) => {
   e.stopPropagation()
   void unlockAudio()
   revealAnswer()
-})
-
-checkBtn.addEventListener('pointerdown', (e) => {
-  e.preventDefault()
-  e.stopPropagation()
-  if (checkBtn.hidden || checkBtn.disabled) return
-  void unlockAudio()
-  onConfirmAnswer()
 })
 
 /** QA can pin a keyboard height. Null measures the visual viewport. */
@@ -3460,11 +3446,12 @@ function qaTypeBar(): Record<string, unknown> {
   const prompt = promptBlock.getBoundingClientRect()
   const skip = skipBtn.getBoundingClientRect()
   const word = targetWord.getBoundingClientRect()
-  const check = checkBtn.getBoundingClientRect()
+  const checkBtn = document.querySelector<HTMLButtonElement>('#check-btn')
+  const check = checkBtn?.getBoundingClientRect()
   const inputStyle = getComputedStyle(hiddenInput)
   const wordStyle = getComputedStyle(targetWord)
   const hintStyle = getComputedStyle(tapHint)
-  const checkStyle = getComputedStyle(checkBtn)
+  const checkStyle = checkBtn ? getComputedStyle(checkBtn) : null
   const promptStyle = getComputedStyle(promptBlock)
   const menuLook = document.querySelector('#menu-overlay [data-look]')
   const quizLook = document.querySelector('#quiz-look')
@@ -3480,10 +3467,10 @@ function qaTypeBar(): Record<string, unknown> {
     hudHidden: playHud.hidden,
     skipHidden: skipBtn.hidden,
     skipText: (skipBtn.textContent ?? '').replace(/\s+/g, ' ').trim(),
-    checkHidden: checkBtn.hidden || checkStyle.display === 'none',
-    checkText: (checkBtn.textContent ?? '').trim(),
-    checkBg: checkStyle.backgroundColor,
-    checkBottom: Math.round(check.bottom),
+    checkHidden: !checkBtn || checkBtn.hidden || checkStyle?.display === 'none',
+    checkText: (checkBtn?.textContent ?? '').trim(),
+    checkBg: checkStyle?.backgroundColor ?? '',
+    checkBottom: check ? Math.round(check.bottom) : 0,
     menuHidden: menuOverlay.hidden,
     caseHidden: casePanel.hidden,
     caseTitle: caseTitle.textContent ?? '',

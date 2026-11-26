@@ -1387,9 +1387,7 @@ async function assertP2(cdp) {
   if (desk.tapVisible) failType('desktop type', 'desktop is showing TAP TO TYPE', desk)
   const deskCue = await cdp.evaluate(`getComputedStyle(document.querySelector('#tap-hint')).display`)
   if (deskCue !== 'none') failType('desktop type', `TAP TO TYPE is painted (${deskCue})`, desk)
-  if (desk.checkHidden) failType('desktop type', 'desktop Check is hidden', desk)
-  if (desk.checkText !== 'Check') failType('desktop type', `Check label "${desk.checkText}"`, desk)
-  if (!accentish(desk.checkBg)) failType('desktop type', `Check fill is ${desk.checkBg}`, desk)
+  if (!desk.checkHidden) failType('desktop type', 'desktop type-it is showing Check', desk)
   if (desk.skipText !== 'Skip · show answer') failType('desktop type', `Skip is "${desk.skipText}"`, desk)
   if (desk.promptPanel || !transparentBg(desk.promptBg)) {
     failType('desktop type', 'type-it is still wrapped in a card', desk)
@@ -1397,7 +1395,7 @@ async function assertP2(cdp) {
   if (!desk.lookVisible) failType('desktop type', 'Look is missing from the desktop quiz bar', desk)
   if (desk.context !== 'Bones · memory') failType('desktop type', `context "${desk.context}"`, desk)
   if (desk.inset > 40) failType('desktop type', `desktop lifted by ${desk.inset}`, desk)
-  console.log(`ok desktop Check ${desk.checkBg} context "${desk.context}"`)
+  console.log(`ok desktop type-it context "${desk.context}"`)
   await save('desktop-type')
 
   console.log('ok P2')
@@ -1597,7 +1595,7 @@ async function assertDesktopLayout(cdp) {
   await delay(150)
   const typed = await cdp.evaluate(`window.__anatomyQA.typeBar()`)
   if (typed.promptPanel || !transparentBg(typed.promptBg)) fail('desktop type', 'type-it still has a card', typed)
-  if (typed.checkHidden) fail('desktop type', 'Check is hidden', typed)
+  if (!typed.checkHidden) fail('desktop type', 'desktop type-it is showing Check', typed)
   if (typed.skipText !== 'Skip · show answer') fail('desktop type', `Skip is "${typed.skipText}"`, typed)
   console.log('ok desktop type-it has no card')
   await shotOf('1440x900-type')
@@ -1608,7 +1606,7 @@ async function assertDesktopLayout(cdp) {
   await delay(200)
   const skull = await cdp.evaluate(`window.__anatomyQA.typeBar()`)
   if (skull.promptPanel || !transparentBg(skull.promptBg)) fail('desktop skull', 'type-it still has a card', skull)
-  if (skull.checkHidden || skull.checkText !== 'Check') fail('desktop skull', 'Check is missing', skull)
+  if (!skull.checkHidden) fail('desktop skull', 'desktop type-it is showing Check', skull)
   console.log('ok skull type-it has no card')
   await shotOf('1440x900-skull-type')
 

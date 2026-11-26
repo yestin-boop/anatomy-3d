@@ -740,28 +740,6 @@ html.touch-quiz .target-word {
   gap: var(--space-2);
   backdrop-filter: blur(20px) saturate(140%);
 }
-.check-btn {
-  appearance: none;
-  margin: 0;
-  min-height: var(--target-min);
-  min-width: var(--target-min);
-  padding: var(--space-3) 18px;
-  border: 0;
-  border-radius: var(--radius-pill);
-  background: var(--accent);
-  color: var(--text-on-accent);
-  font: 700 var(--type-label)/1 var(--font);
-  letter-spacing: 0.02em;
-  cursor: pointer;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-}
-.check-btn:active:not(:disabled) { transform: scale(0.97); }
-.check-btn:disabled { opacity: 0.38; cursor: default; }
-.check-btn[hidden] { display: none !important; }
-/* iPhone Check is the keyboard Go / Enter key. */
-html.touch-quiz .check-btn { display: none !important; }
 .skip-btn:active:not(:disabled) { transform: scale(0.97); }
 .skip-btn:disabled {
   opacity: 0.38;
@@ -1997,7 +1975,6 @@ html.touch-quiz.phone-landscape.ankle-case .target-word {
   .view-panel-body,
   .filter-chip,
   .skip-btn,
-  .check-btn,
   .case-btn,
   .start-btn,
   .menu-sheet-btn,
