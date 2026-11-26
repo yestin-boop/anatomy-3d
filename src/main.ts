@@ -2998,7 +2998,7 @@ function renderCaseHud(): void {
     typeLabel.textContent = 'CASE COMPLETE · TAP OR ESC FOR MENU'
     targetWord.classList.add('reveal')
     targetWord.innerHTML = `<span class="tw-done">case complete</span>`
-    glossLine.textContent = 'Right ankle: likely ATFL, CFL also under tension in inversion. Immediate care is POLICE.'
+    glossLine.textContent = 'Right ankle: likely ATFL, CFL also under tension in inversion. Immediate care is RICE.'
     glossLine.classList.add('show')
     glossLine.classList.remove('is-wrong')
     syncSkipButton()

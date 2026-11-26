@@ -76,8 +76,8 @@ function meshesArePacked(names: readonly string[], label: string): void {
   }
 }
 
-assert(ACTION_QUIZ.length >= 8 && ACTION_QUIZ.length <= 16, `muscle-action quiz stays tight, got ${ACTION_QUIZ.length}`)
-assert(ACTION_LEARN.length >= 3 && ACTION_LEARN.length <= 8, `muscle-action learn stays short, got ${ACTION_LEARN.length}`)
+assert(ACTION_QUIZ.length >= 8 && ACTION_QUIZ.length <= 22, `muscle-action quiz stays tight, got ${ACTION_QUIZ.length}`)
+assert(ACTION_LEARN.length >= 3 && ACTION_LEARN.length <= 10, `muscle-action learn stays short, got ${ACTION_LEARN.length}`)
 assert(ACTION_QUIZ.some((step) => step.kind === 'type'), 'muscle actions include type questions')
 assert(ACTION_QUIZ.some((step) => step.kind === 'tap'), 'muscle actions include tap questions')
 
@@ -89,6 +89,7 @@ const actionIds = [
   'psoas_major',
   'rectus_femoris',
   'vastus_lateralis',
+  'vastus_medialis',
   'gastrocnemius',
   'soleus',
   'tibialis_anterior',
@@ -96,6 +97,19 @@ const actionIds = [
   'deltoid',
   'biceps_brachii',
   'triceps_brachii',
+  'latissimus_dorsi',
+  'pectoralis_major',
+  'serratus_anterior',
+  'trapezius',
+  'rhomboid_major',
+  'rhomboid_minor',
+  'supraspinatus',
+  'infraspinatus',
+  'teres_minor',
+  'subscapularis',
+  'brachialis',
+  'brachioradialis',
+  'anconeus',
 ]
 for (const id of actionIds) {
   assert(MUSCLES.some((muscle) => muscle.id === id), `${id} is a packed muscle`)
@@ -153,6 +167,41 @@ assert(actionTypeMatch(triceps, 'extends the elbow'), 'triceps accepts extends t
 assert(actionTypeMatch(triceps, 'chief extensor of the elbow'), 'triceps accepts chief extensor')
 assert(!actionTypeMatch(triceps, 'flexes the elbow'), 'triceps is not elbow flexion')
 
+const lats = typeStep(ACTION_QUIZ, 'type-lats') as ActionTypeStep
+assert(actionTypeMatch(lats, 'internally rotates, adducts, and extends the shoulder'), 'lats accepts the three shoulder actions')
+assert(actionTypeMatch(lats, 'shoulder adduction'), 'lats accepts shoulder adduction')
+assert(actionTypeMatch(lats, 'climbing, rowing, and swimming'), 'lats accepts the notes functional context')
+assert(!actionTypeMatch(lats, 'initiates shoulder abduction'), 'lats is not the initiator of abduction')
+
+const pec = typeStep(ACTION_QUIZ, 'type-pec-major') as ActionTypeStep
+assert(actionTypeMatch(pec, 'adducts, horizontally adducts, and medially rotates the shoulder'), 'pec major accepts the three actions')
+assert(actionTypeMatch(pec, 'horizontal adduction'), 'pec major accepts horizontal adduction')
+assert(actionTypeMatch(pec, 'primary pushing muscle'), 'pec major accepts primary pushing muscle')
+assert(!actionTypeMatch(pec, 'scapular protraction'), 'pec major is not serratus protraction')
+
+const serratus = typeStep(ACTION_QUIZ, 'type-serratus') as ActionTypeStep
+assert(actionTypeMatch(serratus, 'protracts and upwardly rotates the scapula'), 'serratus accepts protraction and upward rotation')
+assert(actionTypeMatch(serratus, 'holds the scapula against the thoracic wall'), 'serratus accepts holds the scapula against the thoracic wall')
+assert(actionTypeMatch(serratus, 'prevents scapular winging'), 'serratus accepts prevents scapular winging')
+assert(!actionTypeMatch(serratus, 'internally rotates the shoulder'), 'serratus is not a humeral rotator')
+
+const supra = typeStep(ACTION_QUIZ, 'type-supra') as ActionTypeStep
+assert(actionTypeMatch(supra, 'initiates shoulder abduction'), 'supraspinatus accepts initiates shoulder abduction')
+assert(actionTypeMatch(supra, 'initiates abduction', 'confirm'), 'supraspinatus accepts initiates abduction on Enter')
+assert(!actionTypeMatch(supra, 'externally rotates the shoulder'), 'supraspinatus is not the external rotator answer')
+
+const brachialis = typeStep(ACTION_QUIZ, 'type-brachialis') as ActionTypeStep
+assert(actionTypeMatch(brachialis, 'flexes the elbow'), 'brachialis accepts flexes the elbow')
+assert(actionTypeMatch(brachialis, 'powerful elbow flexor'), 'brachialis accepts powerful elbow flexor')
+assert(!actionTypeMatch(brachialis, 'chief flexor of the elbow'), 'brachialis does not use the unsourced chief-flexor phrase')
+assert(!actionTypeMatch(brachialis, 'extends the elbow'), 'brachialis is not elbow extension')
+
+const vastusMed = tapStep(ACTION_QUIZ, 'tap-vastus-med') as ActionTapStep
+assert(gradeActionTap(vastusMed, 'vastus_medialis').ok, 'tapping vastus medialis is correct')
+assert(!gradeActionTap(vastusMed, 'vastus_lateralis').ok, 'vastus lateralis is the wrong side of the thigh')
+assert(!gradeActionTap(vastusMed, 'rectus_femoris').ok, 'rectus femoris is not the inner vastus')
+assert(gradeActionTap(vastusMed, 'vastus_medialis').message.toLowerCase().includes('extends the leg at the knee'), 'vastus medialis feedback names knee extension')
+
 const glutMin = tapStep(ACTION_QUIZ, 'tap-glut-min') as ActionTapStep
 assert(gradeActionTap(glutMin, 'gluteus_minimus').ok, 'tapping gluteus minimus is correct')
 assert(!gradeActionTap(glutMin, 'gluteus_medius').ok, 'gluteus medius is the wrong tap')
@@ -187,6 +236,26 @@ assert(ACTION_LEARN.find((card) => card.id === 'thigh')?.focus.cue === 'kick', '
 assert(ACTION_QUIZ.find((step) => step.id === 'type-rectus')?.focus.cue === 'kick', 'rectus quiz plays the kick')
 assert(ACTION_QUIZ.find((step) => step.id === 'tap-vastus-lat')?.focus.cue === 'knee-extend', 'vastus quiz shows knee extension')
 assert(ACTION_QUIZ.find((step) => step.id === 'type-triceps')?.focus.cue === 'elbow-extend', 'triceps quiz shows elbow extension')
+assert(ACTION_LEARN.find((card) => card.id === 'girdle')?.motion === false, 'shoulder girdle card is highlight-only')
+assert(ACTION_LEARN.find((card) => card.id === 'girdle')?.focus.cue === 'none', 'shoulder girdle has no invented scapular or rotation cue')
+assert(ACTION_LEARN.find((card) => card.id === 'cuff')?.motion === true, 'rotator cuff card plays motion')
+assert(ACTION_LEARN.find((card) => card.id === 'cuff')?.focus.cue === 'arm-abduct', 'rotator cuff uses the existing arm-abduct cue')
+assert(ACTION_LEARN.find((card) => card.id === 'elbow-assist')?.focus.cue === 'elbow-flex', 'elbow assistants play elbow flexion')
+assert(ACTION_QUIZ.find((step) => step.id === 'type-lats')?.focus.cue === 'none', 'lats quiz stays highlight-only')
+assert(ACTION_QUIZ.find((step) => step.id === 'type-pec-major')?.focus.cue === 'none', 'pec major quiz stays highlight-only')
+assert(ACTION_QUIZ.find((step) => step.id === 'type-serratus')?.focus.cue === 'none', 'serratus quiz stays highlight-only')
+assert(ACTION_QUIZ.find((step) => step.id === 'type-supra')?.focus.cue === 'arm-abduct', 'supraspinatus quiz uses arm-abduct')
+assert(ACTION_QUIZ.find((step) => step.id === 'type-brachialis')?.focus.cue === 'elbow-flex', 'brachialis quiz uses elbow-flex')
+assert(ACTION_QUIZ.find((step) => step.id === 'tap-vastus-med')?.focus.cue === 'knee-extend', 'vastus medialis quiz uses knee-extend')
+assert(actionCopy.includes('internally rotates, adducts, and extends the shoulder'), 'learn keeps the lats actions')
+assert(actionCopy.includes('primary pushing muscle'), 'learn keeps the pec major pushing line')
+assert(actionCopy.includes('holds it against the thoracic wall'), 'learn keeps the serratus wall line')
+assert(actionCopy.includes('initiates shoulder abduction in the first 15–30 degrees'), 'learn keeps the supraspinatus initiation line')
+assert(actionCopy.includes('most commonly injured rotator cuff muscle'), 'learn names supraspinatus as the most commonly injured cuff muscle')
+assert(actionCopy.includes('powerful elbow flexor'), 'learn keeps the brachialis joints-lecture wording')
+assert(actionCopy.includes('helps flex the forearm'), 'learn keeps the brachioradialis joints-lecture wording')
+assert(actionCopy.includes('assists elbow extension'), 'learn keeps the anconeus joints-lecture wording')
+assert(!/pronat|chief flexor of the elbow/i.test(actionCopy), 'elbow-assist learn does not add unsourced brachialis claims')
 for (const card of ACTION_LEARN) {
   if (card.motion) assert(card.focus.cue !== 'none', `${card.id} motion has a cue`)
 }
@@ -339,6 +408,11 @@ const totapsStop = typeStep(HAMSTRING_QUIZ, 'type-totaps-stop') as HamTypeStep
 assert(hamstringTypeMatch(totapsStop, 'stop testing'), 'TOTAPS stop rule accepts stop testing')
 assert(hamstringTypeMatch(totapsStop, 'do not immediately return to play'), 'TOTAPS stop rule accepts do not return to play')
 assert(!hamstringTypeMatch(totapsStop, 'return to play'), 'returning to play is not the stop rule')
+const totapsStages = typeStep(HAMSTRING_QUIZ, 'type-totaps-stages') as HamTypeStep
+assert(hamstringTypeMatch(totapsStages, 'Talk, Observe, Touch, Active movement, Passive movement, and Skill test'), 'TOTAPS stages accept the official six names')
+assert(hamstringTypeMatch(totapsStages, 'talk observe touch active passive skill test'), 'TOTAPS stages accept a compact six-name form')
+assert(!hamstringTypeMatch(totapsStages, 'totaps'), 'the mnemonic alone is not the six stages')
+assert(!hamstringTypeMatch(totapsStages, 'talk'), 'a single stage is not the six-name answer')
 
 const mainSrc = readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8')
 const cssSrc = readFileSync(new URL('../src/style.css', import.meta.url), 'utf8')
