@@ -1,6 +1,6 @@
 /**
  * P2 UI refinement: Look in the quiz bar, exclusive Combined vs level,
- * tagline, sticky Start, one context label, prompt panel, Skip and Check.
+ * tagline, sticky Start, one context label, prompt panel, and Skip.
  * Run: npm test
  */
 import { readFileSync } from 'node:fs'
@@ -93,15 +93,20 @@ assert(css.includes('.footer-cluster'), 'licence and helper words share one stac
 assert(css.includes('font-size: var(--type-quiet)'), 'licence and helper words use the quiet size')
 assert(hud.includes('Skip · show answer'), 'Skip says show answer')
 assert(!hud.includes("don't know"), 'the old Skip cue is gone')
-assert(hud.includes('id="check-btn"'), 'desktop has a Check button')
+assert(!hud.includes('id="check-btn"') && !hud.includes('>Check<'), 'type-it has no Check button')
+assert(!cssBare.includes('.check-btn'), 'Check button styles are gone')
 assert(hud.includes('>Tap to type<'), 'type-it still starts as Tap to type')
-assert(block('.check-btn').includes('background: var(--accent)'), 'Check is filled with the accent')
-assert(block('.check-btn').includes('color: var(--text-on-accent)'), 'Check uses accent ink')
-assert(block('.check-btn').includes('min-height: var(--target-min)'), 'Check is at least 44px')
 assert(block('.menu-sheet-btn').includes('min-height: var(--target-min)'), 'menu sheet actions are at least 44px')
-assert(cssBare.includes('html.touch-quiz .check-btn { display: none !important; }'), 'iPhone has no extra Check button')
-assert(main.includes('enterkeyhint="go"'), 'phone Go / Enter still checks')
-assert(main.includes("closest('#skip-btn, #check-btn')"), 'Check does not steal the type-it tap')
+assert(block('.skip-btn').includes('min-height: var(--target-min)'), 'Skip is at least 44px')
+assert(main.includes('enterkeyhint="go"'), 'phone Go / Enter still confirms a short alias')
+assert(main.includes("e.key === 'Enter'"), 'Enter still confirms a short alias')
+assert(main.includes('onConfirmAnswer()'), 'Enter still runs the confirm path')
+assert(main.includes('bone.match(state.typed)'), 'live typing still auto-succeeds on a complete name')
+assert(main.includes("bone.match(state.typed, 'confirm')"), 'Enter still accepts a short alias')
+assert(main.includes('caseTypeMatches(cleaned)'), 'case type-it still auto-succeeds as you type')
+assert(main.includes("caseTypeMatches(state.typed, 'confirm')"), 'case Enter still accepts a short alias')
+assert(main.includes("closest('#skip-btn')"), 'Skip does not steal the type-it tap')
+assert(!main.includes("closest('#skip-btn, #check-btn')"), 'Check is no longer in the type-it tap guard')
 
 assert(isModeSelected('memory', 'memory'), 'the chosen level is selected')
 assert(!isModeSelected('memory', 'combined'), 'Combined is clear while a level is selected')
