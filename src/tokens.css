@@ -51,6 +51,8 @@
   --type-input: 16px;
 
   --target-min: 44px;
+  /* Phone View chips and the View menu pill. Desktop already uses 32px. */
+  --target-compact: 32px;
 
   --motion-fast: 150ms;
   --motion-base: 250ms;
