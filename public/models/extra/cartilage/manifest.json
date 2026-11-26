@@ -49,5 +49,9 @@
   "/models/extra/cartilage/nasal_lateral_l.glb",
   "/models/extra/cartilage/nasal_lateral_r.glb",
   "/models/extra/cartilage/nasal_septal.glb",
-  "/models/extra/cartilage/thyroid_cartilage.glb"
+  "/models/extra/cartilage/thyroid_cartilage.glb",
+  "/models/extra/cartilage/med_meniscus_r.glb",
+  "/models/extra/cartilage/med_meniscus_l.glb",
+  "/models/extra/cartilage/lat_meniscus_r.glb",
+  "/models/extra/cartilage/lat_meniscus_l.glb"
 ]

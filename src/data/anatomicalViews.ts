@@ -126,6 +126,7 @@ const MUSCLE_VIEW: Record<string, AnatomicalView> = {
 /** Face for one muscle. Region default, then an explicit override. */
 export function viewForMuscle(muscle: Muscle | ViewOnlyMuscle): AnatomicalView {
   if (muscle.id === 'masseter' || muscle.id === 'temporalis') return 'lateral'
+  if (muscle.id === 'extensor_digitorum_brevis') return 'anterior'
   if (muscle.region === 'head') return 'lateral'
   return MUSCLE_VIEW[muscle.id] ?? MUSCLE_REGION_VIEW[muscle.region]
 }
@@ -166,6 +167,17 @@ const TISSUE_VIEW_FACE: Record<string, AnatomicalView> = {
   calcaneal_tendon: 'posterior',
   it_tract: 'lateral',
   flexor_retinaculum_wrist: 'anterior',
+  cervical_ligament: 'anterior-lateral',
+  interosseous_talocalcaneal: 'anterior-lateral',
+  flexor_retinaculum_ankle: 'anterior-medial',
+  spring_ligament: 'posterior',
+  bifurcate: 'anterior-lateral',
+  dorsal_tarsometatarsal: 'anterior',
+  plantar_tarsometatarsal: 'posterior',
+  cuneometatarsal_interosseous: 'anterior',
+  acl: 'anterior',
+  pcl: 'posterior',
+  lcl: 'lateral',
 }
 
 export function viewForTissue(item: TissueItem): AnatomicalView {

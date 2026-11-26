@@ -1284,14 +1284,15 @@ export const MUSCLES: Muscle[] = [
 ]
 
 /**
- * View-only head muscles from Écorché (Z-Anatomy, CC BY-SA 4.0), aligned
- * with the documented Écorché → packed BodyParts3D frame. They are not in
- * the muscle quiz or Sport lessons.
+ * View-only muscles that sit on this skeleton but are not in the muscle quiz
+ * or Sport lessons. Masseter and temporalis are from Écorché (Z-Anatomy,
+ * CC BY-SA 4.0). Extensor digitorum brevis is from Open3DModel (CC BY-SA 4.0).
  */
-export type ViewOnlyMuscleRegion = 'head'
+export type ViewOnlyMuscleRegion = 'head' | 'lower_leg'
 
 export const VIEW_ONLY_MUSCLE_REGIONS: { id: ViewOnlyMuscleRegion; label: string }[] = [
   { id: 'head', label: 'Head' },
+  { id: 'lower_leg', label: 'Leg & foot' },
 ]
 
 export type ViewOnlyMuscle = Omit<Muscle, 'region'> & { region: ViewOnlyMuscleRegion }
@@ -1326,6 +1327,21 @@ export const VIEW_ONLY_MUSCLES: ViewOnlyMuscle[] = [
       'right temporalis',
     ],
     hint: 'temporalis · temporal fossa to the coronoid process of the mandible',
+    layer: 'superficial',
+  },
+  {
+    id: 'extensor_digitorum_brevis',
+    region: 'lower_leg',
+    meshNames: ['edb_l', 'edb_r'],
+    displayName: 'extensor digitorum brevis',
+    aliases: [
+      'extensor digitorum brevis',
+      'extensor digitorum brevis muscle',
+      'EDB',
+      'left extensor digitorum brevis',
+      'right extensor digitorum brevis',
+    ],
+    hint: 'extensor digitorum brevis · dorsum of the foot, calcaneus to toes 2–4',
     layer: 'superficial',
   },
 ]
@@ -1444,7 +1460,7 @@ export const MUSCLES_DEFERRED = [
   'temporalis — View only, from Écorché (Z-Anatomy); not a quiz or Sport lesson',
   'psoas minor — not in this OBJ pack',
   'rotatores — present in Écorché (Z-Anatomy) but skipped (a long combined set; not visually reviewed as a clean single muscle)',
-  'extensor digitorum brevis — not in this OBJ pack',
+  'extensor digitorum brevis — View only, from Open3DModel; not a quiz or Sport lesson',
   'palmaris brevis — not in this OBJ pack',
   'external / internal / innermost intercostals — skipped (each side is a 7–9 MB OBJ)',
   'levatores costarum — skipped (grouped “set of” rib slips)',

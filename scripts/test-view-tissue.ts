@@ -7,6 +7,9 @@ import { TISSUE } from '../src/data/tissue.ts'
 import { getTissueView, getMuscleView } from '../src/data/viewInfo.ts'
 import { catalogCoverage, viewForMuscleId, viewForTissueId } from '../src/data/anatomicalViews.ts'
 import { isTissueMeshKind } from '../src/data/tissue.ts'
+import { ANKLE_LIGAMENT_MESHES, ANKLE_FRAME_MESHES } from '../src/data/ankleSprain.ts'
+import { CARTILAGE } from '../src/data/cartilage.ts'
+import { getCartilageView } from '../src/data/viewInfo.ts'
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const main = readFileSync(path.join(root, 'src/main.ts'), 'utf8')
@@ -23,7 +26,7 @@ function assertFile(rel: string) {
 const ids = TISSUE.map((t) => t.id)
 assert.deepEqual(
   ids,
-  ['atfl', 'cfl', 'ptfl', 'aitfl', 'pitfl', 'trans_tibfib', 'deltoid_ligament', 'long_plantar', 'calcaneal_tendon', 'it_tract', 'flexor_retinaculum_wrist'],
+  ['atfl', 'cfl', 'ptfl', 'aitfl', 'pitfl', 'trans_tibfib', 'deltoid_ligament', 'cervical_ligament', 'interosseous_talocalcaneal', 'flexor_retinaculum_ankle', 'long_plantar', 'spring_ligament', 'bifurcate', 'dorsal_tarsometatarsal', 'plantar_tarsometatarsal', 'cuneometatarsal_interosseous', 'acl', 'pcl', 'lcl', 'calcaneal_tendon', 'it_tract', 'flexor_retinaculum_wrist'],
 )
 assert.equal(new Set(ids).size, ids.length, 'tissue ids are unique')
 assert.ok(!ids.includes('deltoid'), 'deltoid ligament must not use the muscle id')
@@ -38,6 +41,19 @@ assert.equal(byId.flexor_retinaculum_wrist.kind, 'fascia')
 assert.ok(byId.calcaneal_tendon.aliases.some((a) => /achilles/i.test(a)))
 assert.ok(byId.it_tract.aliases.some((a) => a === 'IT band'))
 assert.ok(byId.flexor_retinaculum_wrist.aliases.some((a) => /transverse carpal/i.test(a)))
+assert.equal(byId.flexor_retinaculum_ankle.kind, 'fascia')
+assert.equal(byId.flexor_retinaculum_ankle.region, 'ankle')
+assert.ok(byId.flexor_retinaculum_ankle.aliases.some((a) => /laciniate/i.test(a)))
+assert.equal(byId.spring_ligament.region, 'foot')
+assert.ok(byId.spring_ligament.aliases.some((a) => /spring/i.test(a)))
+assert.equal(byId.acl.region, 'knee')
+assert.equal(byId.pcl.region, 'knee')
+assert.equal(byId.lcl.region, 'knee')
+assert.ok(byId.acl.aliases.includes('ACL'))
+assert.ok(byId.lcl.aliases.some((a) => /lateral collateral/i.test(a)))
+assert.deepEqual(byId.acl.meshNames, ['acl_l', 'acl_r'])
+assert.ok(byId.dorsal_tarsometatarsal.aliases.some((a) => /Lisfranc/i.test(a)))
+
 assert.ok(byId.deltoid_ligament.aliases.includes('deltoid ligament'))
 assert.ok(!byId.deltoid_ligament.aliases.includes('deltoid'))
 
@@ -72,6 +88,34 @@ const publicFiles = [
   'models/extra/muscles/masseter_sup_l.glb',
   'models/extra/muscles/masseter_deep_l.glb',
   'models/extra/muscles/temporalis_l.glb',
+  'models/extra/ligaments/spring_r.glb',
+  'models/extra/ligaments/spring_l.glb',
+  'models/extra/ligaments/bifurcate_r.glb',
+  'models/extra/ligaments/bifurcate_l.glb',
+  'models/extra/ligaments/cervical_talocalc_r.glb',
+  'models/extra/ligaments/cervical_talocalc_l.glb',
+  'models/extra/ligaments/io_talocalc_r.glb',
+  'models/extra/ligaments/io_talocalc_l.glb',
+  'models/extra/ligaments/dorsal_tmt_r.glb',
+  'models/extra/ligaments/dorsal_tmt_l.glb',
+  'models/extra/ligaments/plantar_tmt_r.glb',
+  'models/extra/ligaments/plantar_tmt_l.glb',
+  'models/extra/ligaments/cuneometatarsal_io_r.glb',
+  'models/extra/ligaments/cuneometatarsal_io_l.glb',
+  'models/extra/ligaments/acl_r.glb',
+  'models/extra/ligaments/acl_l.glb',
+  'models/extra/ligaments/pcl_r.glb',
+  'models/extra/ligaments/pcl_l.glb',
+  'models/extra/ligaments/lcl_r.glb',
+  'models/extra/ligaments/lcl_l.glb',
+  'models/extra/tissue/flex_retinac_ankle_r.glb',
+  'models/extra/tissue/flex_retinac_ankle_l.glb',
+  'models/extra/muscles/edb_r.glb',
+  'models/extra/muscles/edb_l.glb',
+  'models/extra/cartilage/med_meniscus_r.glb',
+  'models/extra/cartilage/med_meniscus_l.glb',
+  'models/extra/cartilage/lat_meniscus_r.glb',
+  'models/extra/cartilage/lat_meniscus_l.glb',
 ]
 for (const f of publicFiles) assertFile(f)
 
@@ -79,6 +123,8 @@ for (const manifest of [
   'models/extra/ligaments/manifest.json',
   'models/extra/tendons/manifest.json',
   'models/extra/tissue/manifest.json',
+  'models/extra/cartilage/manifest.json',
+  'models/extra/muscles/manifest.json',
 ]) {
   const urls: string[] = JSON.parse(readFileSync(path.join(root, 'public', manifest), 'utf8'))
   assert.ok(urls.length > 0, manifest + ' empty')
@@ -88,18 +134,25 @@ for (const manifest of [
 // --- view-only muscles stay out of the quiz ---
 assert.ok(VIEW_ONLY_MUSCLES.some((m) => m.id === 'masseter'))
 assert.ok(VIEW_ONLY_MUSCLES.some((m) => m.id === 'temporalis'))
-assert.ok(!MUSCLES.some((m) => m.id === 'masseter' || m.id === 'temporalis'))
+assert.ok(VIEW_ONLY_MUSCLES.some((m) => m.id === 'extensor_digitorum_brevis'))
+assert.ok(!MUSCLES.some((m) => m.id === 'masseter' || m.id === 'temporalis' || m.id === 'extensor_digitorum_brevis'))
 assert.ok(!COMMON_MUSCLE_IDS.includes('masseter'))
 assert.ok(!COMMON_MUSCLE_IDS.includes('temporalis'))
-assert.ok(!filterCommonMuscles().some((m) => m.id === 'masseter'))
+assert.ok(!COMMON_MUSCLE_IDS.includes('extensor_digitorum_brevis'))
+assert.ok(!filterCommonMuscles().some((m) => m.id === 'masseter' || m.id === 'extensor_digitorum_brevis'))
 for (const r of MUSCLE_REGIONS) {
-  assert.ok(!filterMuscles([r.id]).some((m) => m.id === 'masseter' || m.id === 'temporalis'))
+  assert.ok(!filterMuscles([r.id]).some((m) => m.id === 'masseter' || m.id === 'temporalis' || m.id === 'extensor_digitorum_brevis'))
 }
 assert.ok(allViewMuscles().some((m) => m.id === 'masseter'))
+assert.ok(allViewMuscles().some((m) => m.id === 'extensor_digitorum_brevis'))
 assert.ok(getMuscleView('masseter'))
 assert.ok(getMuscleView('temporalis'))
+assert.ok(getMuscleView('extensor_digitorum_brevis'))
 assert.equal(viewForMuscleId('masseter'), 'lateral')
 assert.equal(viewForMuscleId('temporalis'), 'lateral')
+assert.equal(viewForMuscleId('extensor_digitorum_brevis'), 'anterior')
+assert.equal(muscleVisibleAtLayer('edb_r', 'all'), true)
+assert.equal(muscleVisibleAtLayer('edb_r', 'mid'), false)
 assert.equal(muscleVisibleAtLayer('masseter_sup_r', 'all'), true)
 assert.equal(muscleVisibleAtLayer('masseter_sup_r', 'mid'), false)
 assert.equal(muscleVisibleAtLayer('masseter_deep_r', 'deep'), true)
@@ -137,5 +190,26 @@ assert.deepEqual(
 assert.ok(css.includes('.view-filters:not(.is-quiz) .view-filter-btn'))
 assert.ok(!css.includes('.view-tissue-bar'))
 assert.ok(!css.includes('#tissue-filters'))
+
+
+// Ankle Learn/Quiz must still show only the original right ATFL, CFL, and named deltoid.
+assert.deepEqual(
+  [...ANKLE_LIGAMENT_MESHES],
+  ['atfl_r', 'atfl_l', 'cfl_r', 'cfl_l', 'deltoid_r', 'deltoid_l'],
+)
+const newTissueMeshes = TISSUE.flatMap((item) => item.meshNames).filter(
+  (name) => !['atfl_r', 'atfl_l', 'cfl_r', 'cfl_l', 'deltoid_r', 'deltoid_l', 'long_plantar_l', 'long_plantar_r', 'calcaneal_l', 'calcaneal_r', 'it_tract_l', 'it_tract_r', 'flex_retinac_l', 'flex_retinac_r', 'ptfl_l', 'ptfl_r', 'aitfl_l', 'aitfl_r', 'pitfl_l', 'pitfl_r', 'trans_tibfib_l', 'trans_tibfib_r'].includes(name),
+)
+for (const name of newTissueMeshes) {
+  assert.ok(!ANKLE_LIGAMENT_MESHES.includes(name), name + ' must not be case anatomy')
+  assert.ok(!ANKLE_FRAME_MESHES.includes(name), name + ' must not enter the ankle frame')
+}
+
+assert.ok(CARTILAGE.some((c) => c.id === 'medial_meniscus'))
+assert.ok(CARTILAGE.some((c) => c.id === 'lateral_meniscus'))
+assert.equal(CARTILAGE.find((c) => c.id === 'medial_meniscus')?.region, 'knee')
+assert.ok(getCartilageView('medial_meniscus'))
+assert.ok(getCartilageView('lateral_meniscus'))
+assert.ok((getCartilageView('medial_meniscus')?.description ?? '').length > 40)
 
 console.log('test-view-tissue: ok', TISSUE.length, 'tissue entries,', VIEW_ONLY_MUSCLES.length, 'view-only muscles')

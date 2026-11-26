@@ -471,11 +471,82 @@ at runtime; the ATFL/CFL display seats are not applied to these new ligaments.
 
 Credit: Open3D project, Jan Kooloos, RadboudUMC, Eungyeol Lee, LUMC et al., CC BY-SA 4.0.
 
-Held from this source, with the ankle-bone transform: ACL (all-vertex mean 8.17 mm,
-tibial end mean 9.15 mm and 0% within 5 mm) and PCL (mean 10.32 mm, proximal end
-still nearest the tibia rather than the femur). A new knee-bone registration was
-not introduced. Open3D’s calcaneal tendon was measured only as a fallback and was
-not packed; the BodyParts3D tendon above is the native-frame seat.
+Held from this source in the earlier View-tissue pass, with only the ankle-bone
+transform: ACL and PCL did not seat (see the 2026-11-26 hold notes). A later
+knee-bone registration is documented below. Open3D’s calcaneal tendon was
+measured only as a fallback and was not packed; the BodyParts3D tendon above is
+the native-frame seat.
+
+
+## View ankle, foot, and knee tissue (2026-11-26, later pass)
+
+Further Open3DModel structures from the same official lower-limb OBJ were packed
+for View only. No new Rehab cases or Sport lessons. The Ankle Learn/Quiz case
+still shows only the original right ATFL, CFL, and named medial deltoid.
+
+### Ankle and foot (mal30_s1)
+
+These use the same documented ATFL/CFL transform as the packed Open3D ankle
+ligaments:
+
+    (x, y, z)_mm = (x_m, −z_m, y_m) × 1000
+    then scale 1 and a rigid rotation + translation
+    Euler XYZ (2.23°, 1.26°, −12.23°), translation (−9.98, −124.88, −87.51) mm
+
+The left meshes are a sagittal mirror about x = 0. Packed GLBs are not rewritten
+at runtime; the ATFL/CFL display seats and inflate are not applied to these meshes.
+
+| GLB | Structure | After the packed seat (unsigned vertex-to-vertex, mm) |
+| --- | --- | --- |
+| `extra/ligaments/spring_l/r` | plantar calcaneonavicular (spring) ligament | mean 3.75, 74.9% within 5 mm; calcaneal end mean 1.42 (100% calcaneus), navicular end mean 2.24 (100% navicular) |
+| `extra/ligaments/bifurcate_l/r` | bifurcate ligament | mean 2.00, 100% within 5 mm; shares calcaneus, cuboid, and navicular |
+| `extra/ligaments/cervical_talocalc_l/r` | cervical (anterior talocalcaneal) ligament | mean 3.32, 93.6% within 5 mm; calcaneal end mean 1.94, talar end mean 3.50 |
+| `extra/ligaments/io_talocalc_l/r` | interosseous talocalcaneal ligament | mean 2.17, 100% within 5 mm; calcaneal end 100% calcaneus, talar end 100% talus |
+| `extra/ligaments/dorsal_tmt_l/r` | dorsal tarsometatarsal (Lisfranc) ligaments | mean 2.15, 99.6% within 5 mm |
+| `extra/ligaments/plantar_tmt_l/r` | plantar tarsometatarsal (Lisfranc) ligaments | mean 3.47, 82.5% within 5 mm |
+| `extra/ligaments/cuneometatarsal_io_l/r` | cuneometatarsal interosseous ligaments | mean 2.71, 100% within 5 mm |
+| `extra/tissue/flex_retinac_ankle_l/r` | flexor retinaculum of ankle | ends: tibial mean 2.00 (100% tibia), calcaneal mean 2.76 (100% calcaneus); mid-substance stands off the bones over the tarsal tunnel (all-vertex mean 5.46) |
+| `extra/muscles/edb_l/r` | extensor digitorum brevis (View-only muscle) | mean 3.79, 75.1% within 5 mm; origin toward the calcaneus/cuboid, tendons toward toes 2–4 |
+
+Held with this ankle-bone transform, and not packed: plantar aponeurosis (all-vertex
+mean 15.65 mm, 9.3% within 5 mm — the sheet floats below the packed sole);
+plantar calcaneocuboid / short plantar (mean 4.69, 51.5% within 5 mm, calcaneal
+end mean 5.23 and only 28.9% within 5 mm); superior and inferior extensor
+retinacula (means 6.97 and 7.64, about 31% within 5 mm); superior and inferior
+fibular retinacula (calcaneal end of the superior band about 6 mm; the inferior
+band has no fibular share).
+
+### Knee (knee_fem80_tib80)
+
+A new scale-locked rigid registration of the Open3D right distal 80 mm of the
+femur and the proximal 80 mm of the tibia onto the packed BodyParts3D equivalents,
+same method class as mal30_s1 (PCA initialize, then ICP with scale fixed at 1).
+The official mal30_s1 ankle-bone transform was not reused for the knee.
+
+    (x, y, z)_mm = (x_m, −z_m, y_m) × 1000
+    then scale 1 and a rigid rotation + translation
+    Euler XYZ (−4.27°, 1.34°, −0.53°), translation (−9.15, −143.31, −61.05) mm
+
+Bone-region residuals after this pose: distal femur 80 mm mean 3.02 (86.7% within
+5 mm); proximal tibia 80 mm mean 4.36 (69.1% within 5 mm); patella mean 3.42
+(88.3% within 5 mm). Whole-bone shaft residuals are larger, as expected when only
+the knee ends are registered, and were not used to score the pose.
+
+| GLB | Structure | After the packed seat (unsigned vertex-to-vertex, mm) |
+| --- | --- | --- |
+| `extra/ligaments/acl_l/r` | anterior cruciate ligament | mean 3.01, 93.9% within 5 mm; tibial end mean 2.37 (100% tibia), femoral end mean 3.37 (100% femur) |
+| `extra/ligaments/pcl_l/r` | posterior cruciate ligament | mean 3.36, 82.2% within 5 mm; tibial end mean 3.70 (100% tibia), femoral end mean 2.14 (100% femur) |
+| `extra/ligaments/lcl_l/r` | fibular (lateral) collateral ligament | ends: femoral mean 2.44 (100% femur), fibular mean 2.68 (100% fibula); mid-substance is a cord across the joint (all-vertex mean 5.42) |
+| `extra/cartilage/med_meniscus_l/r` | medial meniscus (Cartilage chip) | mean 4.14, 70.9% within 5 mm, limited by the proximal-tibia bone residual; sits on the medial plateau |
+| `extra/cartilage/lat_meniscus_l/r` | lateral meniscus (Cartilage chip) | mean 3.62, 81.6% within 5 mm |
+
+Held after this knee registration: medial collateral ligament (mean 4.63, 62.0%
+within 5 mm; tibial end mean 5.52 and 45.9% within 5 mm); the combined quadriceps
+tendon and patellar ligament object (mean 9.37, proximal end 14.85 mm from the
+femur); the separate patellar-ligament object (both ends about 5.3–5.4 mm, only
+about 50% within 5 mm).
+
+Credit: Open3D project, Jan Kooloos, RadboudUMC, Eungyeol Lee, LUMC et al., CC BY-SA 4.0.
 
 ### Écorché jaw muscles (CC BY-SA 4.0)
 
