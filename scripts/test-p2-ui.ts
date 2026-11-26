@@ -82,8 +82,8 @@ assert(!block('.prompt-block').includes('border-radius'), 'the type-it prompt is
 assert(block('.panel').includes('background: var(--surface-raised)'), 'menu sheets still use the raised surface')
 assert(block('.panel').includes('backdrop-filter: blur(20px) saturate(140%)'), 'menu sheets stay raised glass')
 assert(
-  css.includes('top: calc(max(var(--space-3), env(safe-area-inset-top)) + var(--target-min) + var(--space-2) + var(--space-3))'),
-  'desktop lesson card starts below the quiz bar',
+  css.includes('top: calc(max(var(--space-3), env(safe-area-inset-top)) + var(--target-desktop) + var(--space-2) + var(--space-3))'),
+  'desktop lesson column starts below the quiz bar',
 )
 assert(!cssBare.includes('top: max(var(--space-4), env(safe-area-inset-top))'), 'lesson card no longer sits on the quiz bar')
 assert(css.includes('.chrome--top.is-view .chrome-context'), 'study view hides the context bar')

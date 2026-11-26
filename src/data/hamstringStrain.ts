@@ -123,6 +123,19 @@ export const HAMSTRING_LEARN: readonly HamLearnCard[] = [
       'TOTAPS Touch, with consent, starts away from the painful site. Note tenderness, warmth, swelling, and unusual bumps. If a stage shows a problem, stop. Do not go straight back to play.',
     ],
   },
+  {
+    id: 'totaps',
+    kicker: 'TOTAPS',
+    title: 'Six stages, then stop',
+    motion: false,
+    focus: ALL,
+    paragraphs: [
+      'TOTAPS is a structured pitch-side assessment: Talk, Observe, Touch, Active movement, Passive movement, and Skill test.',
+      'Talk clarifies the mechanism, the current problem, the site of pain, and any previous similar injury. Observe compares both sides: swelling, discoloration, deformity, and how the athlete holds or moves the area.',
+      'Touch, with consent, starts away from the painful site. Active movement: ask the athlete to move independently, only as far as comfortable; do not push through pain. Passive movement, if appropriate and safe, is checked without forcing it. A skill test is only if the earlier stages are reassuring and full movement is pain-free.',
+      'If any stage reveals a problem, stop testing. Do not immediately return the athlete to play.',
+    ],
+  },
 ]
 
 const TAP_OTHER = 'Tap a hamstring on the back of the right thigh.'
@@ -258,6 +271,31 @@ export const HAMSTRING_QUIZ: readonly HamQuizStep[] = [
     ],
     hint: 'TOTAPS Touch, with consent. Do not start on the sorest spot.',
     reveal: 'With consent, palpate from away from the painful site. If a stage shows a problem, stop. Do not go straight back to play.',
+    focus: ALL,
+  },
+  {
+    kind: 'type',
+    id: 'type-totaps-stop',
+    region: 'TOTAPS',
+    prompt: 'If a TOTAPS stage reveals a problem, what do you do?',
+    official: 'stop testing',
+    aliases: [
+      'stop testing',
+      'stop',
+      'stop the test',
+      'stop assessment',
+      'stop the assessment',
+      'do not return to play',
+      'do not immediately return to play',
+      'do not go straight back to play',
+      'stop and do not return to play',
+      'stop testing and do not return to play',
+      'stop and refer',
+      'arrange referral',
+      'stop testing. do not immediately return the athlete to play',
+    ],
+    hint: 'If any stage reveals a problem, stop. Do not immediately return the athlete to play.',
+    reveal: 'If any stage reveals a problem, stop testing. Do not immediately return the athlete to play.',
     focus: ALL,
   },
 ]

@@ -18,6 +18,7 @@ html, body {
   min-height: 100dvh;
   /* Study list width. Filters and the quiet footer share this so they stop at the list. */
   --study-panel: min(320px, 32vw);
+  --lesson-column: min(340px, 30vw);
 }
 
 .stage { position: absolute; inset: 0; z-index: 0; }
@@ -76,6 +77,7 @@ html, body {
   gap: var(--space-3);
 }
 .chrome-center strong { color: var(--text-primary); font-weight: 600; font-variant-numeric: tabular-nums; }
+html.case-learn .chrome-center { display: none !important; }
 .menu-word { white-space: nowrap; }
 .menu-sheet {
   position: absolute;
@@ -361,6 +363,51 @@ html, body {
 }
 .mode-card--disabled { opacity: 0.4; cursor: not-allowed; }
 .mode-card:active:not(:disabled) { transform: scale(0.985); }
+
+.module-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  width: 100%;
+  padding: var(--space-3);
+  border: 1px solid var(--border-subtle);
+  background: var(--surface-overlay);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+}
+.module-row + .module-row { margin-top: var(--space-2); }
+.module-copy {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.module-copy .mode-sub { display: block; }
+.module-actions {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: var(--space-2);
+}
+.module-btn {
+  appearance: none;
+  min-height: var(--target-min);
+  min-width: var(--target-min);
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-pill);
+  border: 0;
+  background: var(--accent);
+  color: var(--text-on-accent);
+  font: 700 var(--type-label)/1 var(--font);
+  cursor: pointer;
+}
+.module-btn--quiet {
+  background: transparent;
+  color: var(--text-primary);
+  border: 1px solid var(--border-strong);
+}
+.module-btn:active { transform: scale(0.98); }
 
 .filter-bar {
   display: flex;
@@ -1128,9 +1175,9 @@ html.touch-quiz.phone-landscape.keyboard-open .view-filters.is-quiz {
   }
   .view-filters:not(.is-quiz) .view-filter-group { flex: 0 0 auto; }
   .view-filters:not(.is-quiz) .view-filter-btn {
-    min-width: var(--target-min);
-    min-height: var(--target-min);
-    padding: var(--space-2) var(--space-3);
+    min-width: var(--target-desktop, 32px);
+    min-height: var(--target-desktop, 32px);
+    padding: 5px 10px;
     letter-spacing: 0.04em;
   }
 }
@@ -1709,6 +1756,9 @@ html.study-quiet .case-panel h2,
 html.study-quiet .case-body p {
   text-shadow: var(--text-halo);
 }
+html.study-quiet .case-kicker {
+  color: var(--text-secondary);
+}
 html.study-quiet .case-body {
   max-height: min(24vh, 180px);
   padding-bottom: var(--space-2);
@@ -1806,26 +1856,100 @@ html.touch-quiz.phone-landscape.ankle-case .target-word {
     max-height: calc(44vh - 11rem);
   }
 }
-@media (min-width: 980px) {
-  .case-panel {
-    /* Quiz bar is 12px pad + 44px controls + 8px pad. A 16px top drew the card over it. */
-    top: calc(max(var(--space-3), env(safe-area-inset-top)) + var(--target-min) + var(--space-2) + var(--space-3));
-    bottom: auto;
-    max-height: calc(100dvh - max(var(--space-3), env(safe-area-inset-top)) - var(--target-min) - var(--space-2) - var(--space-3) - var(--space-4));
-    width: min(400px, 34vw);
+@media (min-width: 901px) {
+  :root, #app { --target-desktop: 32px; }
+
+  /* Modest tighten so View chips fit one row and the menu pill sits quietly.
+     Phone and iPad keep --target-min (44px). */
+  .pill,
+  .view-filter-btn,
+  .quiz-look .view-filter-btn,
+  .filter-chip,
+  .session-chip,
+  .case-btn,
+  .module-btn,
+  .menu-sheet-btn {
+    min-height: var(--target-desktop);
+    min-width: var(--target-desktop);
+    padding: 5px 10px;
+    font-size: var(--type-caption);
   }
-  .case-body {
-    max-height: calc(100dvh - max(var(--space-3), env(safe-area-inset-top)) - var(--target-min) - var(--space-2) - var(--space-3) - 12rem);
+  .view-filter-group {
+    padding: 2px;
+    gap: 1px;
   }
-  html.study-quiet .case-panel {
-    top: auto;
-    bottom: max(28px, env(safe-area-inset-bottom));
-    left: max(var(--space-5), env(safe-area-inset-left));
-    width: min(420px, 32vw);
-    max-height: min(48vh, 460px);
+  .chrome--top {
+    padding-top: max(var(--space-2), env(safe-area-inset-top));
+    padding-bottom: var(--space-1);
+    gap: var(--space-2);
   }
-  html.study-quiet .case-body {
-    max-height: min(34vh, 300px);
+  .chrome-context { min-height: var(--target-desktop); }
+  .mode-card,
+  .module-row {
+    padding: 10px 12px;
+  }
+  .module-btn { padding: 5px 12px; }
+
+  /* Side lesson column: the stage keeps almost the full height. */
+  html.case-learn .case-panel,
+  html.study-quiet.case-learn .case-panel,
+  html.ankle-case.case-learn .case-panel {
+    top: calc(max(var(--space-3), env(safe-area-inset-top)) + var(--target-desktop) + var(--space-2) + var(--space-3));
+    right: max(var(--space-3), env(safe-area-inset-right));
+    left: auto;
+    bottom: max(var(--space-4), env(safe-area-inset-bottom));
+    width: var(--lesson-column);
+    max-height: none;
+    height: auto;
+    padding: var(--space-4);
+    background: var(--surface-raised);
+    border: 1px solid var(--border-subtle);
+    box-shadow: var(--shadow-case);
+    backdrop-filter: blur(20px) saturate(140%);
+  }
+  html.case-learn .case-body,
+  html.study-quiet.case-learn .case-body,
+  html.ankle-case.case-learn .case-body {
+    max-height: none;
+    padding-bottom: var(--space-2);
+    scroll-padding-bottom: var(--space-2);
+  }
+  html.study-quiet.case-learn .case-kicker,
+  html.study-quiet.case-learn .case-panel h2,
+  html.study-quiet.case-learn .case-body p,
+  html.ankle-case.case-learn .case-kicker {
+    text-shadow: none;
+  }
+  html.study-quiet.case-learn .case-kicker,
+  html.ankle-case.case-learn .case-kicker {
+    color: var(--text-secondary);
+  }
+  html.study-quiet.case-learn .case-btn {
+    background: var(--accent);
+    color: var(--text-on-accent);
+    padding: 5px 12px;
+  }
+  html.study-quiet.case-learn .case-btn--ghost {
+    background: transparent;
+    color: var(--text-primary);
+    border: 1px solid var(--border-strong);
+  }
+
+  /* Quiet licence, fixed in the model column, clear of the lesson actions. */
+  html.study-quiet .footer-cluster .footer-attr,
+  html.study-quiet.case-learn .footer-attr,
+  html.ankle-case.case-learn .footer-attr {
+    position: fixed;
+    display: block;
+    left: auto;
+    right: calc(var(--lesson-column) + var(--space-5));
+    bottom: max(8px, env(safe-area-inset-bottom));
+    width: min(260px, 28vw);
+    max-width: min(260px, 28vw);
+    text-align: right;
+    font-size: var(--type-caption);
+    opacity: 0.4;
+    z-index: 1;
   }
 }
 @media (max-width: 900px) {

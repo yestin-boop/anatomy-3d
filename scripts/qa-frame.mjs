@@ -1232,7 +1232,7 @@ async function assertP2(cdp) {
   const lesson = await cdp.evaluate(`(() => {
     const next = document.querySelector('#case-next')
     let guard = 0
-    while ((next.textContent || '').trim() !== 'Start quiz' && guard < 6) {
+    while (!next.hidden && guard < 8) {
       next.click()
       guard += 1
     }
@@ -1254,7 +1254,7 @@ async function assertP2(cdp) {
   })()`)
   if (lesson.title !== 'Grade II · POLICE') failP2('iphone lesson', `expected the long POLICE card, got "${lesson.title}"`, lesson)
   if (!lesson.scrolled) failP2('iphone lesson', 'the lesson body did not scroll', lesson)
-  if (!lesson.clear) failP2('iphone lesson', 'the last line is not fully above Back / Start quiz', lesson)
+  if (!lesson.clear) failP2('iphone lesson', 'the last line is not fully above Back / Quiz', lesson)
   console.log(`ok lesson "${lesson.title}" last line ${lesson.lastBottom} above actions ${lesson.actionsTop}`)
   await save('iphone-lesson')
 
@@ -1548,11 +1548,11 @@ async function assertDesktopLayout(cdp) {
     const talus = ankle.screen?.talus_r
     const atfl = ankle.screen?.atfl_r
     if (!talus || !atfl) fail(label, 'ankle screen point missing', ankle.screen)
-    if (talus.x < layout.panel.right - 8) {
-      fail(label, `talus x ${talus.x} is behind the card right ${layout.panel.right}`, ankle.screen)
+    if (talus.x > layout.panel.left + 8) {
+      fail(label, `talus x ${talus.x} is under the lesson column left ${layout.panel.left}`, ankle.screen)
     }
-    if (atfl.x < layout.panel.right - 8) {
-      fail(label, `ATFL x ${atfl.x} is behind the card right ${layout.panel.right}`, ankle.screen)
+    if (atfl.x > layout.panel.left + 8) {
+      fail(label, `ATFL x ${atfl.x} is under the lesson column left ${layout.panel.left}`, ankle.screen)
     }
     if (talus.y < layout.chrome.bottom || talus.y > height - 8) {
       fail(label, `talus y ${talus.y} is outside the open canvas`, ankle.screen)
@@ -1566,7 +1566,7 @@ async function assertDesktopLayout(cdp) {
   const police = await cdp.evaluate(`(() => {
     const next = document.querySelector('#case-next')
     let guard = 0
-    while ((next.textContent || '').trim() !== 'Start quiz' && guard < 6) {
+    while (!next.hidden && guard < 8) {
       next.click()
       guard += 1
     }

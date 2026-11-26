@@ -40,6 +40,7 @@ import {
   shouldResumeIdleSpinOnMenuOrExitView,
 } from '../src/scene/idleSpin.ts'
 import { quizContextLabel } from '../src/ui/quizHud.ts'
+import { readFileSync } from 'node:fs'
 
 let passed = 0
 let failed = 0
@@ -75,8 +76,8 @@ function meshesArePacked(names: readonly string[], label: string): void {
   }
 }
 
-assert(ACTION_QUIZ.length >= 8 && ACTION_QUIZ.length <= 12, `muscle-action quiz is 8–12, got ${ACTION_QUIZ.length}`)
-assert(ACTION_LEARN.length >= 3 && ACTION_LEARN.length <= 6, 'muscle-action learn stays short')
+assert(ACTION_QUIZ.length >= 8 && ACTION_QUIZ.length <= 16, `muscle-action quiz stays tight, got ${ACTION_QUIZ.length}`)
+assert(ACTION_LEARN.length >= 3 && ACTION_LEARN.length <= 8, `muscle-action learn stays short, got ${ACTION_LEARN.length}`)
 assert(ACTION_QUIZ.some((step) => step.kind === 'type'), 'muscle actions include type questions')
 assert(ACTION_QUIZ.some((step) => step.kind === 'tap'), 'muscle actions include tap questions')
 
@@ -84,6 +85,8 @@ const actionIds = [
   'gluteus_medius',
   'gluteus_minimus',
   'gluteus_maximus',
+  'iliacus',
+  'psoas_major',
   'rectus_femoris',
   'vastus_lateralis',
   'gastrocnemius',
@@ -315,6 +318,63 @@ assert(!shouldResumeIdleSpinAfterControlsEnd({ ...idle, studyCase: true }), 'a s
 assert(!shouldResumeIdleSpinOnMenuOrExitView({ ankleCase: false, studyCase: true }), 'menu spin stays off during a study module')
 assert(shouldResumeIdleSpinAfterControlsEnd(idle), 'the menu still resumes spin')
 assert(shouldResumeIdleSpinOnMenuOrExitView({ ankleCase: false }), 'existing ankle callers still resume on the menu')
+
+const ilio = typeStep(ACTION_QUIZ, 'type-iliopsoas') as ActionTypeStep
+assert(actionTypeMatch(ilio, 'flexes the thigh at the hip'), 'iliopsoas accepts flexes the thigh at the hip')
+assert(actionTypeMatch(ilio, 'chief flexor of the hip'), 'iliopsoas accepts chief flexor of the hip')
+assert(actionTypeMatch(ilio, 'hip flexion'), 'iliopsoas accepts hip flexion')
+assert(!actionTypeMatch(ilio, 'extends the thigh'), 'iliopsoas is not hip extension')
+const ilioTap = tapStep(ACTION_QUIZ, 'tap-iliopsoas') as ActionTapStep
+assert(gradeActionTap(ilioTap, 'iliacus').ok, 'tapping iliacus counts as iliopsoas')
+assert(gradeActionTap(ilioTap, 'psoas_major').ok, 'tapping psoas major counts as iliopsoas')
+assert(!gradeActionTap(ilioTap, 'rectus_femoris').ok, 'rectus femoris is not the chief hip flexor here')
+assert(ACTION_LEARN.some((card) => card.id === 'iliopsoas' && card.focus.cue === 'hip-flex'), 'iliopsoas learn plays hip flexion')
+assert(actionCopy.includes('chief flexor of the hip'), 'learn names iliopsoas as the chief flexor of the hip')
+assert(actionCopy.includes('not either muscle alone'), 'learn keeps iliacus and psoas major as separate muscles')
+
+assert(HAMSTRING_LEARN.some((card) => card.id === 'totaps'), 'hamstring learn has a TOTAPS stages card')
+assert(hamCopy.toLowerCase().includes('talk, observe, touch, active movement, passive movement, and skill test'), 'TOTAPS stages are named')
+assert(hamCopy.toLowerCase().includes('stop testing'), 'TOTAPS learn teaches the stop rule')
+const totapsStop = typeStep(HAMSTRING_QUIZ, 'type-totaps-stop') as HamTypeStep
+assert(hamstringTypeMatch(totapsStop, 'stop testing'), 'TOTAPS stop rule accepts stop testing')
+assert(hamstringTypeMatch(totapsStop, 'do not immediately return to play'), 'TOTAPS stop rule accepts do not return to play')
+assert(!hamstringTypeMatch(totapsStop, 'return to play'), 'returning to play is not the stop rule')
+
+const mainSrc = readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8')
+const cssSrc = readFileSync(new URL('../src/style.css', import.meta.url), 'utf8')
+const sceneSrc = readFileSync(new URL('../src/scene/ThoraxScene.ts', import.meta.url), 'utf8')
+
+assert(mainSrc.includes('id="btn-muscle-actions-learn"') && mainSrc.includes('id="btn-muscle-actions-quiz"'), 'Sport has separate Learn and Quiz entry points')
+assert(mainSrc.includes('id="btn-ankle-case-learn"') && mainSrc.includes('id="btn-ankle-case-quiz"'), 'ankle has separate Learn and Quiz entry points')
+assert(mainSrc.includes('id="btn-hamstring-case-learn"') && mainSrc.includes('id="btn-hamstring-case-quiz"'), 'hamstring has separate Learn and Quiz entry points')
+assert(!mainSrc.includes('Start quiz'), 'the last learn card does not say Start quiz')
+assert(mainSrc.includes('function jumpFromLearnToQuiz'), 'an optional jump from Learn to Quiz exists')
+const advance = mainSrc.slice(mainSrc.indexOf('function advanceCaseLearn'), mainSrc.indexOf('function jumpFromLearnToQuiz'))
+assert(!advance.includes('startStudyQuiz') && !advance.includes('startAnkleQuiz'), 'finishing Learn does not auto-start the quiz')
+assert(mainSrc.includes("startStudyCase('actions', 'quiz')"), 'Sport Quiz opens the quiz directly')
+assert(mainSrc.includes("startAnkleCase('quiz')"), 'ankle Quiz opens the quiz directly')
+assert(cssSrc.includes('html.case-learn .chrome-center'), 'quiz accuracy is hidden during Learn')
+assert(cssSrc.includes('--lesson-column'), 'desktop learn uses a side lesson column')
+assert(cssSrc.includes('html.case-learn .case-panel') && cssSrc.includes('left: auto'), 'the desktop lesson column sits beside the stage')
+assert(cssSrc.includes('--target-desktop'), 'laptop chips use a slightly smaller desktop target')
+assert(cssSrc.includes('min-height: var(--target-min)'), 'phone tap targets still use --target-min')
+
+function enablePanIn(src: string, fn: string, expected: 'true' | 'false'): boolean {
+  const start = src.indexOf(`${fn}(`)
+  if (start < 0) return false
+  const nextFn = src.slice(start + fn.length + 1).search(/\n  (async )?[A-Za-z]+\(/)
+  const body = nextFn >= 0 ? src.slice(start, start + fn.length + 1 + nextFn) : src.slice(start, start + 900)
+  const matches = [...body.matchAll(/enablePan = (true|false)/g)].map((m) => m[1])
+  return matches[0] === expected || matches.at(-1) === expected
+}
+assert(enablePanIn(sceneSrc, 'enterView', 'true'), 'View still enables pan')
+assert(enablePanIn(sceneSrc, 'enterStudyCase', 'true'), 'study Learn/Quiz enables pan')
+assert(enablePanIn(sceneSrc, 'enterAnkleCase', 'true'), 'ankle Learn/Quiz enables pan')
+assert(enablePanIn(sceneSrc, 'exitView', 'false'), 'leaving View disables pan')
+assert(enablePanIn(sceneSrc, 'exitStudyCase', 'false'), 'leaving a study module disables pan')
+assert(enablePanIn(sceneSrc, 'exitAnkleCase', 'false'), 'leaving the ankle case disables pan')
+assert(sceneSrc.includes('screenSpacePanning = true'), 'panning is screen-space')
+assert(mainSrc.includes('scene.replayStudyCue()'), 'Replay still restarts the motion clip')
 
 assert(quizContextLabel({ viewing: false, subject: 'sport', activity: 'type' }) === 'Sport · type it', 'sport type label')
 assert(quizContextLabel({ viewing: false, subject: 'sport', activity: 'tap' }) === 'Sport · tap it', 'sport tap label')
