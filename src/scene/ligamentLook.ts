@@ -75,7 +75,7 @@ export function applyLigamentDisplayTreatment(mesh: THREE.Mesh): void {
 /** Slightly tighter than the general quiz fill, ankle case only. */
 export const ANKLE_FRAME_FILL = 0.8
 
-export type LigamentRole = 'atfl' | 'cfl' | 'deltoid' | 'other'
+export type LigamentRole = 'atfl' | 'cfl' | 'deltoid' | 'aitfl' | 'pitfl' | 'trans' | 'ptfl' | 'other'
 
 export const LIGAMENT_LOOK = {
   atfl: {
@@ -92,6 +92,27 @@ export const LIGAMENT_LOOK = {
     color: 0x8b3d40,
     emissive: 0x4a181c,
     emissiveIntensity: 0.36,
+  },
+  /** Syndesmosis bands. Distinct from the gold ATFL so the two sites stay apart. */
+  aitfl: {
+    color: 0x1f8a70,
+    emissive: 0x0c4a3c,
+    emissiveIntensity: 0.46,
+  },
+  pitfl: {
+    color: 0x2f6f8f,
+    emissive: 0x16384a,
+    emissiveIntensity: 0.4,
+  },
+  trans: {
+    color: 0x3d6b4f,
+    emissive: 0x1a3324,
+    emissiveIntensity: 0.38,
+  },
+  ptfl: {
+    color: 0x7a4e2d,
+    emissive: 0x3a2414,
+    emissiveIntensity: 0.34,
   },
 } as const
 
@@ -112,6 +133,10 @@ export const LIGAMENT_BASE = {
 }
 
 export function ligamentRole(name: string): LigamentRole {
+  if (name.startsWith('aitfl_')) return 'aitfl'
+  if (name.startsWith('pitfl_')) return 'pitfl'
+  if (name.startsWith('trans_tibfib_')) return 'trans'
+  if (name.startsWith('ptfl_')) return 'ptfl'
   if (name.startsWith('atfl_')) return 'atfl'
   if (name.startsWith('cfl_')) return 'cfl'
   if (name.startsWith('deltoid_')) return 'deltoid'

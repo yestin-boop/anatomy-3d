@@ -61,6 +61,15 @@ import {
   type HamQuizStep,
   type HamTypeStep,
 } from './data/hamstringStrain'
+import {
+  HIGH_ANKLE_LEARN,
+  HIGH_ANKLE_QUIZ,
+  gradeHighAnkleTap,
+  highAnkleTypeMatch,
+  highAnkleTypeReject,
+  type HighAnkleQuizStep,
+  type HighAnkleTypeStep,
+} from './data/highAnkleSprain'
 import { insetsChanged, type FramingInsets } from './scene/framing'
 import { playCorrectChime, playKeyTap, playWrongTick, unlockAudio } from './audio/chime'
 import { getBoneView, getCartilageView, getMuscleView, getTissueView, type ViewAttachmentSite, type ViewSide } from './data/viewInfo'
@@ -259,6 +268,16 @@ app.innerHTML = `
               <div class="module-actions">
                 <button type="button" class="module-btn" id="btn-ankle-case-learn" data-revision="ankle-learn"><span class="module-btn-label">Learn</span><span class="module-done" hidden>✓</span></button>
                 <button type="button" class="module-btn module-btn--quiet" id="btn-ankle-case-quiz" data-revision="ankle-quiz"><span class="module-btn-label">Quiz</span><span class="module-done" hidden>✓</span></button>
+              </div>
+            </div>
+            <div class="module-row" id="btn-high-ankle-case">
+              <div class="module-copy">
+                <span class="mode-title">High ankle sprain</span>
+                <span class="mode-sub">soccer training · dorsiflexion, eversion, and tibial internal rotation</span>
+              </div>
+              <div class="module-actions">
+                <button type="button" class="module-btn" id="btn-high-ankle-case-learn" data-revision="high-ankle-learn"><span class="module-btn-label">Learn</span><span class="module-done" hidden>✓</span></button>
+                <button type="button" class="module-btn module-btn--quiet" id="btn-high-ankle-case-quiz" data-revision="high-ankle-quiz"><span class="module-btn-label">Quiz</span><span class="module-done" hidden>✓</span></button>
               </div>
             </div>
           </div>
@@ -482,8 +501,11 @@ const btnView = document.querySelector<HTMLButtonElement>('#btn-view')!
 const btnAnkleCase = document.querySelector<HTMLElement>('#btn-ankle-case')!
 const btnMuscleActions = document.querySelector<HTMLElement>('#btn-muscle-actions')!
 const btnHamstringCase = document.querySelector<HTMLElement>('#btn-hamstring-case')!
+const btnHighAnkleCase = document.querySelector<HTMLElement>('#btn-high-ankle-case')!
 const btnAnkleLearn = document.querySelector<HTMLButtonElement>('#btn-ankle-case-learn')!
 const btnAnkleQuiz = document.querySelector<HTMLButtonElement>('#btn-ankle-case-quiz')!
+const btnHighAnkleLearn = document.querySelector<HTMLButtonElement>('#btn-high-ankle-case-learn')!
+const btnHighAnkleQuiz = document.querySelector<HTMLButtonElement>('#btn-high-ankle-case-quiz')!
 const btnMuscleLearn = document.querySelector<HTMLButtonElement>('#btn-muscle-actions-learn')!
 const btnMuscleQuiz = document.querySelector<HTMLButtonElement>('#btn-muscle-actions-quiz')!
 const btnHamstringLearn = document.querySelector<HTMLButtonElement>('#btn-hamstring-case-learn')!
@@ -571,7 +593,7 @@ const scene = new ThoraxScene({
 })
 ;(window as unknown as { __anatomyScene: typeof scene }).__anatomyScene = scene
 
-type CaseKind = 'ankle' | 'actions' | 'hamstring'
+type CaseKind = 'ankle' | 'actions' | 'hamstring' | 'high-ankle'
 
 type QuizState = {
   playing: boolean
@@ -832,12 +854,14 @@ function isStudyCase(): boolean {
 function caseLearnTotal(): number {
   if (state.caseKind === 'actions') return ACTION_LEARN.length
   if (state.caseKind === 'hamstring') return HAMSTRING_LEARN.length
+  if (state.caseKind === 'high-ankle') return HIGH_ANKLE_LEARN.length
   return ANKLE_LEARN.length
 }
 
 function caseQuizTotal(): number {
   if (state.caseKind === 'actions') return ACTION_QUIZ.length
   if (state.caseKind === 'hamstring') return HAMSTRING_QUIZ.length
+  if (state.caseKind === 'high-ankle') return HIGH_ANKLE_QUIZ.length
   return ANKLE_QUIZ.length
 }
 
@@ -1082,6 +1106,7 @@ function openCase(kind: CaseKind, phase: 'learn' | 'quiz'): void {
   const face = activityFace(saved, id)
   const index = face.label === 'Continue' ? (saved.resume?.index ?? 0) : 0
   if (kind === 'ankle') void startAnkleCase(phase, index)
+  else if (kind === 'high-ankle') void startHighAnkleCase(phase, index)
   else void startStudyCase(kind, phase, index)
 }
 
@@ -2183,6 +2208,15 @@ btnHamstringQuiz.addEventListener('pointerdown', (e) => {
   openCase('hamstring', 'quiz')
 })
 
+btnHighAnkleLearn.addEventListener('pointerdown', (e) => {
+  e.preventDefault()
+  openCase('high-ankle', 'learn')
+})
+btnHighAnkleQuiz.addEventListener('pointerdown', (e) => {
+  e.preventDefault()
+  openCase('high-ankle', 'quiz')
+})
+
 btnView.addEventListener('pointerdown', (e) => {
   e.preventDefault()
   void startView()
@@ -2314,6 +2348,7 @@ function restartCurrent(): void {
       return
     }
     if (isStudyCase()) startStudyQuiz()
+    else if (state.caseKind === 'high-ankle') startHighAnkleQuiz()
     else startAnkleQuiz()
     return
   }
@@ -2855,13 +2890,14 @@ mainCanvas.addEventListener('pointercancel', () => {
   pointerIsPick = false
 })
 
-function currentCaseStep(): AnkleQuizStep | ActionQuizStep | HamQuizStep | null {
+function currentCaseStep(): AnkleQuizStep | ActionQuizStep | HamQuizStep | HighAnkleQuizStep | null {
   if (state.caseKind === 'actions') return ACTION_QUIZ[state.caseQuizIndex] ?? null
   if (state.caseKind === 'hamstring') return HAMSTRING_QUIZ[state.caseQuizIndex] ?? null
+  if (state.caseKind === 'high-ankle') return HIGH_ANKLE_QUIZ[state.caseQuizIndex] ?? null
   return ANKLE_QUIZ[state.caseQuizIndex] ?? null
 }
 
-function caseTypeStep(): AnkleTypeStep | ActionTypeStep | HamTypeStep | null {
+function caseTypeStep(): AnkleTypeStep | ActionTypeStep | HamTypeStep | HighAnkleTypeStep | null {
   const step = currentCaseStep()
   return step && step.kind === 'type' ? step : null
 }
@@ -2875,8 +2911,19 @@ function caseTypeMatches(typed: string, mode: AnswerMatchMode = 'live'): boolean
     const step = HAMSTRING_QUIZ[state.caseQuizIndex]
     return !!step && step.kind === 'type' && hamstringTypeMatch(step, typed, mode)
   }
+  if (state.caseKind === 'high-ankle') {
+    const step = HIGH_ANKLE_QUIZ[state.caseQuizIndex]
+    return !!step && step.kind === 'type' && highAnkleTypeMatch(step, typed, mode)
+  }
   const step = ANKLE_QUIZ[state.caseQuizIndex]
   return !!step && step.kind === 'type' && ankleTypeMatch(step, typed, mode)
+}
+
+function caseTypeContrast(typed: string): string | null {
+  if (state.caseKind !== 'high-ankle') return null
+  const step = HIGH_ANKLE_QUIZ[state.caseQuizIndex]
+  if (!step || step.kind !== 'type') return null
+  return highAnkleTypeReject(step, typed)
 }
 
 function studyQuizStep(): ActionQuizStep | HamQuizStep | null {
@@ -2912,7 +2959,28 @@ function fillCaseCopy(kicker: string, title: string, paragraphs: string[]): void
   )
 }
 
+function applyHighAnkleFocus(id: string, light: HighAnkleQuizStep['light'], span: HighAnkleQuizStep['span']): void {
+  if (appliedFocusId === id) return
+  appliedFocusId = id
+  scene.setHighAnkleFocus(light, span)
+  scene.holdAnklePose(0)
+}
+
 function renderLearnCard(): void {
+  if (state.caseKind === 'high-ankle') {
+    const card = HIGH_ANKLE_LEARN[state.caseLearnIndex]
+    if (!card) return
+    fillCaseCopy(card.kicker, card.title, [...card.paragraphs])
+    caseReplay.hidden = true
+    caseBack.hidden = state.caseLearnIndex === 0
+    const last = state.caseLearnIndex === HIGH_ANKLE_LEARN.length - 1
+    caseNext.textContent = 'Next'
+    caseNext.hidden = last
+    caseQuizJump.hidden = !last
+    applyHighAnkleFocus(card.id, card.light, card.span)
+    syncChromeContext()
+    return
+  }
   if (isStudyCase()) {
     const card = studyLearnCard()
     if (!card) return
@@ -2954,6 +3022,7 @@ function renderLearnCard(): void {
 async function startAnkleCase(phase: 'learn' | 'quiz' = 'learn', atIndex = 0): Promise<void> {
   void unlockAudio()
   if (scene.isStudyCase()) scene.exitStudyCase()
+  if (scene.isHighAnkleCase()) scene.exitAnkleCase()
   if (state.viewing) {
     scene.exitView()
     state.viewing = false
@@ -3007,6 +3076,64 @@ async function startAnkleCase(phase: 'learn' | 'quiz' = 'learn', atIndex = 0): P
   scheduleFramingSync()
 }
 
+async function startHighAnkleCase(phase: 'learn' | 'quiz' = 'learn', atIndex = 0): Promise<void> {
+  void unlockAudio()
+  if (scene.isStudyCase()) scene.exitStudyCase()
+  if (scene.isAnkleCase() && !scene.isHighAnkleCase()) scene.exitAnkleCase()
+  if (state.viewing) {
+    scene.exitView()
+    state.viewing = false
+  }
+  state.caseKind = 'high-ankle'
+  appliedFocusId = ''
+  document.documentElement.classList.remove('ankle-case')
+  document.documentElement.classList.add('study-quiet')
+  caseReplay.hidden = true
+  caseReplay.textContent = 'Replay'
+  targetWord.classList.remove('is-long')
+  state.caseActive = true
+  state.casePhase = phase
+  state.caseLearnIndex = 0
+  state.caseQuizIndex = 0
+  state.caseTyping = false
+  state.playing = true
+  state.finished = false
+  state.revealing = false
+  state.typed = ''
+  state.correct = 0
+  state.attempts = 0
+  hiddenInput.value = ''
+  menuOverlay.hidden = true
+  playHud.hidden = phase !== 'quiz'
+  viewPanel.hidden = true
+  chromeTop.hidden = false
+  chromeTop.classList.remove('is-view')
+  viewFilters.hidden = true
+  viewFilters.classList.remove('is-quiz')
+  sideViews.hidden = true
+  casePanel.hidden = phase !== 'learn'
+  setMenuSheet(false)
+  syncChromeContext()
+  statusEl.style.display = ''
+  statusEl.textContent = 'Loading ankle…'
+  scene.setLook('solid')
+  if (!scene.isHighAnkleCase()) await scene.enterHighAnkleCase()
+  if (!state.caseActive || state.caseKind !== 'high-ankle') {
+    syncSportQuizClass()
+    return
+  }
+  statusEl.style.display = 'none'
+  if (phase === 'quiz') startHighAnkleQuiz(atIndex)
+  else {
+    state.caseLearnIndex = clampIndex(atIndex, caseLearnTotal())
+    renderLearnCard()
+    syncRevision()
+  }
+  syncSportQuizClass()
+  syncFramingInsetsNow()
+  scheduleFramingSync()
+}
+
 function advanceCaseLearn(): void {
   if (!state.caseActive || state.casePhase !== 'learn') return
   if (state.caseLearnIndex < caseLearnTotal() - 1) {
@@ -3021,6 +3148,7 @@ function jumpFromLearnToQuiz(): void {
   if (!state.caseActive || state.casePhase !== 'learn') return
   if (state.caseLearnIndex !== caseLearnTotal() - 1) return
   if (isStudyCase()) startStudyQuiz()
+  else if (state.caseKind === 'high-ankle') startHighAnkleQuiz()
   else startAnkleQuiz()
 }
 
@@ -3096,6 +3224,28 @@ function startStudyQuiz(atIndex = 0): void {
   appliedFocusId = ''
   casePanel.hidden = true
   playHud.hidden = false
+  renderCaseHud()
+  syncSportQuizClass()
+  syncRevision()
+  syncFramingInsetsNow()
+  if (state.caseTyping) focusInput()
+}
+
+function startHighAnkleQuiz(atIndex = 0): void {
+  state.casePhase = 'quiz'
+  state.caseQuizIndex = clampIndex(atIndex, caseQuizTotal())
+  state.finished = false
+  state.revealing = false
+  state.typed = ''
+  state.correct = 0
+  state.attempts = 0
+  hiddenInput.value = ''
+  appliedFocusId = ''
+  casePanel.hidden = true
+  playHud.hidden = false
+  document.documentElement.classList.add('study-quiet')
+  document.documentElement.classList.remove('ankle-case')
+  scene.holdAnklePose(0)
   renderCaseHud()
   syncSportQuizClass()
   syncRevision()
@@ -3183,7 +3333,68 @@ function renderStudyHud(): void {
   scheduleFramingSync()
 }
 
+function renderHighAnkleHud(): void {
+  document.documentElement.classList.remove('ankle-case')
+  document.documentElement.classList.add('study-quiet')
+  playHud.classList.toggle('case-quiz', state.casePhase === 'quiz')
+  const acc = state.attempts === 0 ? 100 : Math.round((state.correct / state.attempts) * 100)
+  statAcc.textContent = `${acc}%`
+  syncChromeContext()
+
+  if (state.casePhase === 'learn') {
+    syncSkipButton()
+    scheduleFramingSync()
+    return
+  }
+
+  if (state.finished) {
+    state.caseTyping = false
+    typeLabel.textContent = 'CASE COMPLETE · TAP OR ESC FOR MENU'
+    targetWord.classList.add('reveal')
+    targetWord.classList.remove('is-long')
+    targetWord.innerHTML = `<span class="tw-done">case complete</span>`
+    glossLine.textContent =
+      'A syndesmotic sprain is a high ankle sprain. It involves the inferior tibiofibular joint, not the ATFL.'
+    glossLine.classList.add('show')
+    glossLine.classList.remove('is-wrong')
+    syncSkipButton()
+    scheduleFramingSync()
+    return
+  }
+
+  const step = HIGH_ANKLE_QUIZ[state.caseQuizIndex]
+  if (!step) return
+  state.caseTyping = step.kind === 'type' && !state.revealing
+  typeLabel.textContent = `${step.kind === 'type' ? 'TYPE IT' : 'TAP IT'} · ${step.region}`
+  glossLine.textContent =
+    state.revealing && step.kind === 'type'
+      ? step.reveal
+      : state.revealing && step.kind === 'tap'
+        ? step.correct
+        : step.prompt
+  glossLine.classList.add('show')
+  glossLine.classList.remove('is-wrong')
+  targetWord.classList.toggle('is-long', step.kind === 'type' && step.official.length > 28)
+  if (step.kind === 'type') renderCaseTypeWord(step)
+  else {
+    targetWord.classList.remove('is-long')
+    targetWord.classList.toggle('reveal', state.revealing)
+    targetWord.innerHTML = state.revealing
+      ? `<span class="tw-done">${escapeHtml(step.revealName)}</span>`
+      : `<span class="tw-on">tap</span>`
+  }
+  applyHighAnkleFocus(step.id, step.light, step.span)
+  syncSkipButton()
+  if (step.kind === 'tap') blurQuizInput()
+  syncTapHint()
+  scheduleFramingSync()
+}
+
 function renderCaseHud(): void {
+  if (state.caseKind === 'high-ankle') {
+    renderHighAnkleHud()
+    return
+  }
   if (isStudyCase()) {
     renderStudyHud()
     return
@@ -3241,7 +3452,7 @@ function renderCaseHud(): void {
   scheduleFramingSync()
 }
 
-function renderCaseTypeWord(step: AnkleTypeStep | ActionTypeStep | HamTypeStep): void {
+function renderCaseTypeWord(step: AnkleTypeStep | ActionTypeStep | HamTypeStep | HighAnkleTypeStep): void {
   if (state.revealing) {
     targetWord.classList.add('reveal')
     targetWord.innerHTML = `<span class="tw-done">${escapeHtml(step.official)}</span>`
@@ -3298,9 +3509,16 @@ function onCaseFieldInput(): void {
   const prev = state.typed
   const added = compactLetters(cleaned).length > compactLetters(prev).length
   state.typed = cleaned
-  if (step && added && firstWrongIndex(cleaned, [step.official, ...step.aliases]) >= 0) playWrongTick()
-  else if (cleaned.length !== prev.length) playKeyTap()
+  const contrast = caseTypeContrast(cleaned)
+  if (step && !contrast && added && firstWrongIndex(cleaned, [step.official, ...step.aliases]) >= 0) playWrongTick()
+  else if (!contrast && cleaned.length !== prev.length) playKeyTap()
   updateHud()
+  if (contrast) {
+    if (cleaned !== prev) playWrongTick()
+    glossLine.textContent = contrast
+    glossLine.classList.add('show', 'is-wrong')
+    return
+  }
   if (step && caseTypeMatches(cleaned)) void onCaseCorrect()
 }
 
@@ -3309,9 +3527,16 @@ function onCaseChar(ch: string): void {
   const step = caseTypeStep()
   if (!step) return
   state.typed += ch
-  if (firstWrongIndex(state.typed, [step.official, ...step.aliases]) >= 0) playWrongTick()
-  else playKeyTap()
+  const contrast = caseTypeContrast(state.typed)
+  if (!contrast && firstWrongIndex(state.typed, [step.official, ...step.aliases]) >= 0) playWrongTick()
+  else if (!contrast) playKeyTap()
   updateHud()
+  if (contrast) {
+    playWrongTick()
+    glossLine.textContent = contrast
+    glossLine.classList.add('show', 'is-wrong')
+    return
+  }
   if (caseTypeMatches(state.typed)) void onCaseCorrect()
 }
 
@@ -3323,6 +3548,13 @@ function onCaseConfirm(): void {
   if (state.casePhase !== 'quiz' || state.revealing) return
   const step = caseTypeStep()
   if (!step) return
+  const contrast = caseTypeContrast(state.typed)
+  if (contrast) {
+    playWrongTick()
+    glossLine.textContent = contrast
+    glossLine.classList.add('show', 'is-wrong')
+    return
+  }
   if (caseTypeMatches(state.typed, 'confirm')) void onCaseCorrect()
 }
 
@@ -3330,6 +3562,20 @@ function onCaseTap(clientX: number, clientY: number): void {
   if (state.casePhase !== 'quiz' || state.revealing || state.finished || state.caseTyping) return
   if (isStudyCase()) {
     onStudyTap(clientX, clientY)
+    return
+  }
+  if (state.caseKind === 'high-ankle') {
+    const step = HIGH_ANKLE_QUIZ[state.caseQuizIndex]
+    if (!step || step.kind !== 'tap') return
+    const picked = scene.pickHighAnkle(clientX, clientY)
+    const graded = gradeHighAnkleTap(step, picked?.hit ?? null)
+    if (!graded.ok) {
+      playWrongTick()
+      glossLine.textContent = graded.message
+      glossLine.classList.add('show', 'is-wrong')
+      return
+    }
+    void onCaseCorrect(graded.message)
     return
   }
   const step = ANKLE_QUIZ[state.caseQuizIndex]
@@ -3402,7 +3648,7 @@ function revealCaseAnswer(): void {
   state.caseTyping = false
   state.typed = ''
   hiddenInput.value = ''
-  if (!isStudyCase() && step.kind === 'tap') {
+  if (state.caseKind === 'ankle' && step.kind === 'tap') {
     const ankle = ANKLE_QUIZ[state.caseQuizIndex]
     if (ankle && ankle.kind === 'tap') scene.setAnkleEmphasis(ankle.accept[0] === 'cfl' ? 'cfl' : 'atfl')
   }
@@ -3410,7 +3656,7 @@ function revealCaseAnswer(): void {
   if (state.caseTyping) focusInputNow()
   void (async () => {
     await wait(1400)
-    if (!isStudyCase()) scene.setAnkleEmphasis('none')
+    if (state.caseKind === 'ankle') scene.setAnkleEmphasis('none')
     advanceCaseQuiz()
   })()
 }
@@ -3451,6 +3697,7 @@ caseQuizJump.addEventListener('click', () => {
 })
 
 caseReplay.addEventListener('click', () => {
+  if (state.caseKind === 'high-ankle') return
   if (isStudyCase()) scene.replayStudyCue()
   else scene.replayAnkleMotion()
 })
@@ -4112,6 +4359,76 @@ function qaAnswer(text: string): { revealing: boolean; id: string; typed: string
   return { revealing: state.revealing, id: step?.id ?? '', typed: state.typed }
 }
 
+async function qaShowHighAnkle(
+  mode: 'menu' | 'learn' | 'anatomy' | 'type' | 'tap',
+  keyboardPx = 0,
+): Promise<Record<string, unknown>> {
+  pinForcedKeyboard(keyboardPx)
+  if (mode === 'menu') {
+    showMenu()
+    btnHighAnkleCase.scrollIntoView({ block: 'center' })
+    const rect = btnHighAnkleCase.getBoundingClientRect()
+    const region = btnHighAnkleCase.closest('.region-group')
+    return {
+      title: btnHighAnkleCase.querySelector('.mode-title')?.textContent ?? '',
+      sub: btnHighAnkleCase.querySelector('.mode-sub')?.textContent ?? '',
+      visible: rect.width > 8 && rect.height > 8 && rect.bottom > 0 && rect.top < window.innerHeight,
+      region: region?.getAttribute('data-region') ?? '',
+      regionLabel: (region?.querySelector('.region-label')?.textContent ?? '').trim(),
+      studyQuiet: document.documentElement.classList.contains('study-quiet'),
+      hudHidden: playHud.hidden,
+      panelHidden: casePanel.hidden,
+    }
+  }
+  if (!state.caseActive || state.caseKind !== 'high-ankle') {
+    await startHighAnkleCase(mode === 'learn' || mode === 'anatomy' ? 'learn' : 'quiz')
+  }
+  if (mode === 'learn' || mode === 'anatomy') {
+    state.casePhase = 'learn'
+    state.caseLearnIndex = mode === 'anatomy' ? 1 : 0
+    state.finished = false
+    appliedFocusId = ''
+    casePanel.hidden = false
+    playHud.hidden = true
+    renderLearnCard()
+  } else {
+    const id = mode === 'type' ? 'type-injury' : 'tap-aitfl'
+    const index = HIGH_ANKLE_QUIZ.findIndex((step) => step.id === id)
+    state.casePhase = 'quiz'
+    state.caseQuizIndex = index < 0 ? 0 : index
+    state.finished = false
+    state.revealing = false
+    state.typed = ''
+    state.caseTyping = mode === 'type'
+    appliedFocusId = ''
+    casePanel.hidden = true
+    playHud.hidden = false
+    hiddenInput.value = ''
+    renderCaseHud()
+    if (mode === 'tap') blurQuizInput()
+  }
+  syncChromeContext()
+  syncFramingInsetsNow()
+  await scene.whenPoseSettled()
+  syncFramingInsetsNow()
+  await scene.whenPoseSettled()
+  return {
+    ...scene.getAnkleReport(),
+    mode,
+    studyQuiet: document.documentElement.classList.contains('study-quiet'),
+    ankleClass: document.documentElement.classList.contains('ankle-case'),
+    hudHidden: playHud.hidden,
+    panelHidden: casePanel.hidden,
+    replayHidden: caseReplay.hidden,
+    title: caseTitle.textContent ?? '',
+    kicker: caseKicker.textContent ?? '',
+    prompt: (glossLine.textContent ?? '').trim(),
+    label: (typeLabel.textContent ?? '').trim(),
+    context: (quizContext.textContent ?? '').trim(),
+    innerHeight: window.innerHeight,
+  }
+}
+
 function installQaHooks(): void {
   const api = {
     showQuiz: qaShowQuiz,
@@ -4125,6 +4442,7 @@ function installQaHooks(): void {
     viewChrome: qaViewChrome,
     showCommonBones: qaShowCommonBones,
     showAnkle: qaShowAnkle,
+    showHighAnkle: qaShowHighAnkle,
     showStudy: qaShowStudy,
     showStudyCase: qaShowStudyCase,
     playStudy: qaPlayStudy,
