@@ -745,6 +745,11 @@ async function main() {
       return
     }
 
+    if (process.env.QA_ASSERT_HIGH_ANKLE === '1') {
+      await assertHighAnkleScene(cdp)
+      return
+    }
+
     if (process.env.QA_ASSERT_SPORT === '1') {
       await assertStudyScene(cdp)
       return
@@ -861,6 +866,107 @@ async function main() {
     }
   } finally {
     chrome.kill('SIGKILL')
+  }
+}
+
+async function assertHighAnkleScene(cdp) {
+  const table = []
+  const note = (surface, check, ok, detail) => {
+    table.push({ surface, check, ok, detail: String(detail) })
+    console.log(`${ok ? 'ok' : 'FAIL'}  ${surface}  ${check}  ${detail}`)
+    if (!ok) throw new Error(`${surface}: ${check}: ${detail}`)
+  }
+  let touchPage = null
+  const show = async (mode, width, height, mobile) => {
+    await setViewport(cdp, width, height, mobile)
+    await delay(250)
+    if (touchPage !== mobile) {
+      await openApp(cdp, mobile)
+      touchPage = mobile
+    }
+    return cdp.evaluate(`window.__anatomyQA.showHighAnkle(${JSON.stringify(mode)}, 0)`, true)
+  }
+  const shot = async (name) => {
+    const png = await cdp.send('Page.captureScreenshot', { format: 'png' })
+    await writeFile(`${OUT}/high-ankle-${name}.png`, Buffer.from(png.data, 'base64'))
+  }
+  const layouts = [
+    ['phone', 390, 844, true],
+    ['desktop', 1440, 900, false],
+  ]
+  for (const [label, width, height, mobile] of layouts) {
+    const menu = await show('menu', width, height, mobile)
+    note(label, 'menu title', menu.title === 'High ankle sprain', menu.title)
+    note(
+      label,
+      'menu subtitle',
+      menu.sub === 'soccer training · dorsiflexion, eversion, and tibial internal rotation',
+      menu.sub,
+    )
+    note(label, 'menu region', menu.region === 'ankle-foot' && menu.regionLabel === 'Ankle & foot', `${menu.region} ${menu.regionLabel}`)
+    note(label, 'menu row visible', menu.visible === true && menu.hudHidden === true && menu.panelHidden === true, JSON.stringify({ visible: menu.visible, hud: menu.hudHidden }))
+    await shot(`${label}-menu`)
+
+    const learn = await show('learn', width, height, mobile)
+    note(label, 'learn title', learn.title === 'A sprain above the usual site', learn.title)
+    note(label, 'learn kicker', learn.kicker === 'Rehab · high ankle', learn.kicker)
+    note(label, 'study quiet', learn.studyQuiet === true && learn.ankleClass === false, `quiet ${learn.studyQuiet} ankle-class ${learn.ankleClass}`)
+    note(label, 'no type-it in study', learn.hudHidden === true && learn.panelHidden === false && learn.replayHidden === true, `hud ${learn.hudHidden} panel ${learn.panelHidden} replay ${learn.replayHidden}`)
+    note(label, 'high profile', learn.profile === 'high' && learn.active === true && learn.span === 'mortise', `${learn.profile} ${learn.span}`)
+    note(label, 'resting and still', learn.spinning === false && learn.pose && Math.abs(learn.pose.plantar) < 0.02 && Math.abs(learn.pose.invert) < 0.02, JSON.stringify(learn.pose))
+    note(label, 'lateral mortise', learn.viewId === 'lateral', learn.viewId)
+    const cam = learn.camera
+    const tgt = learn.target
+    note(label, 'camera on the right side', cam && tgt && cam.x < tgt.x, `cam ${cam?.x} target ${cam && tgt ? tgt.x : ''}`)
+    const aitfl = learn.points?.aitfl_r
+    const talus = learn.points?.talus_r
+    note(label, 'AITFL loaded', Boolean(aitfl && learn.points?.pitfl_r && learn.points?.trans_tibfib_r), aitfl ? 'yes' : 'missing')
+    note(label, 'frame above the talus', Boolean(learn.framed && talus && learn.framed.centerY > talus.y), `frame ${learn.framed?.centerY} talus ${talus?.y}`)
+    const tibia = learn.tibia
+    const shaft = tibia ? tibia.maxY - tibia.minY : 0
+    const belowKnee = Boolean(learn.framed && tibia && learn.framed.maxY < tibia.minY + shaft * 0.55)
+    note(label, 'frame stops short of the knee', belowKnee, `frameMax ${learn.framed?.maxY} tibia ${tibia?.minY}–${tibia?.maxY}`)
+    note(label, 'AITFL on screen', learn.screen?.aitfl_r?.inFrame === true, JSON.stringify(learn.screen?.aitfl_r))
+    note(label, 'ATFL still visible', learn.screen?.atfl_r?.inFrame === true, JSON.stringify(learn.screen?.atfl_r))
+    await shot(`${label}-learn`)
+
+    const anatomy = await show('anatomy', width, height, mobile)
+    note(label, 'anatomy title', anatomy.title === 'Inferior tibiofibular joint', anatomy.title)
+    note(label, 'anatomy lights the three bands', anatomy.span === 'mortise' && anatomy.profile === 'high', anatomy.span)
+    note(label, 'AITFL PITFL and transverse on screen', anatomy.screen?.aitfl_r?.inFrame === true && anatomy.screen?.pitfl_r?.inFrame === true && anatomy.screen?.trans_tibfib_r?.inFrame === true, JSON.stringify({
+      aitfl: anatomy.screen?.aitfl_r,
+      pitfl: anatomy.screen?.pitfl_r,
+      trans: anatomy.screen?.trans_tibfib_r,
+    }))
+    await shot(`${label}-anatomy`)
+
+    const typed = await show('type', width, height, mobile)
+    note(label, 'type prompt', typed.prompt === 'Type the name of this sprain.', typed.prompt)
+    note(label, 'type label', typed.label === 'TYPE IT · NAME IT', typed.label)
+    note(label, 'type context', typed.context === 'Rehab · type it', typed.context)
+    note(label, 'type hud', typed.hudHidden === false && typed.panelHidden === true && typed.studyQuiet === true, `hud ${typed.hudHidden}`)
+    note(label, 'type still mortise', typed.span === 'mortise' && typed.profile === 'high', typed.span)
+    await shot(`${label}-type`)
+
+    const tap = await show('tap', width, height, mobile)
+    note(label, 'tap prompt', tap.prompt === 'Tap the anterior inferior tibiofibular ligament.', tap.prompt)
+    note(label, 'tap label', tap.label === 'TAP IT · TAP THE LIGAMENT', tap.label)
+    note(label, 'tap context', tap.context === 'Rehab · tap it', tap.context)
+    note(label, 'tap AITFL', tap.picks?.aitfl_r === 'aitfl', tap.picks?.aitfl_r)
+    note(label, 'tap ATFL contrast', tap.picks?.atfl_r === 'atfl', tap.picks?.atfl_r)
+    note(
+      label,
+      'posterior bands loaded',
+      Boolean(tap.points?.pitfl_r && tap.points?.trans_tibfib_r),
+      `pitfl pick ${tap.picks?.pitfl_r} transverse pick ${tap.picks?.trans_tibfib_r}`,
+    )
+    note(label, 'tap stays still', tap.spinning === false && tap.pose && Math.abs(tap.pose.plantar) < 0.02, JSON.stringify(tap.pose))
+    await shot(`${label}-tap`)
+  }
+  console.log('HIGH ANKLE QA')
+  console.log('surface | check | ok | detail')
+  for (const row of table) {
+    console.log(`${row.surface} | ${row.check} | ${row.ok ? 'pass' : 'fail'} | ${row.detail}`)
   }
 }
 

@@ -424,8 +424,8 @@ html.case-learn .chrome-center { display: none !important; }
   letter-spacing: 0.02em;
   color: var(--text-secondary);
 }
-/* Later cases in one region stack under the same label. The two current
-   cases stay in view; a region is not a second tap or a search. */
+/* Later cases in one region stack under the same label. A region is not
+   a second tap or a search. */
 
 .filter-bar {
   display: flex;
