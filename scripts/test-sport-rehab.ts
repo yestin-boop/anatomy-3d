@@ -40,6 +40,7 @@ import {
   shouldResumeIdleSpinOnMenuOrExitView,
 } from '../src/scene/idleSpin.ts'
 import { quizContextLabel } from '../src/ui/quizHud.ts'
+import { activityFace, noteRevision, type RevisionState } from '../src/ui/revision.ts'
 import { readFileSync } from 'node:fs'
 
 let passed = 0
@@ -195,6 +196,46 @@ assert(actionTypeMatch(brachialis, 'flexes the elbow'), 'brachialis accepts flex
 assert(actionTypeMatch(brachialis, 'powerful elbow flexor'), 'brachialis accepts powerful elbow flexor')
 assert(!actionTypeMatch(brachialis, 'chief flexor of the elbow'), 'brachialis does not use the unsourced chief-flexor phrase')
 assert(!actionTypeMatch(brachialis, 'extends the elbow'), 'brachialis is not elbow extension')
+
+assert(actionTypeMatch(glutMed, 'abduction'), 'glute med accepts abduction while typing')
+assert(!actionTypeMatch(glutMed, 'adduction'), 'adduction does not match abduction')
+assert(!actionTypeMatch(glutMed, 'abduct'), 'a clipped verb is not the abduction answer')
+assert(actionTypeMatch(glutMax, 'extension'), 'glute max accepts extension')
+assert(!actionTypeMatch(glutMax, 'abduction'), 'glute max does not accept abduction')
+assert(!actionTypeMatch(glutMax, 'flexion'), 'glute max does not accept flexion')
+const ilioShort = typeStep(ACTION_QUIZ, 'type-iliopsoas') as ActionTypeStep
+assert(actionTypeMatch(ilioShort, 'flexion'), 'iliopsoas accepts flexion')
+assert(!actionTypeMatch(ilioShort, 'extension'), 'iliopsoas does not accept extension')
+assert(actionTypeMatch(rectus, 'extends knee and flexes hip'), 'rectus accepts the short two-joint phrase')
+assert(actionTypeMatch(rectus, 'knee extension, hip flexion'), 'rectus accepts the comma two-joint phrase')
+assert(!actionTypeMatch(rectus, 'extension'), 'rectus does not accept extension alone')
+assert(!actionTypeMatch(rectus, 'flexion'), 'rectus does not accept flexion alone')
+assert(!actionTypeMatch(rectus, 'hip extension and knee flexion'), 'the hamstring pairing is not rectus')
+assert(actionTypeMatch(bicepsFem, 'flexion'), 'biceps femoris accepts flexion at the knee')
+assert(!actionTypeMatch(bicepsFem, 'extension'), 'biceps femoris does not accept extension alone')
+assert(actionTypeMatch(biceps, 'flexion'), 'biceps accepts flexion')
+assert(actionTypeMatch(biceps, 'supination'), 'biceps accepts supination')
+assert(!actionTypeMatch(biceps, 'extension'), 'biceps does not accept extension')
+assert(actionTypeMatch(triceps, 'extension'), 'triceps accepts extension')
+assert(!actionTypeMatch(triceps, 'flexion'), 'triceps does not accept flexion')
+assert(!actionTypeMatch(triceps, 'adduction'), 'triceps does not accept adduction')
+const latsShort = typeStep(ACTION_QUIZ, 'type-lats') as ActionTypeStep
+assert(actionTypeMatch(latsShort, 'adduction'), 'lats accepts adduction')
+assert(actionTypeMatch(latsShort, 'extension'), 'lats accepts extension')
+assert(!actionTypeMatch(latsShort, 'abduction'), 'lats does not accept abduction')
+const pecShort = typeStep(ACTION_QUIZ, 'type-pec-major') as ActionTypeStep
+assert(actionTypeMatch(pecShort, 'adduction'), 'pec major accepts adduction')
+assert(actionTypeMatch(pecShort, 'horizontal adduction'), 'pec major accepts horizontal adduction')
+assert(!actionTypeMatch(pecShort, 'abduction'), 'pec major does not accept abduction')
+const serratusShort = typeStep(ACTION_QUIZ, 'type-serratus') as ActionTypeStep
+assert(actionTypeMatch(serratusShort, 'protraction'), 'serratus accepts protraction')
+assert(actionTypeMatch(serratusShort, 'upward rotation'), 'serratus accepts upward rotation')
+assert(!actionTypeMatch(serratusShort, 'adduction'), 'serratus does not accept adduction')
+const supraShort = typeStep(ACTION_QUIZ, 'type-supra') as ActionTypeStep
+assert(actionTypeMatch(supraShort, 'abduction'), 'supraspinatus accepts abduction')
+assert(!actionTypeMatch(supraShort, 'adduction'), 'supraspinatus does not accept adduction')
+assert(actionTypeMatch(brachialis, 'flexion'), 'brachialis accepts flexion')
+assert(!actionTypeMatch(brachialis, 'adduction'), 'brachialis does not accept adduction')
 
 const vastusMed = tapStep(ACTION_QUIZ, 'tap-vastus-med') as ActionTapStep
 assert(gradeActionTap(vastusMed, 'vastus_medialis').ok, 'tapping vastus medialis is correct')
@@ -425,8 +466,44 @@ assert(!mainSrc.includes('Start quiz'), 'the last learn card does not say Start 
 assert(mainSrc.includes('function jumpFromLearnToQuiz'), 'an optional jump from Learn to Quiz exists')
 const advance = mainSrc.slice(mainSrc.indexOf('function advanceCaseLearn'), mainSrc.indexOf('function jumpFromLearnToQuiz'))
 assert(!advance.includes('startStudyQuiz') && !advance.includes('startAnkleQuiz'), 'finishing Learn does not auto-start the quiz')
-assert(mainSrc.includes("startStudyCase('actions', 'quiz')"), 'Sport Quiz opens the quiz directly')
-assert(mainSrc.includes("startAnkleCase('quiz')"), 'ankle Quiz opens the quiz directly')
+assert(mainSrc.includes("openCase('actions', 'quiz')"), 'Sport Quiz opens the quiz directly')
+assert(mainSrc.includes("openCase('ankle', 'quiz')"), 'ankle Quiz opens the quiz directly')
+assert(mainSrc.includes('data-region="ankle-foot"') && mainSrc.includes('Ankle &amp; foot'), 'ankle stays in the Ankle & foot group')
+assert(mainSrc.includes('data-region="thigh"') && mainSrc.includes('>Thigh<'), 'hamstring stays in the Thigh group')
+const ankleAt = mainSrc.indexOf('data-region="ankle-foot"')
+const thighAt = mainSrc.indexOf('data-region="thigh"')
+assert(ankleAt > 0 && thighAt > ankleAt, 'Ankle & foot is listed before Thigh')
+assert(mainSrc.indexOf('id="btn-ankle-case"') > ankleAt && mainSrc.indexOf('id="btn-ankle-case"') < thighAt, 'the ankle case row sits in its region')
+assert(mainSrc.indexOf('id="btn-hamstring-case"') > thighAt, 'the hamstring case row sits in its region')
+const sportBlock = mainSrc.slice(mainSrc.indexOf('id="sport-section"'), mainSrc.indexOf('id="rehab-section"'))
+assert(!sportBlock.includes('region-label'), 'Sport has no group label for its one module')
+assert(sportBlock.includes('Muscle actions'), 'muscle actions stays the Sport module')
+const menuHeadings = [...mainSrc.slice(mainSrc.indexOf('id="menu-overlay"'), mainSrc.indexOf('id="view-panel"')).matchAll(/<h2>([^<]+)<\/h2>/g)].map((match) => match[1])
+assert(
+  menuHeadings.join('|') === 'Explore|Sport|Rehab|Subject|Mode|Quick filters|Per session',
+  `start menu keeps its sections, got ${menuHeadings.join('|')}`,
+)
+const sportSkip = cssSrc.slice(cssSrc.indexOf('html.touch-quiz.sport-quiz:not(.phone-landscape) .skip-btn'))
+assert(sportSkip.slice(0, 280).includes('min-height: var(--target-compact)'), 'phone Sport Skip uses the 32px compact target')
+assert(cssSrc.includes('min-height: var(--target-min)'), 'the base Skip target stays 44px')
+
+let revision: RevisionState = { done: [], resume: null }
+revision = noteRevision(revision, 'ankle-learn', 1, 6, 'learn')
+assert(activityFace(revision, 'ankle-learn').label === 'Continue', 'an unfinished ankle Learn offers Continue')
+assert(!activityFace(revision, 'ankle-learn').done, 'a mid-lesson Learn is not finished')
+revision = noteRevision(revision, 'hamstring-quiz', 2, 8, 'quiz')
+assert(activityFace(revision, 'hamstring-quiz').label === 'Continue', 'Continue follows the latest unfinished activity')
+assert(activityFace(revision, 'ankle-learn').label === 'Learn', 'an earlier unfinished activity keeps Learn')
+revision = noteRevision(revision, 'ankle-learn', 5, 6, 'learn')
+assert(activityFace(revision, 'ankle-learn').done, 'reaching the last Learn card marks it finished')
+assert(activityFace(revision, 'ankle-learn').label === 'Learn', 'a finished Learn stays Learn')
+assert(revision.resume?.id === 'hamstring-quiz', 'finishing one activity leaves the other Continue in place')
+revision = noteRevision(revision, 'ankle-learn', 0, 6, 'learn')
+assert(activityFace(revision, 'ankle-learn').done, 'replaying a finished Learn does not clear the mark')
+assert(activityFace(revision, 'ankle-learn').label !== 'Continue', 'a finished replay is not a new Continue')
+revision = noteRevision(revision, 'hamstring-quiz', 8, 8, 'quiz')
+assert(activityFace(revision, 'hamstring-quiz').done, 'finishing the quiz marks it done')
+assert(revision.resume === null, 'a finished quiz clears Continue')
 assert(cssSrc.includes('html.case-learn .chrome-center'), 'quiz accuracy is hidden during Learn')
 assert(cssSrc.includes('--lesson-column'), 'desktop learn uses a side lesson column')
 assert(cssSrc.includes('html.case-learn .case-panel') && cssSrc.includes('left: auto'), 'the desktop lesson column sits beside the stage')

@@ -317,6 +317,7 @@ export const ACTION_QUIZ: readonly ActionQuizStep[] = [
       'extends the hip',
       'hip extension',
       'thigh extension',
+      'extension',
       'extends the flexed thigh',
       'chief extensor of the flexed thigh',
       'chief extensor',
@@ -337,6 +338,7 @@ export const ACTION_QUIZ: readonly ActionQuizStep[] = [
       'flex the hip',
       'hip flexion',
       'flexion of the hip',
+      'flexion',
       'flexes the thigh',
       'chief flexor of the hip',
       'principal hip flexor',
@@ -379,6 +381,10 @@ export const ACTION_QUIZ: readonly ActionQuizStep[] = [
       'extends the leg and flexes the thigh',
       'knee extension and hip flexion',
       'hip flexion and knee extension',
+      'extends knee and flexes hip',
+      'flexes hip and extends knee',
+      'knee extension, hip flexion',
+      'hip flexion, knee extension',
       'extends the leg at the knee and flexes the thigh',
     ],
     hint: 'The only quadriceps muscle that crosses both the hip and the knee.',
@@ -479,6 +485,7 @@ export const ACTION_QUIZ: readonly ActionQuizStep[] = [
       'flex the knee',
       'knee flexion',
       'flexion of the knee',
+      'flexion',
       'flexes the leg',
       'flexes the knee and extends the thigh',
       'extends the thigh and flexes the knee',
@@ -518,6 +525,7 @@ export const ACTION_QUIZ: readonly ActionQuizStep[] = [
       'flex the elbow',
       'elbow flexion',
       'flexion of the elbow',
+      'flexion',
       'flexes the forearm',
       'supinates the forearm',
       'chief supinator',
@@ -541,6 +549,7 @@ export const ACTION_QUIZ: readonly ActionQuizStep[] = [
       'extend the elbow',
       'elbow extension',
       'extension of the elbow',
+      'extension',
       'extends the forearm',
       'chief extensor of the elbow',
       'chief extensor',
@@ -672,6 +681,7 @@ export const ACTION_QUIZ: readonly ActionQuizStep[] = [
       'flex the elbow',
       'elbow flexion',
       'flexion of the elbow',
+      'flexion',
       'flexes the forearm',
       'a powerful elbow flexor',
       'powerful elbow flexor',
@@ -702,7 +712,11 @@ export const ACTION_QUIZ: readonly ActionQuizStep[] = [
 ]
 
 export function actionTypeMatch(step: ActionTypeStep, typed: string, mode: AnswerMatchMode = 'live'): boolean {
-  return matchAliases(typed, step.aliases, mode, step.official)
+  // A short action such as "abduction" is a complete answer. It must succeed
+  // while typing even when a longer alias starts with the same word.
+  // Wrong actions stay exact: "adduction" does not match "abduction".
+  const timing = mode === 'live' ? 'confirm' : mode
+  return matchAliases(typed, step.aliases, timing, step.official)
 }
 
 export function gradeActionTap(step: ActionTapStep, hit: string | null): { ok: boolean; message: string } {

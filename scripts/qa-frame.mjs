@@ -561,6 +561,145 @@ async function assertStudyScene(cdp) {
   await assertCueMotion(cdp)
 }
 
+function failRevision(label, msg, extra) {
+  throw new Error(`${label}: ${msg}${extra ? `\n${JSON.stringify(extra)}` : ''}`)
+}
+
+async function saveShot(cdp, name) {
+  const png = await cdp.send('Page.captureScreenshot', { format: 'png' })
+  await writeFile(`${OUT}/${name}.png`, Buffer.from(png.data, 'base64'))
+}
+
+async function assertRevision(cdp) {
+  const table = []
+  const note = (surface, check, ok, detail) => {
+    table.push({ surface, check, ok, detail })
+    console.log(`${ok ? 'ok' : 'FAIL'}  ${surface}  ${check}  ${detail}`)
+    if (!ok) failRevision(surface, `${check}: ${detail}`)
+  }
+
+  const readMenu = () => cdp.evaluate(`window.__anatomyQA.menuSnapshot()`)
+  const scrollTo = (selector) =>
+    cdp.evaluate(`(() => {
+      const el = document.querySelector(${JSON.stringify(selector)})
+      if (el) el.scrollIntoView({ block: 'start' })
+      const panel = document.querySelector('#menu-panel').getBoundingClientRect()
+      const rows = ['#btn-muscle-actions', '#btn-ankle-case', '#btn-hamstring-case'].map((sel) => {
+        const box = document.querySelector(sel).getBoundingClientRect()
+        return {
+          sel,
+          top: Math.round(box.top),
+          bottom: Math.round(box.bottom),
+          inPanel: box.top >= panel.top - 4 && box.bottom <= panel.bottom + 4,
+        }
+      })
+      return { panelTop: Math.round(panel.top), panelBottom: Math.round(panel.bottom), rows }
+    })()`)
+
+  async function checkMenu(label, width, height, mobile) {
+    await setViewport(cdp, width, height, mobile)
+    await openApp(cdp, mobile)
+    await cdp.evaluate(`window.__anatomyQA.setRevision(null)`)
+    const fresh = await readMenu()
+    const headings = (fresh.headings || []).join('|')
+    note(label, 'sections', headings === 'Explore|Sport|Rehab|Subject|Mode|Quick filters|Per session', headings)
+    note(label, 'regions', (fresh.regions || []).join('|') === 'Ankle & foot|Thigh', (fresh.regions || []).join('|'))
+    note(label, 'sport has no group label', fresh.sportRegions === 0 && fresh.sportRows === 1, `labels ${fresh.sportRegions} rows ${fresh.sportRows}`)
+    note(label, 'no rehab search', fresh.searchInRehab === false, String(fresh.searchInRehab))
+    const byTitle = Object.fromEntries((fresh.rows || []).map((row) => [row.title, row]))
+    const ankle = byTitle['Lateral ankle sprain']
+    const ham = byTitle['Grade II hamstring strain']
+    const sport = byTitle['Muscle actions']
+    note(label, 'three module rows', Boolean(ankle && ham && sport), (fresh.rows || []).map((row) => row.title).join(', '))
+    note(label, 'ankle subtitle', ankle?.sub === 'soccer cut · inversion and plantarflexion', ankle?.sub || '')
+    note(label, 'hamstring subtitle', ham?.sub === 'sprint · eccentric overload', ham?.sub || '')
+    note(label, 'fresh Learn and Quiz', [sport, ankle, ham].every((row) => row.learn === 'Learn' && row.quiz === 'Quiz' && !row.learnDone && !row.quizDone), JSON.stringify({ sport, ankle, ham }))
+    note(label, 'cases stay shown', [sport, ankle, ham].every((row) => row.visible && row.height > 8), JSON.stringify(fresh.rows))
+    await scrollTo('#sport-section')
+    await saveShot(cdp, `${label}-menu-sport`)
+    const rehabPlace = await scrollTo('#rehab-section')
+    note(
+      label,
+      'both rehab cases on screen',
+      rehabPlace.rows.filter((row) => row.sel !== '#btn-muscle-actions').every((row) => row.inPanel),
+      JSON.stringify(rehabPlace),
+    )
+    await saveShot(cdp, `${label}-menu-rehab`)
+
+    const marked = await cdp.evaluate(`window.__anatomyQA.setRevision({
+      done: ['ankle-learn', 'actions-quiz'],
+      resume: { id: 'hamstring-learn', index: 2 }
+    })`)
+    await scrollTo('#rehab-section')
+    const markedBy = Object.fromEntries((marked.rows || []).map((row) => [row.title, row]))
+    const continues = (marked.rows || []).filter((row) => row.learn === 'Continue' || row.quiz === 'Continue')
+    note(label, 'ankle Learn finished', markedBy['Lateral ankle sprain']?.learn === 'Learn' && markedBy['Lateral ankle sprain']?.learnDone === true, JSON.stringify(markedBy['Lateral ankle sprain']))
+    note(label, 'ankle Quiz unchanged', markedBy['Lateral ankle sprain']?.quiz === 'Quiz' && markedBy['Lateral ankle sprain']?.quizDone === false, JSON.stringify(markedBy['Lateral ankle sprain']))
+    note(label, 'Continue on the unfinished card', continues.length === 1 && markedBy['Grade II hamstring strain']?.learn === 'Continue', JSON.stringify(continues))
+    note(label, 'Sport Quiz finished', markedBy['Muscle actions']?.quiz === 'Quiz' && markedBy['Muscle actions']?.quizDone === true, JSON.stringify(markedBy['Muscle actions']))
+    note(label, 'no second Continue', markedBy['Muscle actions']?.learn === 'Learn' && markedBy['Grade II hamstring strain']?.quiz === 'Quiz', 'one continue')
+    await saveShot(cdp, `${label}-menu-continue`)
+  }
+
+  await checkMenu('phone', 390, 844, true)
+  await checkMenu('desktop', 1440, 900, false)
+
+  await setViewport(cdp, 390, 844, true)
+  await openApp(cdp, true)
+  const phone = await cdp.evaluate(`window.__anatomyQA.showActionStep('type-rectus', 0)`, true)
+  note('phone sport type-it', 'rectus prompt', phone.prompt === 'Type what this muscle does at the knee and the hip.', phone.prompt)
+  note('phone sport type-it', 'context', phone.context === 'Sport · type it', phone.context)
+  note('phone sport type-it', 'Skip is compact', phone.skipHeight >= 30 && phone.skipHeight <= 36, `height ${phone.skipHeight}`)
+  note('phone sport type-it', 'cue sits under the prompt', phone.gapPromptToHint >= 0 && phone.gapPromptToHint <= 12, `gap ${phone.gapPromptToHint}`)
+  note('phone sport type-it', 'Skip sits under the cue', phone.gapHintToSkip >= 0 && phone.gapHintToSkip <= 14, `gap ${phone.gapHintToSkip}`)
+  note('phone sport type-it', 'TAP TO TYPE', phone.tapVisible === true && phone.tapText === 'Tap to type', `${phone.tapText} visible ${phone.tapVisible}`)
+  note('phone sport type-it', 'answer word is not a field', phone.promptDisplay !== 'flex' && !phone.promptPanel, `${phone.promptDisplay} panel ${phone.promptPanel}`)
+  await saveShot(cdp, 'phone-sport-type-rectus')
+
+  const phoneKb = await cdp.evaluate(`window.__anatomyQA.showActionStep('type-rectus', 300)`, true)
+  const limit = phoneKb.innerHeight - 300 + 8
+  note('phone sport keyboard', 'prompt above the keyboard', phoneKb.promptBottom <= limit, `bottom ${phoneKb.promptBottom} limit ${limit}`)
+  note('phone sport keyboard', 'Skip above the keyboard', phoneKb.skipBottom <= limit, `bottom ${phoneKb.skipBottom} limit ${limit}`)
+  note('phone sport keyboard', 'Skip stays compact', phoneKb.skipHeight >= 30 && phoneKb.skipHeight <= 36, `height ${phoneKb.skipHeight}`)
+  await saveShot(cdp, 'phone-sport-type-keyboard')
+
+  const adduct = await cdp.evaluate(`window.__anatomyQA.showActionStep('type-glut-med', 0).then(() => window.__anatomyQA.answer('adduction'))`, true)
+  note('phone sport answer', 'adduction is not abduction', adduct.revealing === false && adduct.id === 'type-glut-med', JSON.stringify(adduct))
+  const abduct = await cdp.evaluate(`window.__anatomyQA.showActionStep('type-glut-med', 0).then(() => window.__anatomyQA.answer('abduction'))`, true)
+  note('phone sport answer', 'abduction is enough', abduct.revealing === true && abduct.id === 'type-glut-med', JSON.stringify(abduct))
+
+  await setViewport(cdp, 1440, 900, false)
+  await openApp(cdp, false)
+  const desk = await cdp.evaluate(`window.__anatomyQA.showActionStep('type-rectus', 0)`, true)
+  note('desktop sport type-it', 'rectus prompt', desk.prompt === 'Type what this muscle does at the knee and the hip.', desk.prompt)
+  note('desktop sport type-it', 'Skip stays 44px', desk.skipHeight >= 44, `height ${desk.skipHeight}`)
+  note('desktop sport type-it', 'no TAP TO TYPE', desk.tapVisible === false, `visible ${desk.tapVisible} display ${desk.hintDisplay}`)
+  note('desktop sport type-it', 'prompt is not a landscape row', desk.promptDisplay !== 'flex' && !desk.promptPanel, desk.promptDisplay)
+  note('desktop sport type-it', 'answer word stays the display', (desk.wordText || '').includes('_') || (desk.wordText || '').length > 10, desk.wordText)
+  await saveShot(cdp, 'desktop-sport-type-rectus')
+
+  const field = await cdp.evaluate(`(() => {
+    const input = document.querySelector('#answer')
+    return {
+      autocomplete: input.getAttribute('autocomplete'),
+      autocorrect: input.getAttribute('autocorrect'),
+      spellcheck: input.getAttribute('spellcheck'),
+      autocapitalize: input.getAttribute('autocapitalize'),
+    }
+  })()`)
+  note(
+    'type-it field',
+    'autocomplete stays off',
+    field.autocomplete === 'off' && field.autocorrect === 'off' && field.spellcheck === 'false' && field.autocapitalize === 'none',
+    JSON.stringify(field),
+  )
+
+  console.log('\nQA table')
+  console.log(['surface', 'check', 'result'].join('\t'))
+  for (const row of table) console.log([row.surface, row.check, row.ok ? 'pass' : 'fail'].join('\t'))
+  console.log(`${table.length} checks passed`)
+}
+
 async function main() {
   await mkdir(OUT, { recursive: true })
   const chrome = launchChrome()
@@ -630,6 +769,11 @@ async function main() {
 
     if (process.env.QA_ASSERT_LAYOUT === '1') {
       await assertDesktopLayout(cdp)
+      return
+    }
+
+    if (process.env.QA_ASSERT_REVISION === '1') {
+      await assertRevision(cdp)
       return
     }
 

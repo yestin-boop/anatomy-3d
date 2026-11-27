@@ -86,6 +86,14 @@ import {
   type QuizActivity,
   type QuizSubject,
 } from './ui/quizHud'
+import {
+  activityFace,
+  noteRevision,
+  parseRevision,
+  revisionId,
+  type RevisionId,
+  type RevisionState,
+} from './ui/revision'
 
 /** Bonetype three-level model (+ Combined runs all back-to-back). */
 type Level = 'see' | 'hint' | 'memory'
@@ -222,40 +230,50 @@ app.innerHTML = `
         </button>
       </section>
 
-      <section class="menu-section">
+      <section class="menu-section" id="sport-section">
         <h2>Sport</h2>
-        <div class="module-row" id="btn-muscle-actions">
-          <div class="module-copy">
-            <span class="mode-title">Muscle actions</span>
-            <span class="mode-sub">lit muscle · joint motion with the muscle on the limb</span>
-          </div>
-          <div class="module-actions">
-            <button type="button" class="module-btn" id="btn-muscle-actions-learn">Learn</button>
-            <button type="button" class="module-btn module-btn--quiet" id="btn-muscle-actions-quiz">Quiz</button>
+        <div class="module-list" id="sport-modules">
+          <div class="module-row" id="btn-muscle-actions">
+            <div class="module-copy">
+              <span class="mode-title">Muscle actions</span>
+              <span class="mode-sub">lit muscle · joint motion with the muscle on the limb</span>
+            </div>
+            <div class="module-actions">
+              <button type="button" class="module-btn" id="btn-muscle-actions-learn" data-revision="actions-learn"><span class="module-btn-label">Learn</span><span class="module-done" hidden>✓</span></button>
+              <button type="button" class="module-btn module-btn--quiet" id="btn-muscle-actions-quiz" data-revision="actions-quiz"><span class="module-btn-label">Quiz</span><span class="module-done" hidden>✓</span></button>
+            </div>
           </div>
         </div>
       </section>
 
-      <section class="menu-section">
+      <section class="menu-section" id="rehab-section">
         <h2>Rehab</h2>
-        <div class="module-row" id="btn-ankle-case">
-          <div class="module-copy">
-            <span class="mode-title">Lateral ankle sprain</span>
-            <span class="mode-sub">soccer cut · inversion and plantarflexion</span>
+        <div class="region-groups">
+          <div class="region-group" data-region="ankle-foot">
+            <h3 class="region-label">Ankle &amp; foot</h3>
+            <div class="module-row" id="btn-ankle-case">
+              <div class="module-copy">
+                <span class="mode-title">Lateral ankle sprain</span>
+                <span class="mode-sub">soccer cut · inversion and plantarflexion</span>
+              </div>
+              <div class="module-actions">
+                <button type="button" class="module-btn" id="btn-ankle-case-learn" data-revision="ankle-learn"><span class="module-btn-label">Learn</span><span class="module-done" hidden>✓</span></button>
+                <button type="button" class="module-btn module-btn--quiet" id="btn-ankle-case-quiz" data-revision="ankle-quiz"><span class="module-btn-label">Quiz</span><span class="module-done" hidden>✓</span></button>
+              </div>
+            </div>
           </div>
-          <div class="module-actions">
-            <button type="button" class="module-btn" id="btn-ankle-case-learn">Learn</button>
-            <button type="button" class="module-btn module-btn--quiet" id="btn-ankle-case-quiz">Quiz</button>
-          </div>
-        </div>
-        <div class="module-row" id="btn-hamstring-case">
-          <div class="module-copy">
-            <span class="mode-title">Grade II hamstring strain</span>
-            <span class="mode-sub">sprint · eccentric overload</span>
-          </div>
-          <div class="module-actions">
-            <button type="button" class="module-btn" id="btn-hamstring-case-learn">Learn</button>
-            <button type="button" class="module-btn module-btn--quiet" id="btn-hamstring-case-quiz">Quiz</button>
+          <div class="region-group" data-region="thigh">
+            <h3 class="region-label">Thigh</h3>
+            <div class="module-row" id="btn-hamstring-case">
+              <div class="module-copy">
+                <span class="mode-title">Grade II hamstring strain</span>
+                <span class="mode-sub">sprint · eccentric overload</span>
+              </div>
+              <div class="module-actions">
+                <button type="button" class="module-btn" id="btn-hamstring-case-learn" data-revision="hamstring-learn"><span class="module-btn-label">Learn</span><span class="module-done" hidden>✓</span></button>
+                <button type="button" class="module-btn module-btn--quiet" id="btn-hamstring-case-quiz" data-revision="hamstring-quiz"><span class="module-btn-label">Quiz</span><span class="module-done" hidden>✓</span></button>
+              </div>
+            </div>
           </div>
         </div>
       </section>
@@ -1000,7 +1018,71 @@ function showMenu(): void {
   scene.showMenuView()
   renderMenuFilters()
   updatePoolCount()
+  syncSportQuizClass()
+  paintRevision()
   syncFramingInsetsNow()
+}
+
+const REVISION_KEY = 'anatomy-3d-revision'
+
+function loadRevision(): RevisionState {
+  try {
+    return parseRevision(localStorage.getItem(REVISION_KEY))
+  } catch {
+    return { done: [], resume: null }
+  }
+}
+
+function saveRevision(next: RevisionState): void {
+  try {
+    localStorage.setItem(REVISION_KEY, JSON.stringify(next))
+  } catch {
+    /* private mode */
+  }
+}
+
+function paintRevision(): void {
+  const saved = loadRevision()
+  document.querySelectorAll<HTMLButtonElement>('[data-revision]').forEach((btn) => {
+    const id = btn.dataset.revision
+    if (!id) return
+    const face = activityFace(saved, id as RevisionId)
+    const label = btn.querySelector('.module-btn-label')
+    if (label) label.textContent = face.label
+    btn.classList.toggle('module-btn--done', face.done)
+    const mark = btn.querySelector<HTMLElement>('.module-done')
+    if (mark) mark.hidden = !face.done
+    const base = id.endsWith('quiz') ? 'Quiz' : 'Learn'
+    const name = face.label === 'Continue' ? 'Continue' : face.done ? `${base}, finished` : base
+    btn.setAttribute('aria-label', name)
+  })
+}
+
+function clampIndex(index: number, total: number): number {
+  if (!Number.isFinite(index) || total <= 0) return 0
+  return Math.max(0, Math.min(Math.floor(index), total - 1))
+}
+
+function syncSportQuizClass(): void {
+  const on = state.caseActive && state.caseKind === 'actions' && state.casePhase === 'quiz'
+  document.documentElement.classList.toggle('sport-quiz', on)
+}
+
+function syncRevision(): void {
+  if (!state.caseActive) return
+  const phase = state.casePhase
+  const total = phase === 'learn' ? caseLearnTotal() : caseQuizTotal()
+  const index = phase === 'learn' ? state.caseLearnIndex : state.finished ? total : state.caseQuizIndex
+  saveRevision(noteRevision(loadRevision(), revisionId(state.caseKind, phase), index, total, phase))
+}
+
+function openCase(kind: CaseKind, phase: 'learn' | 'quiz'): void {
+  const id = revisionId(kind, phase)
+  const saved = loadRevision()
+  const face = activityFace(saved, id)
+  const index = face.label === 'Continue' ? (saved.resume?.index ?? 0) : 0
+  if (kind === 'ankle') void startAnkleCase(phase, index)
+  else void startStudyCase(kind, phase, index)
 }
 
 
@@ -2076,29 +2158,29 @@ startBtn.addEventListener('pointerdown', (e) => {
 
 btnAnkleLearn.addEventListener('pointerdown', (e) => {
   e.preventDefault()
-  void startAnkleCase('learn')
+  openCase('ankle', 'learn')
 })
 btnAnkleQuiz.addEventListener('pointerdown', (e) => {
   e.preventDefault()
-  void startAnkleCase('quiz')
+  openCase('ankle', 'quiz')
 })
 
 btnMuscleLearn.addEventListener('pointerdown', (e) => {
   e.preventDefault()
-  void startStudyCase('actions', 'learn')
+  openCase('actions', 'learn')
 })
 btnMuscleQuiz.addEventListener('pointerdown', (e) => {
   e.preventDefault()
-  void startStudyCase('actions', 'quiz')
+  openCase('actions', 'quiz')
 })
 
 btnHamstringLearn.addEventListener('pointerdown', (e) => {
   e.preventDefault()
-  void startStudyCase('hamstring', 'learn')
+  openCase('hamstring', 'learn')
 })
 btnHamstringQuiz.addEventListener('pointerdown', (e) => {
   e.preventDefault()
-  void startStudyCase('hamstring', 'quiz')
+  openCase('hamstring', 'quiz')
 })
 
 btnView.addEventListener('pointerdown', (e) => {
@@ -2227,6 +2309,7 @@ function restartCurrent(): void {
       state.finished = false
       appliedFocusId = ''
       renderLearnCard()
+      syncRevision()
       syncChromeContext()
       return
     }
@@ -2309,17 +2392,17 @@ window.addEventListener('keydown', (e) => {
   }
   if (!state.playing && !state.viewing && (e.key === 'r' || e.key === 'R') && document.activeElement !== hiddenInput) {
     e.preventDefault()
-    void startAnkleCase('learn')
+    openCase('ankle', 'learn')
     return
   }
   if (!state.playing && !state.viewing && (e.key === 's' || e.key === 'S') && document.activeElement !== hiddenInput) {
     e.preventDefault()
-    void startStudyCase('actions', 'learn')
+    openCase('actions', 'learn')
     return
   }
   if (!state.playing && !state.viewing && (e.key === 'h' || e.key === 'H') && document.activeElement !== hiddenInput) {
     e.preventDefault()
-    void startStudyCase('hamstring', 'learn')
+    openCase('hamstring', 'learn')
     return
   }
   if (e.key === 'Tab' && state.playing) {
@@ -2868,7 +2951,7 @@ function renderLearnCard(): void {
   else scene.holdAnklePose(0)
 }
 
-async function startAnkleCase(phase: 'learn' | 'quiz' = 'learn'): Promise<void> {
+async function startAnkleCase(phase: 'learn' | 'quiz' = 'learn', atIndex = 0): Promise<void> {
   void unlockAudio()
   if (scene.isStudyCase()) scene.exitStudyCase()
   if (state.viewing) {
@@ -2908,10 +2991,18 @@ async function startAnkleCase(phase: 'learn' | 'quiz' = 'learn'): Promise<void> 
   statusEl.textContent = 'Loading ankle…'
   scene.setLook('solid')
   await scene.enterAnkleCase()
-  if (!state.caseActive) return
+  if (!state.caseActive) {
+    syncSportQuizClass()
+    return
+  }
   statusEl.style.display = 'none'
-  if (phase === 'quiz') startAnkleQuiz()
-  else renderLearnCard()
+  if (phase === 'quiz') startAnkleQuiz(atIndex)
+  else {
+    state.caseLearnIndex = clampIndex(atIndex, caseLearnTotal())
+    renderLearnCard()
+    syncRevision()
+  }
+  syncSportQuizClass()
   syncFramingInsetsNow()
   scheduleFramingSync()
 }
@@ -2923,6 +3014,7 @@ function advanceCaseLearn(): void {
     renderLearnCard()
     scheduleFramingSync()
   }
+  syncRevision()
 }
 
 function jumpFromLearnToQuiz(): void {
@@ -2935,6 +3027,7 @@ function jumpFromLearnToQuiz(): void {
 async function startStudyCase(
   kind: 'actions' | 'hamstring',
   phase: 'learn' | 'quiz' = 'learn',
+  atIndex = 0,
 ): Promise<void> {
   void unlockAudio()
   if (scene.isAnkleCase()) scene.exitAnkleCase()
@@ -2975,17 +3068,25 @@ async function startStudyCase(
   statusEl.textContent = 'Loading muscles…'
   scene.setLook('solid')
   await scene.enterStudyCase()
-  if (!state.caseActive || state.caseKind !== kind) return
+  if (!state.caseActive || state.caseKind !== kind) {
+    syncSportQuizClass()
+    return
+  }
   statusEl.style.display = 'none'
-  if (phase === 'quiz') startStudyQuiz()
-  else renderLearnCard()
+  if (phase === 'quiz') startStudyQuiz(atIndex)
+  else {
+    state.caseLearnIndex = clampIndex(atIndex, caseLearnTotal())
+    renderLearnCard()
+    syncRevision()
+    syncSportQuizClass()
+  }
   syncFramingInsetsNow()
   scheduleFramingSync()
 }
 
-function startStudyQuiz(): void {
+function startStudyQuiz(atIndex = 0): void {
   state.casePhase = 'quiz'
-  state.caseQuizIndex = 0
+  state.caseQuizIndex = clampIndex(atIndex, caseQuizTotal())
   state.finished = false
   state.revealing = false
   state.typed = ''
@@ -2996,13 +3097,15 @@ function startStudyQuiz(): void {
   casePanel.hidden = true
   playHud.hidden = false
   renderCaseHud()
+  syncSportQuizClass()
+  syncRevision()
   syncFramingInsetsNow()
   if (state.caseTyping) focusInput()
 }
 
-function startAnkleQuiz(): void {
+function startAnkleQuiz(atIndex = 0): void {
   state.casePhase = 'quiz'
-  state.caseQuizIndex = 0
+  state.caseQuizIndex = clampIndex(atIndex, caseQuizTotal())
   state.finished = false
   state.revealing = false
   state.typed = ''
@@ -3015,11 +3118,14 @@ function startAnkleQuiz(): void {
   scene.setAnkleEmphasis('none')
   scene.setAnkleLigamentLabels(false)
   renderCaseHud()
+  syncSportQuizClass()
+  syncRevision()
   syncFramingInsetsNow()
   if (state.caseTyping) focusInput()
 }
 
 function renderStudyHud(): void {
+  syncSportQuizClass()
   document.documentElement.classList.remove('ankle-case')
   document.documentElement.classList.add('study-quiet')
   playHud.classList.toggle('case-quiz', state.casePhase === 'quiz')
@@ -3319,9 +3425,11 @@ function advanceCaseQuiz(): void {
     state.finished = true
     state.caseTyping = false
     updateHud()
+    syncRevision()
     return
   }
   updateHud()
+  syncRevision()
   if (state.caseTyping) focusInput()
 }
 
@@ -3330,6 +3438,7 @@ caseBack.addEventListener('click', () => {
   state.caseLearnIndex -= 1
   pillRound.textContent = `${state.caseLearnIndex + 1} / ${caseLearnTotal()}`
   renderLearnCard()
+  syncRevision()
   scheduleFramingSync()
 })
 
@@ -3917,9 +4026,99 @@ function qaViewChrome(): Record<string, unknown> {
   }
 }
 
+function qaMenuSnapshot(): Record<string, unknown> {
+  const headings = [...document.querySelectorAll('#menu-scroll h2')].map((el) => (el.textContent ?? '').trim())
+  const regions = [...document.querySelectorAll('#rehab-section .region-label')].map((el) => (el.textContent ?? '').trim())
+  const rows = [...document.querySelectorAll('#sport-modules .module-row, #rehab-section .module-row')].map((row) => {
+    const learn = row.querySelector<HTMLButtonElement>('[data-revision$="-learn"]')
+    const quiz = row.querySelector<HTMLButtonElement>('[data-revision$="-quiz"]')
+    const rect = row.getBoundingClientRect()
+    return {
+      title: row.querySelector('.mode-title')?.textContent ?? '',
+      sub: row.querySelector('.mode-sub')?.textContent ?? '',
+      learn: learn?.querySelector('.module-btn-label')?.textContent ?? '',
+      quiz: quiz?.querySelector('.module-btn-label')?.textContent ?? '',
+      learnDone: learn?.classList.contains('module-btn--done') ?? false,
+      quizDone: quiz?.classList.contains('module-btn--done') ?? false,
+      top: Math.round(rect.top),
+      height: Math.round(rect.height),
+      visible: rect.width > 8 && rect.height > 8 && getComputedStyle(row).display !== 'none',
+    }
+  })
+  return {
+    headings,
+    regions,
+    sportRegions: document.querySelectorAll('#sport-section .region-label').length,
+    sportRows: document.querySelectorAll('#sport-modules .module-row').length,
+    rows,
+    searchInRehab: Boolean(document.querySelector('#rehab-section input, #rehab-section [type="search"]')),
+  }
+}
+
+function qaSetRevision(next: RevisionState | null): Record<string, unknown> {
+  if (!next) saveRevision({ done: [], resume: null })
+  else saveRevision(parseRevision(JSON.stringify(next)))
+  showMenu()
+  return qaMenuSnapshot()
+}
+
+async function qaShowActionStep(id: string, keyboardPx = 0): Promise<Record<string, unknown>> {
+  pinForcedKeyboard(keyboardPx)
+  if (!state.caseActive || state.caseKind !== 'actions') await startStudyCase('actions', 'quiz')
+  const index = ACTION_QUIZ.findIndex((step) => step.id === id)
+  state.casePhase = 'quiz'
+  state.caseQuizIndex = index < 0 ? 0 : index
+  state.finished = false
+  state.revealing = false
+  state.typed = ''
+  state.caseTyping = true
+  hiddenInput.value = ''
+  casePanel.hidden = true
+  playHud.hidden = false
+  renderCaseHud()
+  if (keyboardPx > 0) focusInputNow()
+  else hiddenInput.blur()
+  syncTapHint()
+  syncFramingInsetsNow()
+  await scene.whenPoseSettled()
+  syncFramingInsetsNow()
+  await scene.whenPoseSettled()
+  const skip = skipBtn.getBoundingClientRect()
+  const gloss = glossLine.getBoundingClientRect()
+  const hint = tapHint.getBoundingClientRect()
+  const label = typeLabel.getBoundingClientRect()
+  const hintStyle = getComputedStyle(tapHint)
+  return {
+    ...qaTypeBar(),
+    id: ACTION_QUIZ[state.caseQuizIndex]?.id ?? '',
+    skipHeight: Math.round(skip.height),
+    glossBottom: Math.round(gloss.bottom),
+    hintTop: Math.round(hint.top),
+    hintBottom: Math.round(hint.bottom),
+    labelTop: Math.round(label.top),
+    clusterHeight: Math.round(skip.bottom - label.top),
+    gapPromptToHint: Math.round(hint.top - gloss.bottom),
+    gapHintToSkip: Math.round(skip.top - hint.bottom),
+    sportQuiz: document.documentElement.classList.contains('sport-quiz'),
+    promptDisplay: getComputedStyle(promptBlock).display,
+    hintDisplay: hintStyle.display,
+  }
+}
+
+function qaAnswer(text: string): { revealing: boolean; id: string; typed: string } {
+  hiddenInput.value = text
+  hiddenInput.dispatchEvent(new Event('input', { bubbles: true }))
+  const step = currentCaseStep()
+  return { revealing: state.revealing, id: step?.id ?? '', typed: state.typed }
+}
+
 function installQaHooks(): void {
   const api = {
     showQuiz: qaShowQuiz,
+    menuSnapshot: qaMenuSnapshot,
+    setRevision: qaSetRevision,
+    showActionStep: qaShowActionStep,
+    answer: qaAnswer,
     showView: qaShowView,
     startView,
     setViewDisplay: qaSetViewDisplay,
