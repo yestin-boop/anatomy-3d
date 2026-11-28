@@ -605,8 +605,9 @@ html.touch-quiz .target-word {
   font-size: clamp(var(--type-prompt-min), 7vw, var(--type-prompt-max));
 }
 /* Phone portrait Sport type-it. Cue and Skip tuck up under the prompt
-   at the View-chip size so the model keeps the screen. Desktop and
-   phone landscape keep the existing typing layout, including 44px Skip. */
+   so the model keeps the screen. Skip is tighter than the 32px View chip:
+   quiet type and short padding. Desktop and phone landscape keep the
+   existing typing layout, including the 44px Skip. */
 @media (max-width: 900px) {
   html.touch-quiz.sport-quiz:not(.phone-landscape) .tap-hint {
     margin: var(--space-1) 0 0;
@@ -617,7 +618,31 @@ html.touch-quiz .target-word {
   html.touch-quiz.sport-quiz:not(.phone-landscape) .skip-btn {
     min-height: var(--target-compact);
     min-width: var(--target-compact);
-    padding: 4px 12px;
+    padding: 2px 8px;
+    font-size: var(--type-quiet);
+    letter-spacing: 0.01em;
+  }
+  /* Quiz menu and X-ray/Solid match the compact View chips. Phone
+     landscape and desktop keep their own targets. View-mode chips stay. */
+  html.touch-quiz:not(.phone-landscape) .chrome--top:not(.is-view) .pill {
+    min-height: var(--target-compact);
+    min-width: var(--target-compact);
+    padding: 4px 10px;
+    font-size: var(--type-caption);
+    letter-spacing: 0.04em;
+  }
+  html.touch-quiz:not(.phone-landscape) #quiz-look {
+    padding: 2px;
+    gap: 1px;
+  }
+  html.touch-quiz:not(.phone-landscape) #quiz-look .view-filter-btn {
+    min-width: 0;
+    min-height: var(--target-compact);
+    padding: 4px 8px;
+    font-size: var(--type-caption);
+    letter-spacing: 0.03em;
+  }
+  html.touch-quiz:not(.phone-landscape) #quiz-look .view-filter-btn--on::before {
     font-size: var(--type-caption);
   }
 }

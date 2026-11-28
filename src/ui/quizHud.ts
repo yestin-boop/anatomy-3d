@@ -93,3 +93,21 @@ export function progressRatio(shown: number, total: number): number {
   if (total <= 0 || shown <= 0) return 0
   return Math.min(1, shown / total)
 }
+
+export const SKIP_LABEL = 'Skip · show answer'
+export const SKIP_LABEL_SHORT = 'Skip'
+
+/**
+ * Phone portrait Sport type-it uses the short Skip label.
+ * Desktop, phone landscape, and every other quiz keep the full label.
+ */
+export function skipButtonLabel(input: {
+  touch: boolean
+  width: number
+  height: number
+  sportTypeIt: boolean
+}): string {
+  const phoneLandscape = input.width > input.height && input.height <= 520
+  const phonePortrait = input.touch && input.width <= 900 && !phoneLandscape
+  return phonePortrait && input.sportTypeIt ? SKIP_LABEL_SHORT : SKIP_LABEL
+}

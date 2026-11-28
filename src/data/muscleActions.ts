@@ -266,13 +266,14 @@ export const ACTION_LEARN: readonly ActionLearnCard[] = [
 
 const TAP_OTHER = 'Tap the muscle this question names.'
 
+/** Blanks and the revealed word use the short movement name. The notes sentence stays an alias. Hints, reveals, and tap prompts stay on the notes wording. */
 export const ACTION_QUIZ: readonly ActionQuizStep[] = [
   {
     kind: 'type',
     id: 'type-glut-med',
     region: 'GLUTEUS MEDIUS',
     prompt: 'What does this muscle do at the hip?',
-    official: 'abducts the hip',
+    official: 'abduction',
     aliases: [
       'abducts the hip',
       'abduct the hip',
@@ -310,7 +311,7 @@ export const ACTION_QUIZ: readonly ActionQuizStep[] = [
     id: 'type-glut-max',
     region: 'GLUTEUS MAXIMUS',
     prompt: 'What does this muscle do to the thigh?',
-    official: 'extends the thigh',
+    official: 'extension',
     aliases: [
       'extends the thigh',
       'extend the thigh',
@@ -331,7 +332,7 @@ export const ACTION_QUIZ: readonly ActionQuizStep[] = [
     id: 'type-iliopsoas',
     region: 'ILIOPSOAS',
     prompt: 'What does iliopsoas do at the hip?',
-    official: 'flexes the thigh at the hip',
+    official: 'flexion',
     aliases: [
       'flexes the thigh at the hip',
       'flexes the hip',
@@ -373,7 +374,7 @@ export const ACTION_QUIZ: readonly ActionQuizStep[] = [
     id: 'type-rectus',
     region: 'RECTUS FEMORIS',
     prompt: 'Type what this muscle does at the knee and the hip.',
-    official: 'extends the leg at the knee and flexes the thigh at the hip',
+    official: 'knee extension and hip flexion',
     aliases: [
       'extends the leg at the knee and flexes the thigh at the hip',
       'extends the knee and flexes the hip',
@@ -415,7 +416,7 @@ export const ACTION_QUIZ: readonly ActionQuizStep[] = [
     id: 'type-gastroc',
     region: 'GASTROCNEMIUS',
     prompt: 'What does this muscle do to the foot?',
-    official: 'plantarflexes the foot',
+    official: 'plantarflexion',
     aliases: [
       'plantarflexes the foot',
       'plantarflex the foot',
@@ -458,7 +459,7 @@ export const ACTION_QUIZ: readonly ActionQuizStep[] = [
     id: 'type-tib-ant',
     region: 'TIBIALIS ANTERIOR',
     prompt: 'What does this muscle do to the foot?',
-    official: 'dorsiflexes the foot',
+    official: 'dorsiflexion',
     aliases: [
       'dorsiflexes the foot',
       'dorsiflex the foot',
@@ -478,7 +479,7 @@ export const ACTION_QUIZ: readonly ActionQuizStep[] = [
     id: 'type-biceps-fem',
     region: 'BICEPS FEMORIS',
     prompt: 'What does this muscle do at the knee?',
-    official: 'flexes the leg at the knee',
+    official: 'flexion',
     aliases: [
       'flexes the leg at the knee',
       'flexes the knee',
@@ -519,7 +520,7 @@ export const ACTION_QUIZ: readonly ActionQuizStep[] = [
     id: 'type-biceps',
     region: 'BICEPS BRACHII',
     prompt: 'What does this muscle do at the elbow?',
-    official: 'flexes the elbow',
+    official: 'flexion',
     aliases: [
       'flexes the elbow',
       'flex the elbow',
@@ -543,7 +544,7 @@ export const ACTION_QUIZ: readonly ActionQuizStep[] = [
     id: 'type-triceps',
     region: 'TRICEPS BRACHII',
     prompt: 'What does this muscle do at the elbow?',
-    official: 'extends the elbow',
+    official: 'extension',
     aliases: [
       'extends the elbow',
       'extend the elbow',
@@ -563,7 +564,7 @@ export const ACTION_QUIZ: readonly ActionQuizStep[] = [
     id: 'type-lats',
     region: 'LATISSIMUS DORSI',
     prompt: 'What does this muscle do at the shoulder?',
-    official: 'internally rotates, adducts, and extends the shoulder',
+    official: 'internal rotation, adduction, and extension',
     aliases: [
       'internally rotates, adducts, and extends the shoulder',
       'internal rotation, adduction, and extension',
@@ -597,7 +598,7 @@ export const ACTION_QUIZ: readonly ActionQuizStep[] = [
     id: 'type-pec-major',
     region: 'PECTORALIS MAJOR',
     prompt: 'What does this muscle do at the shoulder?',
-    official: 'adducts, horizontally adducts, and medially rotates the shoulder',
+    official: 'adduction, horizontal adduction, and medial rotation',
     aliases: [
       'adducts, horizontally adducts, and medially rotates the shoulder',
       'adduction, horizontal adduction, and medial rotation',
@@ -624,7 +625,7 @@ export const ACTION_QUIZ: readonly ActionQuizStep[] = [
     id: 'type-serratus',
     region: 'SERRATUS ANTERIOR',
     prompt: 'What does this muscle do to the scapula?',
-    official: 'protracts and upwardly rotates the scapula',
+    official: 'protraction and upward rotation',
     aliases: [
       'protracts and upwardly rotates the scapula',
       'scapular protraction and upward rotation',
@@ -650,7 +651,7 @@ export const ACTION_QUIZ: readonly ActionQuizStep[] = [
     id: 'type-supra',
     region: 'SUPRASPINATUS',
     prompt: 'What does this muscle do at the shoulder?',
-    official: 'initiates shoulder abduction',
+    official: 'initiates abduction',
     aliases: [
       'initiates shoulder abduction',
       'initiates abduction',
@@ -675,7 +676,7 @@ export const ACTION_QUIZ: readonly ActionQuizStep[] = [
     id: 'type-brachialis',
     region: 'BRACHIALIS',
     prompt: 'What does this muscle do at the elbow?',
-    official: 'flexes the elbow',
+    official: 'flexion',
     aliases: [
       'flexes the elbow',
       'flex the elbow',
