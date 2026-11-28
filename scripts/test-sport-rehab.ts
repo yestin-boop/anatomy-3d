@@ -39,7 +39,7 @@ import {
   shouldResumeIdleSpinAfterControlsEnd,
   shouldResumeIdleSpinOnMenuOrExitView,
 } from '../src/scene/idleSpin.ts'
-import { quizContextLabel } from '../src/ui/quizHud.ts'
+import { quizContextLabel, skipButtonLabel } from '../src/ui/quizHud.ts'
 import { activityFace, noteRevision, type RevisionState } from '../src/ui/revision.ts'
 import { readFileSync } from 'node:fs'
 
@@ -138,6 +138,8 @@ assert(
 )
 assert(actionTypeMatch(rectus, 'knee extension and hip flexion'), 'rectus accepts the student phrase')
 assert(!actionTypeMatch(rectus, 'extends the leg at the knee'), 'knee extension alone is not the two-joint answer')
+assert(!actionTypeMatch(rectus, 'knee extension'), 'knee extension alone does not pass')
+assert(!actionTypeMatch(rectus, 'hip flexion'), 'hip flexion alone does not pass')
 
 const gastroc = typeStep(ACTION_QUIZ, 'type-gastroc') as ActionTypeStep
 assert(actionTypeMatch(gastroc, 'plantarflexes the foot'), 'gastroc accepts plantarflexes the foot')
@@ -236,6 +238,74 @@ assert(actionTypeMatch(supraShort, 'abduction'), 'supraspinatus accepts abductio
 assert(!actionTypeMatch(supraShort, 'adduction'), 'supraspinatus does not accept adduction')
 assert(actionTypeMatch(brachialis, 'flexion'), 'brachialis accepts flexion')
 assert(!actionTypeMatch(brachialis, 'adduction'), 'brachialis does not accept adduction')
+
+const SHORT_OFFICIAL: Record<string, string> = {
+  'type-glut-med': 'abduction',
+  'type-glut-max': 'extension',
+  'type-iliopsoas': 'flexion',
+  'type-rectus': 'knee extension and hip flexion',
+  'type-gastroc': 'plantarflexion',
+  'type-tib-ant': 'dorsiflexion',
+  'type-biceps-fem': 'flexion',
+  'type-biceps': 'flexion',
+  'type-triceps': 'extension',
+  'type-lats': 'internal rotation, adduction, and extension',
+  'type-pec-major': 'adduction, horizontal adduction, and medial rotation',
+  'type-serratus': 'protraction and upward rotation',
+  'type-supra': 'initiates abduction',
+  'type-brachialis': 'flexion',
+}
+const LEGACY_OFFICIAL: Record<string, string> = {
+  'type-glut-med': 'abducts the hip',
+  'type-glut-max': 'extends the thigh',
+  'type-iliopsoas': 'flexes the thigh at the hip',
+  'type-rectus': 'extends the leg at the knee and flexes the thigh at the hip',
+  'type-gastroc': 'plantarflexes the foot',
+  'type-tib-ant': 'dorsiflexes the foot',
+  'type-biceps-fem': 'flexes the leg at the knee',
+  'type-biceps': 'flexes the elbow',
+  'type-triceps': 'extends the elbow',
+  'type-lats': 'internally rotates, adducts, and extends the shoulder',
+  'type-pec-major': 'adducts, horizontally adducts, and medially rotates the shoulder',
+  'type-serratus': 'protracts and upwardly rotates the scapula',
+  'type-supra': 'initiates shoulder abduction',
+  'type-brachialis': 'flexes the elbow',
+}
+const LOCKED_REVEAL: Record<string, string> = {
+  'type-glut-med': 'Gluteus medius abducts the hip.',
+  'type-glut-max': 'Gluteus maximus extends the thigh. It is the chief extensor of the flexed thigh.',
+  'type-iliopsoas': 'Iliacus and psoas major form iliopsoas, the chief flexor of the hip. Together they flex the thigh at the hip.',
+  'type-rectus': 'Rectus femoris extends the leg at the knee and flexes the thigh at the hip.',
+  'type-gastroc': 'Gastrocnemius plantarflexes the foot and powers push-off in walking, running, and jumping.',
+  'type-tib-ant': 'Tibialis anterior dorsiflexes the foot. It lifts the front of the foot.',
+  'type-biceps-fem': 'Biceps femoris flexes the leg at the knee. The long head also extends the thigh.',
+  'type-biceps': 'Biceps brachii flexes the elbow and is the chief supinator of the forearm.',
+  'type-triceps': 'Triceps brachii is the chief extensor of the elbow.',
+  'type-lats': 'Latissimus dorsi internally rotates, adducts, and extends the shoulder. The notes place it in climbing, rowing, and swimming.',
+  'type-pec-major': 'Pectoralis major adducts, horizontally adducts, and medially rotates the shoulder. It is the primary pushing muscle.',
+  'type-serratus': 'Serratus anterior protracts and upwardly rotates the scapula, and holds it against the thoracic wall. That prevents scapular winging.',
+  'type-supra': 'Supraspinatus initiates shoulder abduction in the first 15–30 degrees. It is the most commonly injured rotator cuff muscle.',
+  'type-brachialis': 'Brachialis is a powerful elbow flexor. It sits deep to biceps brachii and inserts on the ulna, flexing the elbow.',
+}
+for (const step of ACTION_QUIZ) {
+  if (step.kind !== 'type') continue
+  const official = SHORT_OFFICIAL[step.id]
+  const legacy = LEGACY_OFFICIAL[step.id]
+  assert(official != null && step.official === official, `${step.id} blanks use the short name`)
+  assert(legacy != null && step.aliases.includes(legacy), `${step.id} keeps the notes phrase as an alias`)
+  assert(step.aliases.includes(step.official), `${step.id} official is accepted`)
+  assert(actionTypeMatch(step, step.official), `${step.id} accepts its short official`)
+  assert(actionTypeMatch(step, legacy ?? ''), `${step.id} still accepts the notes phrase`)
+  assert(step.official.length < (legacy ?? '').length, `${step.id} official is shorter than the notes phrase`)
+  assert(step.reveal === LOCKED_REVEAL[step.id], `${step.id} reveal stays notes-locked`)
+}
+assert(glutMed.reveal === 'Gluteus medius abducts the hip.', 'glute med reveal stays notes-locked')
+assert(glutMed.hint === 'Gluteus medius. HPHS: abducts the hip.', 'glute med hint stays notes-locked')
+assert(tapStep(ACTION_QUIZ, 'tap-glut-min').prompt.includes('abducts the hip'), 'tap prompt stays on the notes wording')
+assert(!actionTypeMatch(glutMed, 'initiates abduction'), 'glute med does not take the supraspinatus phrase')
+assert(!actionTypeMatch(supraShort, 'abducts the hip'), 'supraspinatus does not take the glute med phrase')
+assert(!actionTypeMatch(ilioShort, 'knee extension and hip flexion'), 'iliopsoas does not take the two-joint rectus phrase')
+assert(!actionTypeMatch(bicepsFem, 'knee extension and hip flexion'), 'biceps femoris does not take the rectus phrase')
 
 const vastusMed = tapStep(ACTION_QUIZ, 'tap-vastus-med') as ActionTapStep
 assert(gradeActionTap(vastusMed, 'vastus_medialis').ok, 'tapping vastus medialis is correct')
@@ -484,8 +554,35 @@ assert(
   `start menu keeps its sections, got ${menuHeadings.join('|')}`,
 )
 const sportSkip = cssSrc.slice(cssSrc.indexOf('html.touch-quiz.sport-quiz:not(.phone-landscape) .skip-btn'))
-assert(sportSkip.slice(0, 280).includes('min-height: var(--target-compact)'), 'phone Sport Skip uses the 32px compact target')
+assert(sportSkip.slice(0, 360).includes('min-height: var(--target-compact)'), 'phone Sport Skip uses the 32px compact target')
+assert(sportSkip.slice(0, 360).includes('padding: 2px 8px'), 'phone Sport Skip padding is tighter')
+assert(sportSkip.slice(0, 360).includes('font-size: var(--type-quiet)'), 'phone Sport Skip type is quieter')
 assert(cssSrc.includes('min-height: var(--target-min)'), 'the base Skip target stays 44px')
+assert(
+  cssSrc.includes('html.touch-quiz:not(.phone-landscape) .chrome--top:not(.is-view) .pill'),
+  'phone portrait quiz menu pill can shrink',
+)
+assert(
+  cssSrc.includes('html.touch-quiz:not(.phone-landscape) #quiz-look .view-filter-btn'),
+  'phone portrait quiz look chips can shrink',
+)
+assert(
+  skipButtonLabel({ touch: true, width: 390, height: 844, sportTypeIt: true }) === 'Skip',
+  'phone portrait Sport type-it Skip is Skip',
+)
+assert(
+  skipButtonLabel({ touch: true, width: 390, height: 844, sportTypeIt: false }) === 'Skip · show answer',
+  'other phone quizzes keep Skip · show answer',
+)
+assert(
+  skipButtonLabel({ touch: true, width: 844, height: 390, sportTypeIt: true }) === 'Skip · show answer',
+  'phone landscape Sport keeps Skip · show answer',
+)
+assert(
+  skipButtonLabel({ touch: false, width: 1440, height: 900, sportTypeIt: true }) === 'Skip · show answer',
+  'desktop Sport keeps Skip · show answer',
+)
+assert(mainSrc.includes('skipButtonLabel('), 'the quiz bar uses the Skip label rule')
 
 let revision: RevisionState = { done: [], resume: null }
 revision = noteRevision(revision, 'ankle-learn', 1, 6, 'learn')

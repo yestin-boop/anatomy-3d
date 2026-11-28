@@ -90,6 +90,7 @@ import {
   playableCount,
   progressRatio,
   quizContextLabel,
+  skipButtonLabel,
   startButtonLabel,
   startDisabledReason,
   type QuizActivity,
@@ -1809,6 +1810,13 @@ function onBackspace(): void {
   updateHud()
 }
 
+function sportTypeItActive(): boolean {
+  if (!(state.caseActive && state.caseKind === 'actions' && state.casePhase === 'quiz')) return false
+  if (state.finished || state.revealing) return false
+  const step = currentCaseStep()
+  return step?.kind === 'type'
+}
+
 /** Hide Skip while the menu is up, the answer is showing, or the session is over. */
 function syncSkipButton(): void {
   const show =
@@ -1819,6 +1827,12 @@ function syncSkipButton(): void {
     !(state.caseActive && state.casePhase === 'learn')
   skipBtn.hidden = !show
   skipBtn.disabled = !show
+  skipBtn.textContent = skipButtonLabel({
+    touch: touchQuiz,
+    width: window.innerWidth,
+    height: window.innerHeight,
+    sportTypeIt: sportTypeItActive(),
+  })
 }
 
 function revealAnswer(): void {
@@ -2630,6 +2644,7 @@ function syncHudChrome(): void {
   const land = touchQuiz && window.innerWidth > window.innerHeight && window.innerHeight <= 520
   document.documentElement.classList.toggle('phone-landscape', land)
   document.documentElement.classList.toggle('keyboard-open', currentKeyboardInset() > 40)
+  syncSkipButton()
   if (!chromeTop.hidden) {
     const menu = btnMenuTop.getBoundingClientRect()
     if (menu.width > 8) {
@@ -4335,10 +4350,17 @@ async function qaShowActionStep(id: string, keyboardPx = 0): Promise<Record<stri
   const hint = tapHint.getBoundingClientRect()
   const label = typeLabel.getBoundingClientRect()
   const hintStyle = getComputedStyle(tapHint)
+  const menu = btnMenuTop.getBoundingClientRect()
+  const lookBtn = document.querySelector<HTMLElement>('#quiz-look .view-filter-btn')
+  const look = lookBtn?.getBoundingClientRect()
   return {
     ...qaTypeBar(),
     id: ACTION_QUIZ[state.caseQuizIndex]?.id ?? '',
     skipHeight: Math.round(skip.height),
+    skipWidth: Math.round(skip.width),
+    menuHeight: Math.round(menu.height),
+    menuWidth: Math.round(menu.width),
+    lookHeight: look ? Math.round(look.height) : 0,
     glossBottom: Math.round(gloss.bottom),
     hintTop: Math.round(hint.top),
     hintBottom: Math.round(hint.bottom),
