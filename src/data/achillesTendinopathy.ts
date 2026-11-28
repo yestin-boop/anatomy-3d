@@ -50,6 +50,8 @@ export type AchillesTypeStep = {
   prompt: string
   official: string
   aliases: string[]
+  /** Long phrases only. One entry is the official wording. */
+  choices?: readonly string[]
   hint: string
   reveal: string
   light: AchillesLight
@@ -383,6 +385,12 @@ export const ACHILLES_QUIZ: readonly AchillesQuizStep[] = [
     prompt: 'Type the overuse mechanism for this tendon.',
     official: 'cumulative microtrauma from running and jumping',
     aliases: OVERUSE_PHRASES,
+    choices: [
+      'cumulative microtrauma from running and jumping',
+      'sudden complete or partial tear',
+      'inversion and plantarflexion',
+      'dorsiflexion, eversion, and tibial internal rotation',
+    ],
     hint: 'It builds up from repetitive stress, in activities like running and jumping, when recovery is not enough.',
     reveal:
       'Overuse is cumulative microtrauma from repetitive stress on the tendon, from activities like running and jumping, without sufficient recovery time. It is gradual, with increasing ache, stiffness, and pain with activity.',
@@ -414,6 +422,12 @@ export const ACHILLES_QUIZ: readonly AchillesQuizStep[] = [
       'sudden tear from a forceful traumatic event',
       'forceful traumatic event',
     ],
+    choices: [
+      'sudden complete or partial tear',
+      'cumulative microtrauma from running and jumping',
+      'calf squeeze does not move the foot',
+      'chronic degeneration, no inflammation',
+    ],
     hint: 'It is sudden, and the tear may be complete or partial.',
     reveal:
       'A rupture is a sudden, complete or partial tear of the tendon caused by a forceful, traumatic event. It involves sudden, sharp pain, a popping or snapping sensation, and a significant loss of strength and ability to walk on the injured foot.',
@@ -443,6 +457,12 @@ export const ACHILLES_QUIZ: readonly AchillesQuizStep[] = [
       'squeeze the calf - no PF',
       'calf squeeze does not plantarflex the foot',
     ],
+    choices: [
+      'calf squeeze does not move the foot',
+      'calf squeeze moves the foot',
+      'sudden complete or partial tear',
+      'cumulative microtrauma from running and jumping',
+    ],
     hint: 'Squeeze the calf. Watch the foot.',
     reveal:
       'If the Achilles tendon is ruptured, a calf squeeze does not move the foot. If the foot is healthy, or the tendon is not fully ruptured, a calf squeeze moves the foot — the lecture shows that as plantarflexion. A moving foot does not, on this figure, prove the tendon is completely intact. Thompson’s test is for rupture, not for tendinopathy.',
@@ -469,6 +489,11 @@ export const ACHILLES_QUIZ: readonly AchillesQuizStep[] = [
       'long-term repetitive strain',
       'long term repetitive strain',
       'tiny tears',
+    ],
+    choices: [
+      'chronic degeneration, no inflammation',
+      'sudden overload',
+      'short-term overuse',
     ],
     hint: 'The lecture is clear this is not an inflammatory label.',
     reveal:
@@ -508,6 +533,12 @@ export const ACHILLES_QUIZ: readonly AchillesQuizStep[] = [
       'minimal symptoms, some but not daily morning stiffness, can participate in sports without difficulty',
       'can participate in sports without difficulty',
       'some but not daily morning stiffness',
+    ],
+    choices: [
+      'minimal symptoms, and not daily morning stiffness',
+      'symptom-management',
+      'chronic degeneration, no inflammation',
+      'sudden complete or partial tear',
     ],
     hint: 'Stiffness may still be there, but not every morning, and sport is possible without difficulty.',
     reveal:

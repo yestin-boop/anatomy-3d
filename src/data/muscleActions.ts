@@ -34,6 +34,8 @@ export type ActionTypeStep = {
   prompt: string
   official: string
   aliases: string[]
+  /** Long phrases only. One entry is the official wording. */
+  choices?: readonly string[]
   hint: string
   reveal: string
   focus: StudyFocus
@@ -388,6 +390,12 @@ export const ACTION_QUIZ: readonly ActionQuizStep[] = [
       'hip flexion, knee extension',
       'extends the leg at the knee and flexes the thigh',
     ],
+    choices: [
+      'knee extension and hip flexion',
+      'extension',
+      'flexion',
+      'abduction',
+    ],
     hint: 'The only quadriceps muscle that crosses both the hip and the knee.',
     reveal: 'Rectus femoris extends the leg at the knee and flexes the thigh at the hip.',
     focus: RECTUS,
@@ -589,6 +597,12 @@ export const ACTION_QUIZ: readonly ActionQuizStep[] = [
       'rowing',
       'swimming',
     ],
+    choices: [
+      'internal rotation, adduction, and extension',
+      'adduction, horizontal adduction, and medial rotation',
+      'protraction and upward rotation',
+      'knee extension and hip flexion',
+    ],
     hint: 'Shoulder internal rotation, adduction, and extension. Climbing, rowing, and swimming.',
     reveal: 'Latissimus dorsi internally rotates, adducts, and extends the shoulder. The notes place it in climbing, rowing, and swimming.',
     focus: LATS,
@@ -616,6 +630,12 @@ export const ACTION_QUIZ: readonly ActionQuizStep[] = [
       'primary pushing muscle',
       'the primary pushing muscle',
     ],
+    choices: [
+      'adduction, horizontal adduction, and medial rotation',
+      'internal rotation, adduction, and extension',
+      'protraction and upward rotation',
+      'initiates abduction',
+    ],
     hint: 'Adduction, horizontal adduction, and medial rotation. The primary pushing muscle.',
     reveal: 'Pectoralis major adducts, horizontally adducts, and medially rotates the shoulder. It is the primary pushing muscle.',
     focus: PEC_MAJOR,
@@ -641,6 +661,12 @@ export const ACTION_QUIZ: readonly ActionQuizStep[] = [
       'holds the scapula against the wall',
       'prevents scapular winging',
       'prevents winging',
+    ],
+    choices: [
+      'protraction and upward rotation',
+      'internal rotation, adduction, and extension',
+      'adduction, horizontal adduction, and medial rotation',
+      'initiates abduction',
     ],
     hint: 'It protracts and upwardly rotates the scapula, and holds it against the thoracic wall.',
     reveal: 'Serratus anterior protracts and upwardly rotates the scapula, and holds it against the thoracic wall. That prevents scapular winging.',
@@ -713,11 +739,11 @@ export const ACTION_QUIZ: readonly ActionQuizStep[] = [
 ]
 
 export function actionTypeMatch(step: ActionTypeStep, typed: string, mode: AnswerMatchMode = 'live'): boolean {
-  // A short action such as "abduction" is a complete answer. It must succeed
-  // while typing even when a longer alias starts with the same word.
-  // Wrong actions stay exact: "adduction" does not match "abduction".
-  const timing = mode === 'live' ? 'confirm' : mode
-  return matchAliases(typed, step.aliases, timing, step.official)
+  // Live typing uses the shared matcher. A short alias that is only a prefix
+  // of a longer accepted name waits for Enter. The official name still
+  // auto-succeeds, including a complete word such as "abduction" when a
+  // longer alias starts with that word. Wrong actions stay exact.
+  return matchAliases(typed, step.aliases, mode, step.official)
 }
 
 export function gradeActionTap(step: ActionTapStep, hit: string | null): { ok: boolean; message: string } {

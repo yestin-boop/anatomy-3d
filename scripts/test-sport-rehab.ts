@@ -127,7 +127,7 @@ assert(actionTypeMatch(glutMed, 'abduct the thigh'), 'glute med accepts abduct t
 assert(!actionTypeMatch(glutMed, 'extends the thigh'), 'glute med does not accept hip extension')
 
 const glutMax = typeStep(ACTION_QUIZ, 'type-glut-max') as ActionTypeStep
-assert(actionTypeMatch(glutMax, 'extends the thigh'), 'glute max accepts extends the thigh')
+assert(actionTypeMatch(glutMax, 'extends the thigh', 'confirm'), 'glute max accepts extends the thigh on Enter')
 assert(actionTypeMatch(glutMax, 'chief extensor of the flexed thigh', 'confirm'), 'glute max accepts the chief-extensor phrase on Enter')
 assert(!actionTypeMatch(glutMax, 'abducts the hip'), 'glute max is not the abductor answer')
 
@@ -142,25 +142,38 @@ assert(!actionTypeMatch(rectus, 'knee extension'), 'knee extension alone does no
 assert(!actionTypeMatch(rectus, 'hip flexion'), 'hip flexion alone does not pass')
 
 const gastroc = typeStep(ACTION_QUIZ, 'type-gastroc') as ActionTypeStep
-assert(actionTypeMatch(gastroc, 'plantarflexes the foot'), 'gastroc accepts plantarflexes the foot')
+assert(
+  actionTypeMatch(gastroc, 'plantarflexes the foot', 'confirm'),
+  'gastroc accepts plantarflexes the foot on Enter',
+)
+assert(!actionTypeMatch(gastroc, 'plantarflexes the foot'), 'plantarflexes the foot waits, because a longer alias continues')
 assert(actionTypeMatch(gastroc, 'plantarflexion'), 'gastroc accepts plantarflexion')
 assert(actionTypeMatch(gastroc, 'point the toes'), 'gastroc accepts point the toes')
 assert(!actionTypeMatch(gastroc, 'dorsiflexion'), 'gastroc is not dorsiflexion')
 
 const tibAnt = typeStep(ACTION_QUIZ, 'type-tib-ant') as ActionTypeStep
-assert(actionTypeMatch(tibAnt, 'dorsiflexes the foot'), 'tibialis anterior accepts dorsiflexes the foot')
+assert(
+  actionTypeMatch(tibAnt, 'dorsiflexes the foot', 'confirm'),
+  'tibialis anterior accepts dorsiflexes the foot on Enter',
+)
+assert(!actionTypeMatch(tibAnt, 'dorsiflexes the foot'), 'dorsiflexes the foot waits, because a longer alias continues')
 assert(actionTypeMatch(tibAnt, 'dorsiflexion'), 'tibialis anterior accepts dorsiflexion')
 assert(actionTypeMatch(tibAnt, 'lifts the front of the foot'), 'tibialis anterior accepts the HPHS phrase')
 assert(!actionTypeMatch(tibAnt, 'plantarflexion'), 'tibialis anterior is not plantarflexion')
 
 const bicepsFem = typeStep(ACTION_QUIZ, 'type-biceps-fem') as ActionTypeStep
-assert(actionTypeMatch(bicepsFem, 'flexes the leg at the knee'), 'biceps femoris accepts knee flexion')
+assert(
+  actionTypeMatch(bicepsFem, 'flexes the leg at the knee', 'confirm'),
+  'biceps femoris accepts knee flexion on Enter',
+)
+assert(!actionTypeMatch(bicepsFem, 'flexes the leg at the knee'), 'knee flexion phrase waits, because a longer alias continues')
 assert(actionTypeMatch(bicepsFem, 'knee flexion'), 'biceps femoris accepts knee flexion wording')
 assert(actionTypeMatch(bicepsFem, 'flexes the knee and extends the thigh'), 'biceps femoris accepts both actions')
 assert(!actionTypeMatch(bicepsFem, 'extends the thigh'), 'thigh extension alone is not the knee answer')
 
 const biceps = typeStep(ACTION_QUIZ, 'type-biceps') as ActionTypeStep
-assert(actionTypeMatch(biceps, 'flexes the elbow'), 'biceps accepts elbow flexion')
+assert(actionTypeMatch(biceps, 'flexes the elbow', 'confirm'), 'biceps accepts elbow flexion on Enter')
+assert(!actionTypeMatch(biceps, 'flexes the elbow'), 'flexes the elbow waits, because a longer alias continues')
 assert(actionTypeMatch(biceps, 'elbow flexion'), 'biceps accepts elbow flexion wording')
 assert(actionTypeMatch(biceps, 'chief supinator of the forearm'), 'biceps accepts chief supinator')
 assert(!actionTypeMatch(biceps, 'extends the elbow'), 'biceps is not the elbow extensor')
@@ -189,7 +202,11 @@ assert(actionTypeMatch(serratus, 'prevents scapular winging'), 'serratus accepts
 assert(!actionTypeMatch(serratus, 'internally rotates the shoulder'), 'serratus is not a humeral rotator')
 
 const supra = typeStep(ACTION_QUIZ, 'type-supra') as ActionTypeStep
-assert(actionTypeMatch(supra, 'initiates shoulder abduction'), 'supraspinatus accepts initiates shoulder abduction')
+assert(
+  actionTypeMatch(supra, 'initiates shoulder abduction', 'confirm'),
+  'supraspinatus accepts initiates shoulder abduction on Enter',
+)
+assert(!actionTypeMatch(supra, 'initiates shoulder abduction'), 'initiates shoulder abduction waits, because a longer alias continues')
 assert(actionTypeMatch(supra, 'initiates abduction', 'confirm'), 'supraspinatus accepts initiates abduction on Enter')
 assert(!actionTypeMatch(supra, 'externally rotates the shoulder'), 'supraspinatus is not the external rotator answer')
 
@@ -222,15 +239,21 @@ assert(actionTypeMatch(triceps, 'extension'), 'triceps accepts extension')
 assert(!actionTypeMatch(triceps, 'flexion'), 'triceps does not accept flexion')
 assert(!actionTypeMatch(triceps, 'adduction'), 'triceps does not accept adduction')
 const latsShort = typeStep(ACTION_QUIZ, 'type-lats') as ActionTypeStep
+assert(!actionTypeMatch(latsShort, 'internal rotation'), 'live internal rotation does not finish lats')
+assert(actionTypeMatch(latsShort, 'internal rotation', 'confirm'), 'Enter still accepts internal rotation')
+assert(actionTypeMatch(latsShort, latsShort.official), 'lats official auto-succeeds when finished')
 assert(actionTypeMatch(latsShort, 'adduction'), 'lats accepts adduction')
 assert(actionTypeMatch(latsShort, 'extension'), 'lats accepts extension')
 assert(!actionTypeMatch(latsShort, 'abduction'), 'lats does not accept abduction')
 const pecShort = typeStep(ACTION_QUIZ, 'type-pec-major') as ActionTypeStep
-assert(actionTypeMatch(pecShort, 'adduction'), 'pec major accepts adduction')
+assert(!actionTypeMatch(pecShort, 'adduction'), 'live adduction does not finish pec major')
+assert(actionTypeMatch(pecShort, 'adduction', 'confirm'), 'Enter still accepts adduction for pec major')
 assert(actionTypeMatch(pecShort, 'horizontal adduction'), 'pec major accepts horizontal adduction')
 assert(!actionTypeMatch(pecShort, 'abduction'), 'pec major does not accept abduction')
 const serratusShort = typeStep(ACTION_QUIZ, 'type-serratus') as ActionTypeStep
-assert(actionTypeMatch(serratusShort, 'protraction'), 'serratus accepts protraction')
+assert(!actionTypeMatch(serratusShort, 'protraction'), 'live protraction does not finish serratus')
+assert(actionTypeMatch(serratusShort, 'protraction', 'confirm'), 'Enter still accepts protraction')
+assert(actionTypeMatch(serratusShort, 'protraction and upward rotation'), 'serratus official auto-succeeds when finished')
 assert(actionTypeMatch(serratusShort, 'upward rotation'), 'serratus accepts upward rotation')
 assert(!actionTypeMatch(serratusShort, 'adduction'), 'serratus does not accept adduction')
 const supraShort = typeStep(ACTION_QUIZ, 'type-supra') as ActionTypeStep
@@ -295,7 +318,7 @@ for (const step of ACTION_QUIZ) {
   assert(legacy != null && step.aliases.includes(legacy), `${step.id} keeps the notes phrase as an alias`)
   assert(step.aliases.includes(step.official), `${step.id} official is accepted`)
   assert(actionTypeMatch(step, step.official), `${step.id} accepts its short official`)
-  assert(actionTypeMatch(step, legacy ?? ''), `${step.id} still accepts the notes phrase`)
+  assert(actionTypeMatch(step, legacy ?? '', 'confirm'), `${step.id} still accepts the notes phrase on Enter`)
   assert(step.official.length < (legacy ?? '').length, `${step.id} official is shorter than the notes phrase`)
   assert(step.reveal === LOCKED_REVEAL[step.id], `${step.id} reveal stays notes-locked`)
 }

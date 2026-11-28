@@ -51,6 +51,8 @@ export type LisfrancTypeStep = {
   prompt: string
   official: string
   aliases: string[]
+  /** Long phrases only. One entry is the official wording. */
+  choices?: readonly string[]
   hint: string
   reveal: string
   light: LisfrancLight
@@ -431,6 +433,12 @@ export const LISFRANC_QUIZ: readonly LisfrancQuizStep[] = [
     prompt: 'Type the mechanism of a Lisfranc injury.',
     official: 'axial load on a plantarflexed foot',
     aliases: MECHANISM_PHRASES,
+    choices: [
+      'axial load on a plantarflexed foot',
+      'inversion and plantarflexion',
+      'dorsiflexion, eversion, and tibial internal rotation',
+      'low-energy ligamentous versus high-energy',
+    ],
     hint: 'A load goes down the foot while the foot is pointed down.',
     reveal:
       'The course notes give the mechanism as an axial load on a plantarflexed foot. That is not the inversion and plantarflexion of a common lateral sprain, and not the high-ankle mechanism.',
@@ -462,6 +470,12 @@ export const LISFRANC_QUIZ: readonly LisfrancQuizStep[] = [
       'low energy in athletes, ligamentous, versus high energy, car accidents',
       'low-energy ligamentous or high-energy',
       'athletes, ligamentous versus car accidents',
+    ],
+    choices: [
+      'low-energy ligamentous versus high-energy',
+      'axial load on a plantarflexed foot',
+      'Piano key test and Compression test',
+      'non-weight-bearing until specialist review',
     ],
     hint: 'One pattern is in athletes and often ligamentous. The notes’ high-energy example is a car accident.',
     reveal:
@@ -545,6 +559,12 @@ export const LISFRANC_QUIZ: readonly LisfrancQuizStep[] = [
       'Piano key test, Compression test',
       'midfoot palpation, Piano key test, Compression test',
     ],
+    choices: [
+      'Piano key test and Compression test',
+      'Piano key test',
+      'Compression test',
+      'midfoot palpation',
+    ],
     hint: 'One shares its name with a keyboard. The notes also name a compression test.',
     reveal:
       'After midfoot palpation, the notes name the Piano key test and the Compression test. The lecture does not describe how to do them. The descriptions in the sources do not all agree, so this case stays conservative about the how-to.',
@@ -574,6 +594,12 @@ export const LISFRANC_QUIZ: readonly LisfrancQuizStep[] = [
       'move the metatarsals up and down',
       'plantar force to the metatarsal head',
     ],
+    choices: [
+      'move the toes or metatarsals up and down',
+      'compression across the width of the foot',
+      'Piano key test and Compression test',
+      'midfoot palpation',
+    ],
     hint: 'The motion is up and down, and it stresses the midfoot.',
     reveal:
       'Sources agree that an up-and-down movement of the toes or metatarsals stresses the tarsometatarsal joints, and that pain is a positive finding. They do not agree on the exact grip: RACGP 2017 grasps the metatarsals; AAOS OrthoInfo grasps the toes; an earlier description pressed on a metatarsal head as if striking a piano key. A later survey found no consensus. This case does not tidy those into one protocol.',
@@ -596,6 +622,12 @@ export const LISFRANC_QUIZ: readonly LisfrancQuizStep[] = [
       'midfoot compression moving the first metatarsal head relative to the second',
       'compress the first and second metatarsals',
     ],
+    choices: [
+      'compression across the width of the foot',
+      'move the toes or metatarsals up and down',
+      'Piano key test and Compression test',
+      'midfoot palpation',
+    ],
     hint: 'The squeeze is across the midfoot, toward the space between the first and second metatarsals.',
     reveal:
       'The description that best matches a named compression test is compression across the width of the foot, to stress the space between the first and second metatarsals. Pain or a palpable click is suggestive (RACGP 2017). The same article also lists a different midfoot-compression manoeuvre, moving the first metatarsal head relative to the second. AAOS OrthoInfo does not list a compression test by that name; it describes twisting the front of the foot on a held heel. This case does not treat those as one test.',
@@ -617,6 +649,12 @@ export const LISFRANC_QUIZ: readonly LisfrancQuizStep[] = [
       'NWB until specialist review',
       'refer and keep non-weight-bearing',
       'orthopaedic referral and non-weight-bearing',
+    ],
+    choices: [
+      'non-weight-bearing until specialist review',
+      'six to eight weeks',
+      'CAM boot',
+      'axial load on a plantarflexed foot',
     ],
     hint: 'Do not load the midfoot until a specialist has reviewed the injury.',
     reveal:

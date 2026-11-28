@@ -24,6 +24,8 @@ export type AnkleTypeStep = {
   prompt: string
   official: string
   aliases: string[]
+  /** Long phrases only. One entry is the official wording. */
+  choices?: readonly string[]
   hint: string
   reveal: string
 }
@@ -290,6 +292,12 @@ export const ANKLE_QUIZ: readonly AnkleQuizStep[] = [
       'acute inversion and plantarflexion',
       'inverted and plantarflexed',
     ],
+    choices: [
+      'inversion and plantarflexion',
+      'anterior talofibular ligament',
+      'calcaneofibular ligament',
+      'plyometrics, agility, and sport-specific training',
+    ],
     hint: 'The sole turns inward, and the foot points down.',
     reveal:
       'This mechanism is an inversion plantarflexion sprain: inversion and plantarflexion of the right ankle while cutting.',
@@ -315,6 +323,12 @@ export const ANKLE_QUIZ: readonly AnkleQuizStep[] = [
       'sport specific training',
       'plyometrics hopping jumping',
       'pain-free range of motion and isometric exercises, then weight-bearing, strengthening, and single-leg balance, then plyometrics, agility, and sport-specific training',
+    ],
+    choices: [
+      'plyometrics, agility, and sport-specific training',
+      'inversion and plantarflexion',
+      'anterior talofibular ligament',
+      'calcaneofibular ligament',
     ],
     hint: 'Return-to-sport work: hopping and jumping, then agility, then the sport itself.',
     reveal:

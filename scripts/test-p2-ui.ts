@@ -109,7 +109,7 @@ assert(main.includes('bone.match(state.typed)'), 'live typing still auto-succeed
 assert(main.includes("bone.match(state.typed, 'confirm')"), 'Enter still accepts a short alias')
 assert(main.includes('caseTypeMatches(cleaned)'), 'case type-it still auto-succeeds as you type')
 assert(main.includes("caseTypeMatches(state.typed, 'confirm')"), 'case Enter still accepts a short alias')
-assert(main.includes("closest('#skip-btn')"), 'Skip does not steal the type-it tap')
+assert(main.includes("closest('#skip-btn, .type-choice')"), 'Skip and a choice do not steal the type-it tap')
 assert(!main.includes("closest('#skip-btn, #check-btn')"), 'Check is no longer in the type-it tap guard')
 
 assert(isModeSelected('memory', 'memory'), 'the chosen level is selected')

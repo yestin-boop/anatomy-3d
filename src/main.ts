@@ -16,6 +16,7 @@ import {
   type FilterPreset,
 } from './data/axialBones'
 import { type AnswerMatchMode } from './data/answerMatch'
+import { gradeTypeChoice, orderTypeChoices } from './data/typeChoices'
 import {
   MUSCLES,
   MUSCLE_REGIONS,
@@ -483,6 +484,7 @@ app.innerHTML = `
         />
       </div>
       <div class="gloss-line" id="gloss-line"></div>
+      <div class="type-choices" id="type-choices" role="group" aria-label="Choices" hidden></div>
       <p class="tap-hint" id="tap-hint">Tap to type</p>
       <div class="answer-actions">
         <button type="button" class="skip-btn" id="skip-btn">Skip · show answer</button>
@@ -514,6 +516,7 @@ const chromeTop = document.querySelector<HTMLDivElement>('#chrome-top')!
 const typeLabel = document.querySelector<HTMLDivElement>('#type-label')!
 const targetWord = document.querySelector<HTMLDivElement>('#target-word')!
 const glossLine = document.querySelector<HTMLDivElement>('#gloss-line')!
+const typeChoices = document.querySelector<HTMLDivElement>('#type-choices')!
 const promptBlock = document.querySelector<HTMLDivElement>('#prompt-block')!
 const skipBtn = document.querySelector<HTMLButtonElement>('#skip-btn')!
 const tapHint = document.querySelector<HTMLParagraphElement>('#tap-hint')!
@@ -1887,7 +1890,83 @@ function syncSkipButton(): void {
     height: window.innerHeight,
     sportTypeIt: sportTypeItActive(),
   })
+  syncTypeChoices()
 }
+
+let shownChoices: string[] = []
+let wrongChoice = ''
+let choiceStepKey = ''
+let choiceMarkupKey = ''
+
+function currentTypeChoiceStep(): { id: string; official: string; choices?: readonly string[] } | null {
+  if (!state.caseActive || state.casePhase !== 'quiz' || state.finished || state.revealing) return null
+  const step = currentCaseStep()
+  if (!step || step.kind !== 'type' || !step.choices || step.choices.length === 0) return null
+  return step
+}
+
+/** Choices sit under the prompt on long type-it items. Short names leave the list empty. */
+function syncTypeChoices(): void {
+  const step = currentTypeChoiceStep()
+  const key = step ? `${state.caseKind}:${step.id}` : ''
+  if (key !== choiceStepKey) {
+    choiceStepKey = key
+    wrongChoice = ''
+  }
+  if (!step) {
+    choiceMarkupKey = ''
+    shownChoices = []
+    typeChoices.hidden = true
+    typeChoices.replaceChildren()
+    promptBlock.classList.remove('has-choices')
+    return
+  }
+  const ordered = orderTypeChoices(step.id, step.choices ?? [], step.official)
+  shownChoices = ordered
+  const markupKey = `${key}|${wrongChoice}|${ordered.join('\n')}`
+  promptBlock.classList.add('has-choices')
+  typeChoices.hidden = false
+  if (markupKey === choiceMarkupKey) return
+  choiceMarkupKey = markupKey
+  typeChoices.replaceChildren(
+    ...ordered.map((text, index) => {
+      const button = document.createElement('button')
+      button.type = 'button'
+      button.className = text === wrongChoice ? 'type-choice is-wrong' : 'type-choice'
+      button.dataset.index = String(index)
+      button.textContent = text
+      return button
+    }),
+  )
+}
+
+function onTypeChoice(choice: string): void {
+  if (!state.caseTyping || state.finished || state.revealing) return
+  const step = caseTypeStep()
+  if (!step) return
+  void unlockAudio()
+  const graded = gradeTypeChoice(choice, step.official, caseTypeContrast(choice, 'confirm'))
+  if (graded.ok) {
+    wrongChoice = ''
+    state.typed = graded.fill
+    hiddenInput.value = ''
+    void onCaseCorrect()
+    return
+  }
+  wrongChoice = choice
+  playWrongTick()
+  updateHud()
+  glossLine.textContent = graded.message
+  glossLine.classList.add('show', 'is-wrong')
+}
+
+typeChoices.addEventListener('click', (e) => {
+  const button = (e.target as HTMLElement | null)?.closest<HTMLButtonElement>('.type-choice')
+  if (!button) return
+  e.stopPropagation()
+  const choice = shownChoices[Number(button.dataset.index)]
+  if (choice) onTypeChoice(choice)
+})
 
 function revealAnswer(): void {
   if (state.caseActive) {
@@ -2658,7 +2737,7 @@ hiddenInput.addEventListener('keydown', (e) => {
 })
 
 promptBlock.addEventListener('pointerdown', (e) => {
-  if ((e.target as HTMLElement | null)?.closest('#skip-btn')) return
+  if ((e.target as HTMLElement | null)?.closest('#skip-btn, .type-choice')) return
   // Let a direct tap on the field focus it natively. preventDefault on that
   // path can cancel the focus and drop the iOS keyboard.
   if ((e.target as HTMLElement | null)?.closest('#answer')) {
@@ -4130,8 +4209,34 @@ async function onCaseCorrect(message?: string): Promise<void> {
     glossLine.classList.add('show')
     glossLine.classList.remove('is-wrong')
   }
+  // Screenshot QA can park on the filled official before the quiz moves on.
+  if (revealHold) await revealHold
+  if (skipRevealAdvance) {
+    skipRevealAdvance = false
+    return
+  }
   await wait(1100)
   advanceCaseQuiz()
+}
+
+let revealHold: Promise<void> | null = null
+let releaseRevealHoldFn = (): void => {}
+let skipRevealAdvance = false
+
+function armRevealHold(): void {
+  skipRevealAdvance = false
+  revealHold = new Promise((resolve) => {
+    releaseRevealHoldFn = () => {
+      skipRevealAdvance = true
+      revealHold = null
+      resolve()
+    }
+  })
+}
+
+function releaseRevealHold(): void {
+  releaseRevealHoldFn()
+  releaseRevealHoldFn = () => {}
 }
 
 function revealCaseAnswer(): void {
@@ -4435,6 +4540,9 @@ function qaTypeBar(): Record<string, unknown> {
   const prompt = promptBlock.getBoundingClientRect()
   const skip = skipBtn.getBoundingClientRect()
   const word = targetWord.getBoundingClientRect()
+  const gloss = glossLine.getBoundingClientRect()
+  const chrome = chromeTop.getBoundingClientRect()
+  const choiceButtons = [...typeChoices.querySelectorAll<HTMLButtonElement>('.type-choice')]
   const checkBtn = document.querySelector<HTMLButtonElement>('#check-btn')
   const check = checkBtn?.getBoundingClientRect()
   const inputStyle = getComputedStyle(hiddenInput)
@@ -4467,6 +4575,22 @@ function qaTypeBar(): Record<string, unknown> {
     tapVisible: hintStyle.display !== 'none' && tapHint.classList.contains('is-visible'),
     label: (typeLabel.textContent ?? '').trim(),
     prompt: (glossLine.textContent ?? '').trim(),
+    glossTop: Math.round(gloss.top),
+    glossBottom: Math.round(gloss.bottom),
+    chromeBottom: Math.round(chrome.bottom),
+    choiceCount: typeChoices.hidden ? 0 : choiceButtons.length,
+    choices: typeChoices.hidden
+      ? []
+      : choiceButtons.map((btn) => {
+          const rect = btn.getBoundingClientRect()
+          return {
+            text: (btn.textContent ?? '').replace(/\s+/g, ' ').trim(),
+            top: Math.round(rect.top),
+            bottom: Math.round(rect.bottom),
+            height: Math.round(rect.height),
+            width: Math.round(rect.width),
+          }
+        }),
     context: (quizContext.textContent ?? '').trim(),
     progress: (pillRound.textContent ?? '').trim(),
     progressWidth: quizProgressFill.style.width,
@@ -4854,6 +4978,17 @@ async function qaShowActionStep(id: string, keyboardPx = 0): Promise<Record<stri
   }
 }
 
+function qaChoose(text: string): { revealing: boolean; id: string; prompt: string; word: string } {
+  onTypeChoice(text)
+  const step = currentCaseStep()
+  return {
+    revealing: state.revealing,
+    id: step?.id ?? '',
+    prompt: (glossLine.textContent ?? '').replace(/\s+/g, ' ').trim(),
+    word: (targetWord.textContent ?? '').replace(/\s+/g, ' ').trim(),
+  }
+}
+
 function qaAnswer(text: string): { revealing: boolean; id: string; typed: string } {
   hiddenInput.value = text
   hiddenInput.dispatchEvent(new Event('input', { bubbles: true }))
@@ -5166,6 +5301,9 @@ function installQaHooks(): void {
     showAchilles: qaShowAchilles,
     showLisfranc: qaShowLisfranc,
     answer: qaAnswer,
+    choose: qaChoose,
+    armRevealHold,
+    releaseRevealHold,
     showView: qaShowView,
     startView,
     setViewDisplay: qaSetViewDisplay,
