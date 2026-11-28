@@ -758,6 +758,15 @@ async function assertRehabType(cdp) {
     ['achilles', 'type-tendinosis', 'What does the lecture note beside tendinosis?', 'chronic degeneration, no inflammation'],
     ['achilles', 'type-phase', 'Type the first phase of this tendinopathy rehab pathway.', 'symptom-management'],
     ['achilles', 'type-return', 'Type the return-to-sport status in this pathway.', 'minimal symptoms, and not daily morning stiffness'],
+    ['lisfranc', 'type-injury', 'Type the name of this midfoot injury.', 'Lisfranc injury'],
+    ['lisfranc', 'type-joint', 'Type the joint complex this injury involves.', 'tarsometatarsal joint complex'],
+    ['lisfranc', 'type-mechanism', 'Type the mechanism of a Lisfranc injury.', 'axial load on a plantarflexed foot'],
+    ['lisfranc', 'type-energy', 'Type the two energy patterns the notes distinguish for this injury.', 'low-energy ligamentous versus high-energy'],
+    ['lisfranc', 'type-palpate', 'Type the palpation the notes name for this injury.', 'midfoot palpation'],
+    ['lisfranc', 'type-tests', 'Type the two special tests the notes name for this injury.', 'Piano key test and Compression test'],
+    ['lisfranc', 'type-piano', 'What is the shared idea of the Piano key test?', 'move the toes or metatarsals up and down'],
+    ['lisfranc', 'type-compression', 'How do the sourced notes describe the Compression test?', 'compression across the width of the foot'],
+    ['lisfranc', 'type-nwb', 'Type the safe first management step while this injury is being reviewed.', 'non-weight-bearing until specialist review'],
   ]
   let touchPage = null
   const show = async (kind, id, keyboard, width, height, mobile) => {
@@ -802,6 +811,15 @@ async function assertRehabType(cdp) {
   note('phone ATFL keyboard', 'Skip above the keyboard', lifted.skipBottom <= limit, `bottom ${lifted.skipBottom} limit ${limit}`)
   note('phone ATFL keyboard', 'Skip stays full', lifted.skipText === 'Skip · show answer', lifted.skipText)
   await capture('phone-type-atfl-keyboard')
+  const lisfrancKb = await show('lisfranc', 'type-nwb', 300, 390, 844, true)
+  const lisfrancLimit = lisfrancKb.innerHeight - 300 + 8
+  const lisfrancOfficial = 'non-weight-bearing until specialist review'
+  note('phone Lisfranc keyboard', 'official blanks', lisfrancKb.wordText === rehabBlanks(lisfrancOfficial), lisfrancKb.wordText)
+  note('phone Lisfranc keyboard', 'word above the keyboard', lisfrancKb.wordBottom <= lisfrancLimit, `bottom ${lisfrancKb.wordBottom} limit ${lisfrancLimit}`)
+  note('phone Lisfranc keyboard', 'prompt above the keyboard', lisfrancKb.promptBottom <= lisfrancLimit, `bottom ${lisfrancKb.promptBottom} limit ${lisfrancLimit}`)
+  note('phone Lisfranc keyboard', 'Skip above the keyboard', lisfrancKb.skipBottom <= lisfrancLimit, `bottom ${lisfrancKb.skipBottom} limit ${lisfrancLimit}`)
+  note('phone Lisfranc keyboard', 'Skip stays full', lisfrancKb.skipText === 'Skip · show answer', lisfrancKb.skipText)
+  await capture('phone-type-nwb-keyboard')
   const achillesKb = await show('achilles', 'type-return', 300, 390, 844, true)
   const achillesLimit = achillesKb.innerHeight - 300 + 8
   const achillesOfficial = 'minimal symptoms, and not daily morning stiffness'
@@ -927,6 +945,141 @@ async function assertAchillesScene(cdp) {
   for (const row of table) console.log(`${row.surface} | ${row.check} | ${row.ok ? 'pass' : 'fail'} | ${row.detail}`)
 }
 
+async function assertLisfrancScene(cdp) {
+  const table = []
+  const note = (surface, check, ok, detail) => {
+    table.push({ surface, check, ok, detail: String(detail) })
+    console.log(`${ok ? 'ok' : 'FAIL'}  ${surface}  ${check}  ${detail}`)
+    if (!ok) throw new Error(`${surface}: ${check}: ${detail}`)
+  }
+  let touchPage = null
+  const show = async (mode, width, height, mobile) => {
+    await setViewport(cdp, width, height, mobile)
+    await delay(250)
+    if (touchPage !== mobile) {
+      await openApp(cdp, mobile)
+      touchPage = mobile
+    }
+    return cdp.evaluate(`window.__anatomyQA.showLisfranc(${JSON.stringify(mode)}, 0)`, true)
+  }
+  const shot = async (name) => {
+    const png = await cdp.send('Page.captureScreenshot', { format: 'png' })
+    await writeFile(`${OUT}/lisfranc-${name}.png`, Buffer.from(png.data, 'base64'))
+  }
+  const layouts = [
+    ['phone', 390, 844, true],
+    ['desktop', 1440, 900, false],
+  ]
+  for (const [label, width, height, mobile] of layouts) {
+    const menu = await show('menu', width, height, mobile)
+    note(label, 'menu title', menu.title === 'Lisfranc injury', menu.title)
+    note(label, 'menu subtitle', menu.sub === 'rugby game · axial load on a plantarflexed foot', menu.sub)
+    note(label, 'menu region', menu.region === 'ankle-foot' && menu.regionLabel === 'Ankle & foot', `${menu.region} ${menu.regionLabel}`)
+    note(
+      label,
+      'menu order',
+      menu.order === 'Lateral ankle sprain|High ankle sprain|Lisfranc injury|Achilles tendinopathy',
+      menu.order,
+    )
+    note(label, 'menu row visible', menu.visible === true && menu.hudHidden === true && menu.panelHidden === true, JSON.stringify({ visible: menu.visible, hud: menu.hudHidden }))
+    await shot(`${label}-menu`)
+
+    const learn = await show('learn', width, height, mobile)
+    note(label, 'learn title', learn.title === 'A midfoot injury, not only a fracture', learn.title)
+    note(label, 'learn kicker', learn.kicker === 'Rehab · Lisfranc', learn.kicker)
+    note(label, 'study quiet', learn.studyQuiet === true && learn.ankleClass === false, `quiet ${learn.studyQuiet} ankle-class ${learn.ankleClass}`)
+    note(label, 'no type-it in study', learn.hudHidden === true && learn.panelHidden === false && learn.replayHidden === true, `hud ${learn.hudHidden} panel ${learn.panelHidden} replay ${learn.replayHidden}`)
+    note(label, 'lisfranc profile', learn.profile === 'lisfranc' && learn.active === true && learn.span === 'dorsal', `${learn.profile} ${learn.span}`)
+    note(label, 'resting and still', learn.spinning === false && learn.pose && Math.abs(learn.pose.plantar) < 0.02 && Math.abs(learn.pose.invert) < 0.02, JSON.stringify(learn.pose))
+    const cam = learn.camera
+    const tgt = learn.target
+    note(label, 'camera above the midfoot', cam && tgt && cam.y > tgt.y, `cam ${cam?.y} target ${tgt?.y}`)
+    note(label, 'dorsal pack loaded', Boolean(learn.points?.dorsal_tmt_r), learn.points?.dorsal_tmt_r ? 'yes' : 'missing')
+    note(label, 'dorsal pack on screen', learn.screen?.dorsal_tmt_r?.inFrame === true, JSON.stringify(learn.screen?.dorsal_tmt_r))
+    note(label, 'medial cuneiform on screen', learn.screen?.cuneiform_med_r?.inFrame === true, JSON.stringify(learn.screen?.cuneiform_med_r))
+    await shot(`${label}-learn`)
+
+    const anatomy = await show('anatomy', width, height, mobile)
+    note(label, 'anatomy title', anatomy.title === 'Tarsometatarsal joint complex', anatomy.title)
+    note(label, 'plantar span', anatomy.span === 'plantar' && anatomy.profile === 'lisfranc', anatomy.span)
+    const plantarCam = anatomy.camera
+    const plantarTgt = anatomy.target
+    note(label, 'camera under the midfoot', plantarCam && plantarTgt && plantarCam.y < plantarTgt.y, `cam ${plantarCam?.y} target ${plantarTgt?.y}`)
+    note(label, 'plantar pack on screen', anatomy.screen?.plantar_tmt_r?.inFrame === true, JSON.stringify(anatomy.screen?.plantar_tmt_r))
+    await shot(`${label}-anatomy`)
+
+    const intervals = await show('intervals', width, height, mobile)
+    note(label, 'interval span', intervals.span === 'interval', intervals.span)
+    note(label, 'interval pack loaded', Boolean(intervals.points?.cuneometatarsal_io_r), intervals.points?.cuneometatarsal_io_r ? 'yes' : 'missing')
+    await shot(`${label}-intervals`)
+
+    const sources = await show('sources', width, height, mobile)
+    note(label, 'sources title', sources.title === 'Six stages, then stop', sources.title)
+    note(label, 'sources visible', (sources.sourcesText || '').includes('The lecture has no Lisfranc section'), sources.sourcesText)
+    note(label, 'sources name the books', (sources.sourcesText || '').includes('Sports Medicine Australia 2007') && (sources.sourcesText || '').includes('Brukner & Khan'), sources.sourcesText)
+    const hrefs = (sources.sourcesLinks || []).map((link) => link.href).join(' ')
+    note(label, 'sources links', hrefs.includes('https://www.racgp.org.au/afp/2017/march/lisfranc-injuries') && hrefs.includes('https://orthoinfo.aaos.org/'), hrefs)
+    await shot(`${label}-sources`)
+
+    const typed = await show('type', width, height, mobile)
+    note(label, 'type prompt', typed.prompt === 'Type the name of this midfoot injury.', typed.prompt)
+    note(label, 'type label', typed.label === 'TYPE IT · NAME IT', typed.label)
+    note(label, 'type context', typed.context === 'Rehab · type it', typed.context)
+    note(label, 'official blanks', typed.wordText === rehabBlanks('Lisfranc injury'), typed.wordText)
+    note(label, 'Skip stays full', typed.skipText === 'Skip · show answer', typed.skipText)
+    await shot(`${label}-type`)
+
+    const tap = await show('tap', width, height, mobile)
+    note(label, 'tap prompt', tap.prompt === 'Tap the dorsal tarsometatarsal ligaments.', tap.prompt)
+    note(label, 'tap label', tap.label === 'TAP IT · TAP THE LIGAMENTS', tap.label)
+    note(label, 'tap context', tap.context === 'Rehab · tap it', tap.context)
+    note(label, 'tap dorsal', tap.picks?.dorsal_tmt_r === 'dorsal', tap.picks?.dorsal_tmt_r)
+    note(label, 'tap stays still', tap.spinning === false && tap.pose && Math.abs(tap.pose.plantar) < 0.02, JSON.stringify(tap.pose))
+    note(label, 'dorsal target on screen', tap.screen?.dorsal_tmt_r?.inFrame === true, JSON.stringify(tap.screen?.dorsal_tmt_r))
+    await shot(`${label}-tap`)
+  }
+
+  const blanks = [
+    ['type-injury', 'Type the name of this midfoot injury.', 'Lisfranc injury'],
+    ['type-joint', 'Type the joint complex this injury involves.', 'tarsometatarsal joint complex'],
+    ['type-mechanism', 'Type the mechanism of a Lisfranc injury.', 'axial load on a plantarflexed foot'],
+    ['type-energy', 'Type the two energy patterns the notes distinguish for this injury.', 'low-energy ligamentous versus high-energy'],
+    ['type-palpate', 'Type the palpation the notes name for this injury.', 'midfoot palpation'],
+    ['type-tests', 'Type the two special tests the notes name for this injury.', 'Piano key test and Compression test'],
+    ['type-piano', 'What is the shared idea of the Piano key test?', 'move the toes or metatarsals up and down'],
+    ['type-compression', 'How do the sourced notes describe the Compression test?', 'compression across the width of the foot'],
+    ['type-nwb', 'Type the safe first management step while this injury is being reviewed.', 'non-weight-bearing until specialist review'],
+  ]
+  for (const [label, width, height, mobile] of layouts) {
+    await setViewport(cdp, width, height, mobile)
+    await delay(200)
+    for (const [id, prompt, official] of blanks) {
+      const report = await cdp.evaluate(`window.__anatomyQA.showRehabType('lisfranc', ${JSON.stringify(id)}, 0)`, true)
+      note(`${label} ${id}`, 'prompt', report.prompt === prompt, report.prompt)
+      note(`${label} ${id}`, 'official blanks', report.wordText === rehabBlanks(official), report.wordText)
+      note(`${label} ${id}`, 'Skip stays full', report.skipText === 'Skip · show answer', report.skipText)
+      await shot(`${label}-${id}`)
+    }
+  }
+
+  await setViewport(cdp, 390, 844, true)
+  const lifted = await cdp.evaluate(`window.__anatomyQA.showRehabType('lisfranc', 'type-nwb', 300)`, true)
+  const limit = lifted.innerHeight - 300 + 8
+  const official = 'non-weight-bearing until specialist review'
+  note('phone keyboard', 'official blanks', lifted.wordText === rehabBlanks(official), lifted.wordText)
+  note('phone keyboard', 'word above the keyboard', lifted.wordBottom <= limit, `bottom ${lifted.wordBottom} limit ${limit}`)
+  note('phone keyboard', 'prompt above the keyboard', lifted.promptBottom <= limit, `bottom ${lifted.promptBottom} limit ${limit}`)
+  note('phone keyboard', 'Skip above the keyboard', lifted.skipBottom <= limit, `bottom ${lifted.skipBottom} limit ${limit}`)
+  note('phone keyboard', 'Skip stays full', lifted.skipText === 'Skip · show answer', lifted.skipText)
+  await shot('phone-nwb-keyboard')
+
+  const licence = await cdp.evaluate(`(document.querySelector('.footer-attr')?.textContent || '').replace(/\\s+/g, ' ').trim()`)
+  note('attribution', 'BodyParts3D stays', /BodyParts3D/i.test(licence), licence)
+  console.log('LISFRANC QA')
+  console.log('surface | check | ok | detail')
+  for (const row of table) console.log(`${row.surface} | ${row.check} | ${row.ok ? 'pass' : 'fail'} | ${row.detail}`)
+}
+
 async function main() {
   await mkdir(OUT, { recursive: true })
   const chrome = launchChrome()
@@ -979,6 +1132,11 @@ async function main() {
 
     if (process.env.QA_ASSERT_ACHILLES === '1') {
       await assertAchillesScene(cdp)
+      return
+    }
+
+    if (process.env.QA_ASSERT_LISFRANC === '1') {
+      await assertLisfrancScene(cdp)
       return
     }
 

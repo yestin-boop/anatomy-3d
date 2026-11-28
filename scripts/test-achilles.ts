@@ -60,7 +60,7 @@ assert(mainSrc.includes("openCase('achilles', 'learn')") && mainSrc.includes("op
 assert(mainSrc.includes('data-revision="achilles-learn"') && mainSrc.includes('data-revision="achilles-quiz"'), 'revision marks use the new ids')
 assert(mainSrc.includes("state.caseKind = 'achilles'"), 'Achilles is its own case kind')
 assert(mainSrc.includes('enterAchillesCase') && mainSrc.includes('showAchilles'), 'the case has an enter path and a QA hook')
-assert(!mainSrc.includes('btn-lisfranc') && !mainSrc.includes('btn-pcl'), 'this change does not start Lisfranc or a PCL row')
+assert(!mainSrc.includes('btn-pcl'), 'the Achilles case does not start a PCL row')
 
 const ankleSrc = readFileSync(new URL('../src/data/ankleSprain.ts', import.meta.url), 'utf8')
 const highSrc = readFileSync(new URL('../src/data/highAnkleSprain.ts', import.meta.url), 'utf8')

@@ -1821,6 +1821,16 @@ html.study-quiet .case-panel h2,
 html.study-quiet .case-body p {
   text-shadow: var(--text-halo);
 }
+html.study-quiet .case-sources {
+  margin-top: var(--space-3);
+  font-size: var(--type-caption);
+  line-height: 1.45;
+  color: var(--text-secondary);
+}
+html.study-quiet .case-sources a {
+  color: var(--text-primary);
+  text-underline-offset: 2px;
+}
 html.study-quiet .case-kicker {
   color: var(--text-secondary);
 }

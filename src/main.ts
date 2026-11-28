@@ -79,6 +79,19 @@ import {
   type AchillesQuizStep,
   type AchillesTypeStep,
 } from './data/achillesTendinopathy'
+import {
+  LISFRANC_LEARN,
+  LISFRANC_QUIZ,
+  LISFRANC_SOURCE_LEAD,
+  LISFRANC_SOURCE_LINKS,
+  LISFRANC_SOURCE_TAIL,
+  gradeLisfrancTap,
+  lisfrancTypeMatch,
+  lisfrancTypeReject,
+  type LisfrancLearnCard,
+  type LisfrancQuizStep,
+  type LisfrancTypeStep,
+} from './data/lisfrancInjury'
 import { insetsChanged, type FramingInsets } from './scene/framing'
 import { playCorrectChime, playKeyTap, playWrongTick, unlockAudio } from './audio/chime'
 import { getBoneView, getCartilageView, getMuscleView, getTissueView, type ViewAttachmentSite, type ViewSide } from './data/viewInfo'
@@ -288,6 +301,16 @@ app.innerHTML = `
               <div class="module-actions">
                 <button type="button" class="module-btn" id="btn-high-ankle-case-learn" data-revision="high-ankle-learn"><span class="module-btn-label">Learn</span><span class="module-done" hidden>✓</span></button>
                 <button type="button" class="module-btn module-btn--quiet" id="btn-high-ankle-case-quiz" data-revision="high-ankle-quiz"><span class="module-btn-label">Quiz</span><span class="module-done" hidden>✓</span></button>
+              </div>
+            </div>
+            <div class="module-row" id="btn-lisfranc-case">
+              <div class="module-copy">
+                <span class="mode-title">Lisfranc injury</span>
+                <span class="mode-sub">rugby game · axial load on a plantarflexed foot</span>
+              </div>
+              <div class="module-actions">
+                <button type="button" class="module-btn" id="btn-lisfranc-case-learn" data-revision="lisfranc-learn"><span class="module-btn-label">Learn</span><span class="module-done" hidden>✓</span></button>
+                <button type="button" class="module-btn module-btn--quiet" id="btn-lisfranc-case-quiz" data-revision="lisfranc-quiz"><span class="module-btn-label">Quiz</span><span class="module-done" hidden>✓</span></button>
               </div>
             </div>
             <div class="module-row" id="btn-achilles-case">
@@ -529,6 +552,9 @@ const btnHighAnkleQuiz = document.querySelector<HTMLButtonElement>('#btn-high-an
 const btnAchillesCase = document.querySelector<HTMLElement>('#btn-achilles-case')!
 const btnAchillesLearn = document.querySelector<HTMLButtonElement>('#btn-achilles-case-learn')!
 const btnAchillesQuiz = document.querySelector<HTMLButtonElement>('#btn-achilles-case-quiz')!
+const btnLisfrancCase = document.querySelector<HTMLElement>('#btn-lisfranc-case')!
+const btnLisfrancLearn = document.querySelector<HTMLButtonElement>('#btn-lisfranc-case-learn')!
+const btnLisfrancQuiz = document.querySelector<HTMLButtonElement>('#btn-lisfranc-case-quiz')!
 const btnMuscleLearn = document.querySelector<HTMLButtonElement>('#btn-muscle-actions-learn')!
 const btnMuscleQuiz = document.querySelector<HTMLButtonElement>('#btn-muscle-actions-quiz')!
 const btnHamstringLearn = document.querySelector<HTMLButtonElement>('#btn-hamstring-case-learn')!
@@ -616,7 +642,7 @@ const scene = new ThoraxScene({
 })
 ;(window as unknown as { __anatomyScene: typeof scene }).__anatomyScene = scene
 
-type CaseKind = 'ankle' | 'actions' | 'hamstring' | 'high-ankle' | 'achilles'
+type CaseKind = 'ankle' | 'actions' | 'hamstring' | 'high-ankle' | 'achilles' | 'lisfranc'
 
 type QuizState = {
   playing: boolean
@@ -879,6 +905,7 @@ function caseLearnTotal(): number {
   if (state.caseKind === 'hamstring') return HAMSTRING_LEARN.length
   if (state.caseKind === 'high-ankle') return HIGH_ANKLE_LEARN.length
   if (state.caseKind === 'achilles') return ACHILLES_LEARN.length
+  if (state.caseKind === 'lisfranc') return LISFRANC_LEARN.length
   return ANKLE_LEARN.length
 }
 
@@ -887,6 +914,7 @@ function caseQuizTotal(): number {
   if (state.caseKind === 'hamstring') return HAMSTRING_QUIZ.length
   if (state.caseKind === 'high-ankle') return HIGH_ANKLE_QUIZ.length
   if (state.caseKind === 'achilles') return ACHILLES_QUIZ.length
+  if (state.caseKind === 'lisfranc') return LISFRANC_QUIZ.length
   return ANKLE_QUIZ.length
 }
 
@@ -1133,6 +1161,7 @@ function openCase(kind: CaseKind, phase: 'learn' | 'quiz'): void {
   if (kind === 'ankle') void startAnkleCase(phase, index)
   else if (kind === 'high-ankle') void startHighAnkleCase(phase, index)
   else if (kind === 'achilles') void startAchillesCase(phase, index)
+  else if (kind === 'lisfranc') void startLisfrancCase(phase, index)
   else void startStudyCase(kind, phase, index)
 }
 
@@ -2265,6 +2294,15 @@ btnAchillesQuiz.addEventListener('pointerdown', (e) => {
   openCase('achilles', 'quiz')
 })
 
+btnLisfrancLearn.addEventListener('pointerdown', (e) => {
+  e.preventDefault()
+  openCase('lisfranc', 'learn')
+})
+btnLisfrancQuiz.addEventListener('pointerdown', (e) => {
+  e.preventDefault()
+  openCase('lisfranc', 'quiz')
+})
+
 btnView.addEventListener('pointerdown', (e) => {
   e.preventDefault()
   void startView()
@@ -2398,6 +2436,7 @@ function restartCurrent(): void {
     if (isStudyCase()) startStudyQuiz()
     else if (state.caseKind === 'high-ankle') startHighAnkleQuiz()
     else if (state.caseKind === 'achilles') startAchillesQuiz()
+    else if (state.caseKind === 'lisfranc') startLisfrancQuiz()
     else startAnkleQuiz()
     return
   }
@@ -2940,15 +2979,16 @@ mainCanvas.addEventListener('pointercancel', () => {
   pointerIsPick = false
 })
 
-function currentCaseStep(): AnkleQuizStep | ActionQuizStep | HamQuizStep | HighAnkleQuizStep | AchillesQuizStep | null {
+function currentCaseStep(): AnkleQuizStep | ActionQuizStep | HamQuizStep | HighAnkleQuizStep | AchillesQuizStep | LisfrancQuizStep | null {
   if (state.caseKind === 'actions') return ACTION_QUIZ[state.caseQuizIndex] ?? null
   if (state.caseKind === 'hamstring') return HAMSTRING_QUIZ[state.caseQuizIndex] ?? null
   if (state.caseKind === 'high-ankle') return HIGH_ANKLE_QUIZ[state.caseQuizIndex] ?? null
   if (state.caseKind === 'achilles') return ACHILLES_QUIZ[state.caseQuizIndex] ?? null
+  if (state.caseKind === 'lisfranc') return LISFRANC_QUIZ[state.caseQuizIndex] ?? null
   return ANKLE_QUIZ[state.caseQuizIndex] ?? null
 }
 
-function caseTypeStep(): AnkleTypeStep | ActionTypeStep | HamTypeStep | HighAnkleTypeStep | AchillesTypeStep | null {
+function caseTypeStep(): AnkleTypeStep | ActionTypeStep | HamTypeStep | HighAnkleTypeStep | AchillesTypeStep | LisfrancTypeStep | null {
   const step = currentCaseStep()
   return step && step.kind === 'type' ? step : null
 }
@@ -2970,11 +3010,15 @@ function caseTypeMatches(typed: string, mode: AnswerMatchMode = 'live'): boolean
     const step = ACHILLES_QUIZ[state.caseQuizIndex]
     return !!step && step.kind === 'type' && achillesTypeMatch(step, typed, mode)
   }
+  if (state.caseKind === 'lisfranc') {
+    const step = LISFRANC_QUIZ[state.caseQuizIndex]
+    return !!step && step.kind === 'type' && lisfrancTypeMatch(step, typed, mode)
+  }
   const step = ANKLE_QUIZ[state.caseQuizIndex]
   return !!step && step.kind === 'type' && ankleTypeMatch(step, typed, mode)
 }
 
-function caseTypeContrast(typed: string): string | null {
+function caseTypeContrast(typed: string, mode: AnswerMatchMode = 'live'): string | null {
   if (state.caseKind === 'high-ankle') {
     const step = HIGH_ANKLE_QUIZ[state.caseQuizIndex]
     if (!step || step.kind !== 'type') return null
@@ -2984,6 +3028,11 @@ function caseTypeContrast(typed: string): string | null {
     const step = ACHILLES_QUIZ[state.caseQuizIndex]
     if (!step || step.kind !== 'type') return null
     return achillesTypeReject(step, typed)
+  }
+  if (state.caseKind === 'lisfranc') {
+    const step = LISFRANC_QUIZ[state.caseQuizIndex]
+    if (!step || step.kind !== 'type') return null
+    return lisfrancTypeReject(step, typed, mode)
   }
   return null
 }
@@ -3035,7 +3084,58 @@ function applyAchillesFocus(id: string, light: AchillesQuizStep['light'], span: 
   scene.holdAnklePose(0)
 }
 
+function applyLisfrancFocus(id: string, light: LisfrancQuizStep['light'], span: LisfrancQuizStep['span']): void {
+  if (appliedFocusId === id) return
+  appliedFocusId = id
+  scene.setLisfrancFocus(light, span)
+  scene.holdAnklePose(0)
+}
+
+function buildLisfrancSources(): HTMLParagraphElement {
+  const p = document.createElement('p')
+  p.className = 'case-sources'
+  p.id = 'case-sources'
+  p.append(document.createTextNode(`${LISFRANC_SOURCE_LEAD} Also: `))
+  LISFRANC_SOURCE_LINKS.forEach((link, index) => {
+    if (index > 0) p.append(document.createTextNode('; '))
+    const a = document.createElement('a')
+    a.href = link.href
+    a.target = '_blank'
+    a.rel = 'noopener noreferrer'
+    a.textContent = link.label
+    p.append(a)
+  })
+  p.append(document.createTextNode(`. ${LISFRANC_SOURCE_TAIL}`))
+  return p
+}
+
+function fillLisfrancCopy(card: LisfrancLearnCard): void {
+  caseKicker.textContent = card.kicker
+  caseTitle.textContent = card.title
+  const nodes: Node[] = card.paragraphs.map((text) => {
+    const p = document.createElement('p')
+    p.textContent = text
+    return p
+  })
+  if (card.id === LISFRANC_LEARN[LISFRANC_LEARN.length - 1]?.id) nodes.push(buildLisfrancSources())
+  caseBody.replaceChildren(...nodes)
+}
+
 function renderLearnCard(): void {
+  if (state.caseKind === 'lisfranc') {
+    const card = LISFRANC_LEARN[state.caseLearnIndex]
+    if (!card) return
+    fillLisfrancCopy(card)
+    caseReplay.hidden = true
+    caseBack.hidden = state.caseLearnIndex === 0
+    const last = state.caseLearnIndex === LISFRANC_LEARN.length - 1
+    caseNext.textContent = 'Next'
+    caseNext.hidden = last
+    caseQuizJump.hidden = !last
+    applyLisfrancFocus(card.id, card.light, card.span)
+    syncChromeContext()
+    return
+  }
   if (state.caseKind === 'achilles') {
     const card = ACHILLES_LEARN[state.caseLearnIndex]
     if (!card) return
@@ -3105,7 +3205,7 @@ function renderLearnCard(): void {
 async function startAnkleCase(phase: 'learn' | 'quiz' = 'learn', atIndex = 0): Promise<void> {
   void unlockAudio()
   if (scene.isStudyCase()) scene.exitStudyCase()
-  if (scene.isHighAnkleCase() || scene.isAchillesCase()) scene.exitAnkleCase()
+  if (scene.isHighAnkleCase() || scene.isAchillesCase() || scene.isLisfrancCase()) scene.exitAnkleCase()
   if (state.viewing) {
     scene.exitView()
     state.viewing = false
@@ -3275,6 +3375,64 @@ async function startAchillesCase(phase: 'learn' | 'quiz' = 'learn', atIndex = 0)
   scheduleFramingSync()
 }
 
+async function startLisfrancCase(phase: 'learn' | 'quiz' = 'learn', atIndex = 0): Promise<void> {
+  void unlockAudio()
+  if (scene.isStudyCase()) scene.exitStudyCase()
+  if (scene.isAnkleCase() && !scene.isLisfrancCase()) scene.exitAnkleCase()
+  if (state.viewing) {
+    scene.exitView()
+    state.viewing = false
+  }
+  state.caseKind = 'lisfranc'
+  appliedFocusId = ''
+  document.documentElement.classList.remove('ankle-case')
+  document.documentElement.classList.add('study-quiet')
+  caseReplay.hidden = true
+  caseReplay.textContent = 'Replay'
+  targetWord.classList.remove('is-long')
+  state.caseActive = true
+  state.casePhase = phase
+  state.caseLearnIndex = 0
+  state.caseQuizIndex = 0
+  state.caseTyping = false
+  state.playing = true
+  state.finished = false
+  state.revealing = false
+  state.typed = ''
+  state.correct = 0
+  state.attempts = 0
+  hiddenInput.value = ''
+  menuOverlay.hidden = true
+  playHud.hidden = phase !== 'quiz'
+  viewPanel.hidden = true
+  chromeTop.hidden = false
+  chromeTop.classList.remove('is-view')
+  viewFilters.hidden = true
+  viewFilters.classList.remove('is-quiz')
+  sideViews.hidden = true
+  casePanel.hidden = phase !== 'learn'
+  setMenuSheet(false)
+  syncChromeContext()
+  statusEl.style.display = ''
+  statusEl.textContent = 'Loading ankle…'
+  scene.setLook('solid')
+  if (!scene.isLisfrancCase()) await scene.enterLisfrancCase()
+  if (!state.caseActive || state.caseKind !== 'lisfranc') {
+    syncSportQuizClass()
+    return
+  }
+  statusEl.style.display = 'none'
+  if (phase === 'quiz') startLisfrancQuiz(atIndex)
+  else {
+    state.caseLearnIndex = clampIndex(atIndex, caseLearnTotal())
+    renderLearnCard()
+    syncRevision()
+  }
+  syncSportQuizClass()
+  syncFramingInsetsNow()
+  scheduleFramingSync()
+}
+
 function advanceCaseLearn(): void {
   if (!state.caseActive || state.casePhase !== 'learn') return
   if (state.caseLearnIndex < caseLearnTotal() - 1) {
@@ -3291,6 +3449,7 @@ function jumpFromLearnToQuiz(): void {
   if (isStudyCase()) startStudyQuiz()
   else if (state.caseKind === 'high-ankle') startHighAnkleQuiz()
   else if (state.caseKind === 'achilles') startAchillesQuiz()
+  else if (state.caseKind === 'lisfranc') startLisfrancQuiz()
   else startAnkleQuiz()
 }
 
@@ -3374,6 +3533,28 @@ function startStudyQuiz(atIndex = 0): void {
 }
 
 function startAchillesQuiz(atIndex = 0): void {
+  state.casePhase = 'quiz'
+  state.caseQuizIndex = clampIndex(atIndex, caseQuizTotal())
+  state.finished = false
+  state.revealing = false
+  state.typed = ''
+  state.correct = 0
+  state.attempts = 0
+  hiddenInput.value = ''
+  appliedFocusId = ''
+  casePanel.hidden = true
+  playHud.hidden = false
+  document.documentElement.classList.add('study-quiet')
+  document.documentElement.classList.remove('ankle-case')
+  scene.holdAnklePose(0)
+  renderCaseHud()
+  syncSportQuizClass()
+  syncRevision()
+  syncFramingInsetsNow()
+  if (state.caseTyping) focusInput()
+}
+
+function startLisfrancQuiz(atIndex = 0): void {
   state.casePhase = 'quiz'
   state.caseQuizIndex = clampIndex(atIndex, caseQuizTotal())
   state.finished = false
@@ -3611,7 +3792,68 @@ function renderAchillesHud(): void {
   scheduleFramingSync()
 }
 
+function renderLisfrancHud(): void {
+  document.documentElement.classList.remove('ankle-case')
+  document.documentElement.classList.add('study-quiet')
+  playHud.classList.toggle('case-quiz', state.casePhase === 'quiz')
+  const acc = state.attempts === 0 ? 100 : Math.round((state.correct / state.attempts) * 100)
+  statAcc.textContent = `${acc}%`
+  syncChromeContext()
+
+  if (state.casePhase === 'learn') {
+    syncSkipButton()
+    scheduleFramingSync()
+    return
+  }
+
+  if (state.finished) {
+    state.caseTyping = false
+    typeLabel.textContent = 'CASE COMPLETE · TAP OR ESC FOR MENU'
+    targetWord.classList.add('reveal')
+    targetWord.classList.remove('is-long')
+    targetWord.innerHTML = `<span class="tw-done">case complete</span>`
+    glossLine.textContent =
+      'A Lisfranc injury involves the tarsometatarsal joint complex. Keep the athlete non-weight-bearing until specialist review. Sources are on the last Learn card.'
+    glossLine.classList.add('show')
+    glossLine.classList.remove('is-wrong')
+    syncSkipButton()
+    scheduleFramingSync()
+    return
+  }
+
+  const step = LISFRANC_QUIZ[state.caseQuizIndex]
+  if (!step) return
+  state.caseTyping = step.kind === 'type' && !state.revealing
+  typeLabel.textContent = `${step.kind === 'type' ? 'TYPE IT' : 'TAP IT'} · ${step.region}`
+  glossLine.textContent =
+    state.revealing && step.kind === 'type'
+      ? step.reveal
+      : state.revealing && step.kind === 'tap'
+        ? step.correct
+        : step.prompt
+  glossLine.classList.add('show')
+  glossLine.classList.remove('is-wrong')
+  targetWord.classList.toggle('is-long', step.kind === 'type' && step.official.length > 28)
+  if (step.kind === 'type') renderCaseTypeWord(step)
+  else {
+    targetWord.classList.remove('is-long')
+    targetWord.classList.toggle('reveal', state.revealing)
+    targetWord.innerHTML = state.revealing
+      ? `<span class="tw-done">${escapeHtml(step.revealName)}</span>`
+      : `<span class="tw-on">tap</span>`
+  }
+  applyLisfrancFocus(step.id, step.light, step.span)
+  syncSkipButton()
+  if (step.kind === 'tap') blurQuizInput()
+  syncTapHint()
+  scheduleFramingSync()
+}
+
 function renderCaseHud(): void {
+  if (state.caseKind === 'lisfranc') {
+    renderLisfrancHud()
+    return
+  }
   if (state.caseKind === 'achilles') {
     renderAchillesHud()
     return
@@ -3677,7 +3919,7 @@ function renderCaseHud(): void {
   scheduleFramingSync()
 }
 
-function renderCaseTypeWord(step: AnkleTypeStep | ActionTypeStep | HamTypeStep | HighAnkleTypeStep | AchillesTypeStep): void {
+function renderCaseTypeWord(step: AnkleTypeStep | ActionTypeStep | HamTypeStep | HighAnkleTypeStep | AchillesTypeStep | LisfrancTypeStep): void {
   if (state.revealing) {
     targetWord.classList.add('reveal')
     targetWord.innerHTML = `<span class="tw-done">${escapeHtml(step.official)}</span>`
@@ -3734,7 +3976,7 @@ function onCaseFieldInput(): void {
   const prev = state.typed
   const added = compactLetters(cleaned).length > compactLetters(prev).length
   state.typed = cleaned
-  const contrast = caseTypeContrast(cleaned)
+  const contrast = caseTypeContrast(cleaned, 'live')
   if (step && !contrast && added && firstWrongIndex(cleaned, [step.official, ...step.aliases]) >= 0) playWrongTick()
   else if (!contrast && cleaned.length !== prev.length) playKeyTap()
   updateHud()
@@ -3752,7 +3994,7 @@ function onCaseChar(ch: string): void {
   const step = caseTypeStep()
   if (!step) return
   state.typed += ch
-  const contrast = caseTypeContrast(state.typed)
+  const contrast = caseTypeContrast(state.typed, 'live')
   if (!contrast && firstWrongIndex(state.typed, [step.official, ...step.aliases]) >= 0) playWrongTick()
   else if (!contrast) playKeyTap()
   updateHud()
@@ -3773,7 +4015,7 @@ function onCaseConfirm(): void {
   if (state.casePhase !== 'quiz' || state.revealing) return
   const step = caseTypeStep()
   if (!step) return
-  const contrast = caseTypeContrast(state.typed)
+  const contrast = caseTypeContrast(state.typed, 'confirm')
   if (contrast) {
     playWrongTick()
     glossLine.textContent = contrast
@@ -3787,6 +4029,20 @@ function onCaseTap(clientX: number, clientY: number): void {
   if (state.casePhase !== 'quiz' || state.revealing || state.finished || state.caseTyping) return
   if (isStudyCase()) {
     onStudyTap(clientX, clientY)
+    return
+  }
+  if (state.caseKind === 'lisfranc') {
+    const step = LISFRANC_QUIZ[state.caseQuizIndex]
+    if (!step || step.kind !== 'tap') return
+    const picked = scene.pickLisfranc(clientX, clientY)
+    const graded = gradeLisfrancTap(step, picked?.hit ?? null)
+    if (!graded.ok) {
+      playWrongTick()
+      glossLine.textContent = graded.message
+      glossLine.classList.add('show', 'is-wrong')
+      return
+    }
+    void onCaseCorrect(graded.message)
     return
   }
   if (state.caseKind === 'achilles') {
@@ -3936,7 +4192,7 @@ caseQuizJump.addEventListener('click', () => {
 })
 
 caseReplay.addEventListener('click', () => {
-  if (state.caseKind === 'high-ankle' || state.caseKind === 'achilles') return
+  if (state.caseKind === 'high-ankle' || state.caseKind === 'achilles' || state.caseKind === 'lisfranc') return
   if (isStudyCase()) scene.replayStudyCue()
   else scene.replayAnkleMotion()
 })
@@ -4676,7 +4932,7 @@ async function qaShowHighAnkle(
 }
 
 async function qaShowRehabType(
-  kind: 'ankle' | 'high-ankle' | 'hamstring' | 'achilles',
+  kind: 'ankle' | 'high-ankle' | 'hamstring' | 'achilles' | 'lisfranc',
   id: string,
   keyboardPx = 0,
 ): Promise<Record<string, unknown>> {
@@ -4688,7 +4944,9 @@ async function qaShowRehabType(
         ? HIGH_ANKLE_QUIZ
         : kind === 'achilles'
           ? ACHILLES_QUIZ
-          : HAMSTRING_QUIZ
+          : kind === 'lisfranc'
+            ? LISFRANC_QUIZ
+            : HAMSTRING_QUIZ
   const index = quiz.findIndex((step) => step.id === id)
   if (index < 0) throw new Error(`unknown rehab step ${kind}/${id}`)
   if (kind === 'ankle') {
@@ -4700,6 +4958,9 @@ async function qaShowRehabType(
   } else if (kind === 'achilles') {
     if (!state.caseActive || state.caseKind !== 'achilles') await startAchillesCase('quiz', index)
     else startAchillesQuiz(index)
+  } else if (kind === 'lisfranc') {
+    if (!state.caseActive || state.caseKind !== 'lisfranc') await startLisfrancCase('quiz', index)
+    else startLisfrancQuiz(index)
   } else if (!state.caseActive || state.caseKind !== 'hamstring') {
     await startStudyCase('hamstring', 'quiz', index)
   } else {
@@ -4804,6 +5065,97 @@ async function qaShowAchilles(
   }
 }
 
+async function qaShowLisfranc(
+  mode: 'menu' | 'learn' | 'anatomy' | 'intervals' | 'sources' | 'type' | 'tap',
+  keyboardPx = 0,
+): Promise<Record<string, unknown>> {
+  pinForcedKeyboard(keyboardPx)
+  if (mode === 'menu') {
+    showMenu()
+    btnLisfrancCase.scrollIntoView({ block: 'center' })
+    const rect = btnLisfrancCase.getBoundingClientRect()
+    const region = btnLisfrancCase.closest('.region-group')
+    const rows = [...document.querySelectorAll('#rehab-section [data-region="ankle-foot"] .mode-title')].map(
+      (el) => (el.textContent ?? '').trim(),
+    )
+    return {
+      title: btnLisfrancCase.querySelector('.mode-title')?.textContent ?? '',
+      sub: btnLisfrancCase.querySelector('.mode-sub')?.textContent ?? '',
+      visible: rect.width > 8 && rect.height > 8 && rect.bottom > 0 && rect.top < window.innerHeight,
+      region: region?.getAttribute('data-region') ?? '',
+      regionLabel: (region?.querySelector('.region-label')?.textContent ?? '').trim(),
+      order: rows.join('|'),
+      studyQuiet: document.documentElement.classList.contains('study-quiet'),
+      hudHidden: playHud.hidden,
+      panelHidden: casePanel.hidden,
+    }
+  }
+  if (!state.caseActive || state.caseKind !== 'lisfranc') {
+    const learnMode = mode === 'learn' || mode === 'anatomy' || mode === 'intervals' || mode === 'sources'
+    await startLisfrancCase(learnMode ? 'learn' : 'quiz')
+  }
+  if (mode === 'learn' || mode === 'anatomy' || mode === 'intervals' || mode === 'sources') {
+    const cardId = mode === 'anatomy' ? 'anatomy' : mode === 'sources' ? 'totaps' : 'scenario'
+    state.casePhase = 'learn'
+    state.caseLearnIndex = Math.max(0, LISFRANC_LEARN.findIndex((card) => card.id === cardId))
+    state.finished = false
+    appliedFocusId = ''
+    casePanel.hidden = false
+    playHud.hidden = true
+    renderLearnCard()
+    if (mode === 'intervals') {
+      appliedFocusId = ''
+      applyLisfrancFocus('intervals', 'interval', 'interval')
+    }
+  } else {
+    const id = mode === 'type' ? 'type-injury' : 'tap-dorsal'
+    const index = LISFRANC_QUIZ.findIndex((step) => step.id === id)
+    state.casePhase = 'quiz'
+    state.caseQuizIndex = index < 0 ? 0 : index
+    state.finished = false
+    state.revealing = false
+    state.typed = ''
+    state.caseTyping = mode === 'type'
+    appliedFocusId = ''
+    casePanel.hidden = true
+    playHud.hidden = false
+    hiddenInput.value = ''
+    renderCaseHud()
+    if (mode === 'tap') blurQuizInput()
+    if (keyboardPx > 0) focusInputNow()
+  }
+  syncChromeContext()
+  syncFramingInsetsNow()
+  await scene.whenPoseSettled()
+  syncFramingInsetsNow()
+  await scene.whenPoseSettled()
+  if (mode === 'sources') document.querySelector('#case-sources')?.scrollIntoView({ block: 'nearest' })
+  const step = LISFRANC_QUIZ[state.caseQuizIndex]
+  const sources = document.querySelector<HTMLElement>('#case-sources')
+  const links = sources
+    ? [...sources.querySelectorAll('a')].map((a) => ({ text: a.textContent ?? '', href: a.getAttribute('href') ?? '' }))
+    : []
+  return {
+    ...scene.getAnkleReport(),
+    ...qaTypeBar(),
+    mode,
+    official: step && step.kind === 'type' ? step.official : '',
+    studyQuiet: document.documentElement.classList.contains('study-quiet'),
+    ankleClass: document.documentElement.classList.contains('ankle-case'),
+    hudHidden: playHud.hidden,
+    panelHidden: casePanel.hidden,
+    replayHidden: caseReplay.hidden,
+    title: caseTitle.textContent ?? '',
+    kicker: caseKicker.textContent ?? '',
+    prompt: (glossLine.textContent ?? '').trim(),
+    label: (typeLabel.textContent ?? '').trim(),
+    context: (quizContext.textContent ?? '').trim(),
+    sourcesText: (sources?.textContent ?? '').replace(/\s+/g, ' ').trim(),
+    sourcesLinks: links,
+    innerHeight: window.innerHeight,
+  }
+}
+
 function installQaHooks(): void {
   const api = {
     showQuiz: qaShowQuiz,
@@ -4812,6 +5164,7 @@ function installQaHooks(): void {
     showActionStep: qaShowActionStep,
     showRehabType: qaShowRehabType,
     showAchilles: qaShowAchilles,
+    showLisfranc: qaShowLisfranc,
     answer: qaAnswer,
     showView: qaShowView,
     startView,

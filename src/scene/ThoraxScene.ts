@@ -67,6 +67,19 @@ import {
   type AchillesLight,
   type AchillesSpan,
 } from '../data/achillesTendinopathy'
+import {
+  LISFRANC_BASE_FRACTION,
+  LISFRANC_CONTRAST,
+  LISFRANC_DORSAL_MESHES,
+  LISFRANC_INTEROSSEOUS_MESHES,
+  LISFRANC_METATARSALS,
+  LISFRANC_MIDFOOT_BONES,
+  LISFRANC_PLANTAR_MESHES,
+  classifyLisfrancMesh,
+  type LisfrancHit,
+  type LisfrancLight,
+  type LisfrancSpan,
+} from '../data/lisfrancInjury'
 import { classifyStudyMesh, type StudyFocus } from '../data/muscleActions'
 
 const _segV = new THREE.Vector3()
@@ -377,12 +390,14 @@ export class ThoraxScene {
   /** 'bone' | 'muscle' | 'cartilage' | 'ligament' per mesh name */
   private kindByName = new Map<string, MeshKind>()
   private ankleCase = false
-  /** Lateral sprain, high-ankle, or the Achilles case. They share this stage and do not share a lesson. */
-  private ankleProfile: 'lateral' | 'high' | 'achilles' = 'lateral'
+  /** Lateral sprain, high-ankle, Achilles, or Lisfranc. They share this stage and do not share a lesson. */
+  private ankleProfile: 'lateral' | 'high' | 'achilles' | 'lisfranc' = 'lateral'
   private highLight: HighAnkleLight = 'none'
   private highSpan: HighAnkleSpan = 'mortise'
   private achillesLight: AchillesLight = 'tendon'
   private achillesSpan: AchillesSpan = 'heel'
+  private lisfrancLight: LisfrancLight = 'dorsal'
+  private lisfrancSpan: LisfrancSpan = 'dorsal'
   private anklePivot: THREE.Group | null = null
   private ankleHomes: Array<{ mesh: THREE.Mesh; parent: THREE.Object3D }> = []
   private ankleMotion: { t: number; duration: number; playing: boolean } | null = null
@@ -459,6 +474,7 @@ export class ThoraxScene {
     endPos: THREE.Vector3
     elapsed: number
     duration: number
+    up: THREE.Vector3
   } | null = null
   /** CSS-pixel canvas size. View offset and fit distance are in this space. */
   private viewWidth = 1
@@ -1341,7 +1357,7 @@ export class ThoraxScene {
     const e = u * u * (3 - 2 * u)
     this.controls.target.lerpVectors(frame.startTarget, frame.endTarget, e)
     this.camera.position.lerpVectors(frame.startPos, frame.endPos, e)
-    this.camera.up.set(0, 1, 0)
+    this.camera.up.copy(frame.up)
     if (u >= 1) this.viewFrame = null
   }
 
@@ -1912,7 +1928,7 @@ export class ThoraxScene {
   }
 
   /** Fit the part's real projected box into the visible band. */
-  private distanceForBox(box: THREE.Box3, dir: THREE.Vector3, fill?: number): number {
+  private distanceForBox(box: THREE.Box3, dir: THREE.Vector3, fill?: number, contextHalf = 0.11): number {
     this.readViewSize()
     const w = Math.max(this.viewWidth, 1)
     const h = Math.max(this.viewHeight, 1)
@@ -1943,7 +1959,7 @@ export class ThoraxScene {
       marginPx: 12,
       minBandPx,
       // A carpal-sized part stays far enough to keep the neighbouring bones in frame.
-      contextHalf: 0.11,
+      contextHalf,
       minDistance: VIEW_MIN_DISTANCE + 0.05,
       // A ~50px strip needs a much longer pull-back before a thigh or the
       // erector spinae fits inside it. Taller bands keep the usual cap.
@@ -1972,7 +1988,12 @@ export class ThoraxScene {
     this.startViewPose(pivot.clone(), endPos, 0.34)
   }
 
-  private startViewPose(endTarget: THREE.Vector3, endPos: THREE.Vector3, duration: number): void {
+  private startViewPose(
+    endTarget: THREE.Vector3,
+    endPos: THREE.Vector3,
+    duration: number,
+    up?: THREE.Vector3,
+  ): void {
     this.viewFrame = {
       startTarget: this.controls.target.clone(),
       endTarget: endTarget.clone(),
@@ -1980,6 +2001,7 @@ export class ThoraxScene {
       endPos: endPos.clone(),
       elapsed: 0,
       duration,
+      up: (up ?? new THREE.Vector3(0, 1, 0)).clone(),
     }
   }
 
@@ -2134,6 +2156,8 @@ export class ThoraxScene {
     this.highSpan = 'mortise'
     this.achillesLight = 'tendon'
     this.achillesSpan = 'heel'
+    this.lisfrancLight = 'dorsal'
+    this.lisfrancSpan = 'dorsal'
     this.ankleEmphasis = 'none'
     this.ankleLabelsWanted = false
     this.studyFrameLocked = false
@@ -2159,6 +2183,10 @@ export class ThoraxScene {
 
   isAchillesCase(): boolean {
     return this.ankleCase && this.ankleProfile === 'achilles'
+  }
+
+  isLisfrancCase(): boolean {
+    return this.ankleCase && this.ankleProfile === 'lisfranc'
   }
 
   /**
@@ -2238,6 +2266,42 @@ export class ThoraxScene {
     this.frameAchilles(span)
   }
 
+  /**
+   * Lisfranc stage. The three packed groupings stay in their resting seats.
+   * Nothing is repacked, inflated, or labelled on the mesh.
+   */
+  async enterLisfrancCase(): Promise<void> {
+    this.ankleProfile = 'lisfranc'
+    this.lisfrancLight = 'dorsal'
+    this.lisfrancSpan = 'dorsal'
+    this.ankleCase = true
+    this.spinning = false
+    this.spin.rotation.y = 0
+    this.viewMode = false
+    this.targetIds = new Set()
+    this.controls.enablePan = true
+    this.controls.screenSpacePanning = true
+    this.controls.minDistance = VIEW_MIN_DISTANCE
+    await this.ensureLigamentsLoaded()
+    if (this.disposed || !this.ankleCase || this.ankleProfile !== 'lisfranc') return
+    this.buildAnklePivot()
+    this.ankleEmphasis = 'none'
+    this.ankleLigamentsVisible = true
+    this.ankleLabelsWanted = false
+    this.applyAnklePose(anklePoseAt(0))
+    this.frameLisfranc(this.lisfrancSpan)
+  }
+
+  /** Light one Lisfranc grouping and frame the right midfoot. */
+  setLisfrancFocus(light: LisfrancLight, span: LisfrancSpan): void {
+    if (!this.ankleCase || this.ankleProfile !== 'lisfranc') return
+    this.lisfrancLight = light
+    this.lisfrancSpan = span
+    this.ankleLabelsWanted = false
+    this.applyAnkleLook()
+    this.frameLisfranc(span)
+  }
+
   setAnkleEmphasis(emphasis: AnkleEmphasis): void {
     this.ankleEmphasis = emphasis
     if (this.ankleCase) this.applyAnkleLook()
@@ -2272,6 +2336,42 @@ export class ThoraxScene {
   pickHighAnkle(clientX: number, clientY: number): { hit: HighAnkleHit; meshName: string } | null {
     if (!this.ankleCase || this.ankleProfile !== 'high') return null
     return this.pickLigamentCase(clientX, clientY, classifyHighAnkleMesh, HIGH_ANKLE_RIGHT_LIGAMENTS)
+  }
+
+  pickLisfranc(clientX: number, clientY: number): { hit: LisfrancHit; meshName: string } | null {
+    if (!this.ankleCase || this.ankleProfile !== 'lisfranc') return null
+    const rect = this.mainCanvas.getBoundingClientRect()
+    if (rect.width <= 0 || rect.height <= 0) return null
+    this.pointerNdc.set(
+      ((clientX - rect.left) / rect.width) * 2 - 1,
+      -((clientY - rect.top) / rect.height) * 2 + 1,
+    )
+    this.raycaster.setFromCamera(this.pointerNdc, this.camera)
+    const targets: THREE.Object3D[] = []
+    for (const mesh of this.meshByName.values()) {
+      if (mesh.visible) targets.push(mesh)
+    }
+    const hits = this.raycaster.intersectObjects(targets, false)
+    let first: { hit: LisfrancHit; meshName: string; distance: number } | null = null
+    for (const hit of hits) {
+      const obj = hit.object
+      if (!(obj instanceof THREE.Mesh) || !obj.name) continue
+      const kind = this.kindByName.get(obj.name)
+      if (kind !== 'ligament' && kind !== 'bone' && kind !== 'tendon') continue
+      first = { hit: classifyLisfrancMesh(obj.name), meshName: obj.name, distance: hit.distance }
+      break
+    }
+    const ribbons = [
+      'dorsal_tmt_r',
+      'plantar_tmt_r',
+      'cuneometatarsal_io_r',
+      ...LISFRANC_CONTRAST,
+    ]
+    const near = this.nearestRightLigament(0.016, ribbons)
+    if (near && (first == null || near.distance <= first.distance + 0.03)) {
+      return { hit: classifyLisfrancMesh(near.name), meshName: near.name }
+    }
+    return first ? { hit: first.hit, meshName: first.meshName } : null
   }
 
   pickAchilles(clientX: number, clientY: number): { hit: AchillesHit; meshName: string } | null {
@@ -2416,8 +2516,8 @@ export class ThoraxScene {
     inflate: number
     spinning: boolean
     screen: Record<string, { x: number; y: number; inFrame?: boolean } | null>
-    profile: 'lateral' | 'high' | 'achilles'
-    span: 'lateral' | HighAnkleSpan | AchillesSpan
+    profile: 'lateral' | 'high' | 'achilles' | 'lisfranc'
+    span: 'lateral' | HighAnkleSpan | AchillesSpan | LisfrancSpan
     framed: { minY: number; maxY: number; centerY: number } | null
     tibia: { minY: number; maxY: number } | null
     /** Packed-tendon seat, in millimetres. Null outside the Achilles case. */
@@ -2457,6 +2557,11 @@ export class ThoraxScene {
       'gastroc_lat_r',
       'soleus_r',
       'calcaneus_r',
+      'dorsal_tmt_r',
+      'plantar_tmt_r',
+      'cuneometatarsal_io_r',
+      'cuneiform_med_r',
+      'cuboid_r',
     ]) {
       points[name] = centerOf(name)
     }
@@ -2473,7 +2578,17 @@ export class ThoraxScene {
       }
     }
     const pickNames: ReadonlyArray<readonly [string, number]> =
-      this.ankleProfile === 'achilles'
+      this.ankleProfile === 'lisfranc'
+        ? [
+            ['dorsal_tmt_r', 0.5],
+            ['plantar_tmt_r', 0.5],
+            ['cuneometatarsal_io_r', 0.5],
+            ['cuneiform_med_r', 0.5],
+            ['metatarsal2_r', 0.2],
+            ['atfl_r', 0.5],
+            ['calcaneal_r', 0.45],
+          ]
+        : this.ankleProfile === 'achilles'
         ? [
             ['calcaneal_r', 0.48],
             ['gastroc_med_r', 0.62],
@@ -2504,7 +2619,9 @@ export class ThoraxScene {
       const anchor =
         this.ankleProfile === 'achilles'
           ? this.meshSurfaceAnchor(name, yFrac)
-          : this.meshAnchor(name, yFrac)
+          : this.ankleProfile === 'lisfranc'
+            ? this.meshFacingCamera(name)
+            : this.meshAnchor(name, yFrac)
       if (!anchor || canvas.width <= 0) {
         picks[name] = null
         continue
@@ -2515,11 +2632,13 @@ export class ThoraxScene {
         y: Math.round(canvas.top + (-ndc.y * 0.5 + 0.5) * canvas.height),
       }
       picks[name] =
-        this.ankleProfile === 'achilles'
-          ? (this.pickAchilles(at.x, at.y)?.hit ?? null)
-          : this.ankleProfile === 'high'
-            ? (this.pickHighAnkle(at.x, at.y)?.hit ?? null)
-            : (this.pickAnkle(at.x, at.y)?.hit ?? null)
+        this.ankleProfile === 'lisfranc'
+          ? (this.pickLisfranc(at.x, at.y)?.hit ?? null)
+          : this.ankleProfile === 'achilles'
+            ? (this.pickAchilles(at.x, at.y)?.hit ?? null)
+            : this.ankleProfile === 'high'
+              ? (this.pickHighAnkle(at.x, at.y)?.hit ?? null)
+              : (this.pickAnkle(at.x, at.y)?.hit ?? null)
     }
     const screen: Record<string, { x: number; y: number; inFrame?: boolean } | null> = {}
     for (const name of [
@@ -2534,6 +2653,14 @@ export class ThoraxScene {
       'gastroc_med_r',
       'gastroc_lat_r',
       'soleus_r',
+      'dorsal_tmt_r',
+      'plantar_tmt_r',
+      'cuneometatarsal_io_r',
+      'cuneiform_med_r',
+      'cuneiform_int_r',
+      'cuboid_r',
+      'metatarsal1_r',
+      'metatarsal2_r',
     ]) {
       const at = project(name)
       if (!at || canvas.width <= 0) {
@@ -2587,7 +2714,9 @@ export class ThoraxScene {
           ? this.highSpan
           : this.ankleProfile === 'achilles'
             ? this.achillesSpan
-            : 'lateral',
+            : this.ankleProfile === 'lisfranc'
+              ? this.lisfrancSpan
+              : 'lateral',
       framed,
       tibia,
       seat:
@@ -2782,6 +2911,88 @@ export class ThoraxScene {
     this.frameLockedBox(box, 'posterior')
   }
 
+  /**
+   * Right midfoot. Dorsal looks down on the top of the foot. Plantar looks
+   * up at the sole. The interval frame is closer, for the short bands
+   * between the bones. Metatarsal shafts are clipped to their bases.
+   * The packed meshes are not moved.
+   */
+  private frameLisfranc(span: LisfrancSpan): void {
+    this.holdUserOrbit = false
+    this.spinning = false
+    this.spin.rotation.y = 0
+    const box = new THREE.Box3()
+    const names =
+      span === 'plantar'
+        ? ['plantar_tmt_r', 'cuneiform_med_r', 'cuneiform_int_r', 'cuneiform_lat_r', 'cuboid_r']
+        : span === 'interval'
+          ? ['cuneometatarsal_io_r', 'cuneiform_med_r', 'cuneiform_int_r', 'metatarsal2_r']
+          : ['dorsal_tmt_r', 'cuneometatarsal_io_r', 'cuneiform_med_r', 'cuneiform_int_r', 'cuneiform_lat_r', 'cuboid_r']
+    for (const name of names) {
+      if (span === 'interval' && name === 'metatarsal2_r') continue
+      const mesh = this.meshByName.get(name)
+      if (!mesh) continue
+      mesh.updateWorldMatrix(true, false)
+      box.expandByObject(mesh)
+    }
+    if (span !== 'interval') {
+      const anchor = box.isEmpty() ? null : box.getCenter(new THREE.Vector3())
+      if (anchor) {
+        for (const name of LISFRANC_METATARSALS) {
+          const clip = this.nearPointBox(name, anchor, LISFRANC_BASE_FRACTION)
+          if (clip) box.union(clip)
+        }
+      }
+    } else {
+      const clip = this.nearPointBox('metatarsal2_r', box.isEmpty() ? new THREE.Vector3() : box.getCenter(new THREE.Vector3()), 0.34)
+      if (clip) box.union(clip)
+    }
+    if (box.isEmpty()) return
+    const size = box.getSize(new THREE.Vector3())
+    const pad = span === 'interval' ? 0.08 : 0.06
+    box.expandByScalar(Math.max(0.006, Math.max(size.x, size.y, size.z) * pad))
+    // Right foot: medial is +X, toes are +Z, the sole is −Y.
+    // Dorsal looks down on the top of the midfoot. Plantar looks up at the
+    // sole, with toes toward the top of the screen so the roll stays readable.
+    const dir =
+      span === 'plantar'
+        ? new THREE.Vector3(0.16, -0.92, -0.28)
+        : span === 'interval'
+          ? new THREE.Vector3(0.2, 0.94, 0.22)
+          : new THREE.Vector3(0.3, 0.9, 0.26)
+    const up = span === 'plantar' ? new THREE.Vector3(0, 0.2, 1) : undefined
+    const view = span === 'plantar' ? 'posterior' : 'anterior'
+    const context = span === 'interval' ? 0.02 : 0.028
+    this.frameLockedBox(box, view, dir, up, context)
+  }
+
+  /** Vertices of a mesh that sit in the fraction closest to `toward`. */
+  private nearPointBox(name: string, toward: THREE.Vector3, keep: number): THREE.Box3 | null {
+    const mesh = this.meshByName.get(name)
+    if (!mesh) return null
+    mesh.updateWorldMatrix(true, false)
+    const pos = mesh.geometry.getAttribute('position')
+    if (!pos) return null
+    const step = Math.max(1, Math.floor(pos.count / 4000))
+    const p = new THREE.Vector3()
+    let min = Infinity
+    let max = -Infinity
+    for (let i = 0; i < pos.count; i += step) {
+      p.fromBufferAttribute(pos as THREE.BufferAttribute, i).applyMatrix4(mesh.matrixWorld)
+      const d = p.distanceTo(toward)
+      if (d < min) min = d
+      if (d > max) max = d
+    }
+    if (!Number.isFinite(min) || !(max > min)) return null
+    const limit = min + (max - min) * Math.min(1, Math.max(0.05, keep))
+    const box = new THREE.Box3()
+    for (let i = 0; i < pos.count; i += step) {
+      p.fromBufferAttribute(pos as THREE.BufferAttribute, i).applyMatrix4(mesh.matrixWorld)
+      if (p.distanceTo(toward) <= limit) box.expandByPoint(p)
+    }
+    return box.isEmpty() ? null : box
+  }
+
   /** World box of the distal fraction of a mesh, from its own vertices. */
   private distalVertexBox(name: string, fraction: number): THREE.Box3 | null {
     const mesh = this.meshByName.get(name)
@@ -2801,6 +3012,31 @@ export class ThoraxScene {
       if (p.y <= limit) box.expandByPoint(p)
     }
     return box.isEmpty() ? null : box
+  }
+
+  /**
+   * A vertex on the side facing the camera. The Lisfranc packs are separate
+   * short bands, so the bounding-box centre can sit on bone in a gap.
+   */
+  private meshFacingCamera(name: string): THREE.Vector3 | null {
+    const mesh = this.meshByName.get(name)
+    if (!mesh) return null
+    mesh.updateWorldMatrix(true, false)
+    const pos = mesh.geometry.getAttribute('position')
+    if (!pos) return this.meshAnchor(name, 0.5)
+    const sample = new THREE.Vector3()
+    let best: THREE.Vector3 | null = null
+    let bestD = Infinity
+    const stride = Math.max(1, Math.floor(pos.count / 700))
+    for (let i = 0; i < pos.count; i += stride) {
+      sample.fromBufferAttribute(pos as THREE.BufferAttribute, i).applyMatrix4(mesh.matrixWorld)
+      const d = sample.distanceToSquared(this.camera.position)
+      if (d < bestD) {
+        bestD = d
+        best = sample.clone()
+      }
+    }
+    return best ?? this.meshAnchor(name, 0.5)
   }
 
   /** Box center in XZ, at a fraction of the mesh height. 0 is the distal end. */
@@ -2961,6 +3197,11 @@ export class ThoraxScene {
       this.clearAnkleLabels()
       return
     }
+    if (this.ankleProfile === 'lisfranc') {
+      this.paintLisfrancLook()
+      this.clearAnkleLabels()
+      return
+    }
     const context = new Set<string>(ANKLE_CONTEXT_BONES)
     const emphasized = new Set<string>()
     if (this.ankleEmphasis === 'atfl' || this.ankleEmphasis === 'both') emphasized.add('atfl_r')
@@ -3019,6 +3260,109 @@ export class ThoraxScene {
       }
     }
     this.syncAnkleLabels()
+  }
+
+  /**
+   * Right midfoot. The dorsal pack is the gold target. The plantar pack and
+   * the short interosseous bands stay visible and unlabelled. No band is
+   * painted on, and no mesh is moved.
+   */
+  private paintLisfrancLook(): void {
+    const packs = new Set<string>([
+      ...LISFRANC_DORSAL_MESHES,
+      ...LISFRANC_PLANTAR_MESHES,
+      ...LISFRANC_INTEROSSEOUS_MESHES,
+    ])
+    const contrast = new Set<string>(LISFRANC_CONTRAST)
+    const midfoot = new Set<string>(LISFRANC_MIDFOOT_BONES)
+    const hotDorsal = this.lisfrancLight === 'dorsal'
+    const hotPlantar = this.lisfrancLight === 'plantar'
+    const hotInterval = this.lisfrancLight === 'interval'
+    const paintRibbon = (mat: THREE.MeshStandardMaterial, mesh: THREE.Mesh, hot: boolean, quiet: number) => {
+      if (hot) {
+        mat.color.setHex(LIGAMENT_LOOK.atfl.color)
+        mat.emissive.setHex(LIGAMENT_LOOK.atfl.emissive)
+        mat.emissiveIntensity = LIGAMENT_LOOK.atfl.emissiveIntensity
+        mat.opacity = 1
+        mat.transparent = false
+        mat.depthWrite = true
+      } else {
+        mat.color.setHex(LIGAMENT_LOOK.atfl.color)
+        mat.emissive.setHex(LIGAMENT_LOOK.atfl.emissive)
+        mat.emissiveIntensity = 0.16
+        mat.opacity = quiet
+        mat.transparent = true
+        mat.depthWrite = quiet > 0.7
+      }
+      mat.roughness = 0.42
+      mat.metalness = 0.02
+      mat.side = THREE.DoubleSide
+      mat.polygonOffset = true
+      mat.polygonOffsetFactor = -2
+      mat.polygonOffsetUnits = -2
+      mesh.renderOrder = hot ? 16 : 12
+      mat.needsUpdate = true
+    }
+    for (const [name, mat] of this.materials) {
+      const mesh = this.meshByName.get(name)
+      if (!mesh) continue
+      const kind = this.kindByName.get(name) ?? 'bone'
+      if (kind === 'muscle' || kind === 'cartilage' || kind === 'fascia' || name === 'diaphragm') {
+        mesh.visible = false
+        continue
+      }
+      if (kind === 'ligament' || kind === 'tendon') {
+        const isPack = packs.has(name)
+        const isContrast =
+          contrast.has(name) ||
+          name === 'calcaneal_l' ||
+          name === 'atfl_l' ||
+          name === 'cfl_l' ||
+          name === 'ptfl_l' ||
+          name === 'deltoid_l' ||
+          name === 'aitfl_l' ||
+          name === 'pitfl_l' ||
+          name === 'trans_tibfib_l'
+        mesh.visible = (isPack || isContrast) && this.ankleLigamentsVisible
+        if (!mesh.visible) continue
+        if (!isPack) {
+          mat.color.setHex(LIGAMENT_DIM.color)
+          mat.emissive.setHex(LIGAMENT_DIM.emissive)
+          mat.emissiveIntensity = LIGAMENT_DIM.emissiveIntensity
+          mat.opacity = name.endsWith('_l') ? 0.28 : 0.48
+          mat.transparent = true
+          mat.depthWrite = false
+          mat.roughness = 0.42
+          mat.metalness = 0.02
+          mat.side = THREE.DoubleSide
+          mesh.renderOrder = 11
+          mat.needsUpdate = true
+          continue
+        }
+        if (name.endsWith('_l')) {
+          paintRibbon(mat, mesh, false, 0.34)
+          continue
+        }
+        if (name.startsWith('dorsal_tmt_')) paintRibbon(mat, mesh, hotDorsal, hotInterval ? 0.38 : 0.72)
+        else if (name.startsWith('plantar_tmt_')) paintRibbon(mat, mesh, hotPlantar, 0.62)
+        else paintRibbon(mat, mesh, hotInterval, hotInterval ? 0.92 : 0.58)
+        continue
+      }
+      mesh.visible = true
+      const rightFoot = name.endsWith('_r') && (midfoot.has(name) || name.startsWith('metatarsal') || name.startsWith('phal_foot_') || name === 'talus_r' || name === 'calcaneus_r' || name === 'navicular_r')
+      if (midfoot.has(name) || rightFoot) {
+        this.applyPalette(mat, VIEW_BONE, { transparent: false, depthWrite: true })
+        mesh.renderOrder = 2
+      } else if (name.endsWith('_l') && (name.startsWith('cuneiform_') || name.startsWith('metatarsal') || name.startsWith('cuboid') || name === 'talus_l' || name === 'calcaneus_l')) {
+        this.applyPalette(mat, VIEW_BONE, { transparent: true, depthWrite: false })
+        mat.opacity = 0.22
+        mesh.renderOrder = 1
+      } else {
+        this.applyPalette(mat, BONE_CONTEXT_FADE, { transparent: true, depthWrite: false })
+        mat.opacity = 0.07
+        mesh.renderOrder = 0
+      }
+    }
   }
 
   /**
@@ -3665,7 +4009,13 @@ export class ThoraxScene {
     this.frameLockedBox(box, focus.view)
   }
 
-  private frameLockedBox(box: THREE.Box3, view: StudyFocus['view']): void {
+  private frameLockedBox(
+    box: THREE.Box3,
+    view: StudyFocus['view'],
+    direction?: THREE.Vector3,
+    up?: THREE.Vector3,
+    contextHalf?: number,
+  ): void {
     this.frameToken += 1
     this.framePending = false
     this.studyFrameLocked = true
@@ -3673,17 +4023,17 @@ export class ThoraxScene {
     const center = box.getCenter(new THREE.Vector3())
     const side = sideFromBox(box.min.x, box.max.x)
     const toward = directionFor(view, side)
-    const dir = new THREE.Vector3(toward.x, toward.y, toward.z)
+    const dir = direction ? direction.clone().normalize() : new THREE.Vector3(toward.x, toward.y, toward.z)
     this.occluderIds = new Set()
     this.lastViewId = view
-    const dist = this.distanceForBox(box, dir, 0.78)
+    const dist = this.distanceForBox(box, dir, 0.78, contextHalf)
     const endPos = center.clone().addScaledVector(dir, dist)
     this.focusTarget.copy(center)
     this.focusDist = dist
     this.framedBox = box.clone()
-    this.camera.up.set(0, 1, 0)
+    this.camera.up.copy(up ?? new THREE.Vector3(0, 1, 0))
     this.controls.minDistance = VIEW_MIN_DISTANCE
-    this.startViewPose(center, endPos, 0.46)
+    this.startViewPose(center, endPos, 0.46, up)
   }
 
   private applyStudyLook(): void {
