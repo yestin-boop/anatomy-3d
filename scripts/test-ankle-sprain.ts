@@ -139,15 +139,16 @@ assert(ankleTypeMatch(pathway, 'hopping and jumping', 'confirm'), 'pathway accep
 assert(!ankleTypeMatch(pathway, 'nordic hamstring curls'), 'the ankle pathway is not the hamstring Nordic example')
 assert(!pathway.reveal.includes('POLICE') && pathway.reveal.includes('RICE'), 'pathway reveal uses RICE')
 
-const ANKLE_SHORT: Record<string, string> = {
+const ANKLE_OFFICIAL: Record<string, string> = {
+  'type-atfl': 'anterior talofibular ligament',
+  'type-cfl': 'calcaneofibular ligament',
+  'type-mechanism': 'inversion and plantarflexion',
+  'type-pathway': 'plyometrics, agility, and sport-specific training',
+}
+const ANKLE_PR21: Record<string, string> = {
   'type-atfl': 'ATFL',
   'type-cfl': 'CFL',
   'type-pathway': 'plyometrics, agility, and sport training',
-}
-const ANKLE_LEGACY: Record<string, string> = {
-  'type-atfl': 'anterior talofibular ligament',
-  'type-cfl': 'calcaneofibular ligament',
-  'type-pathway': 'plyometrics, agility, and sport-specific training',
 }
 const ANKLE_REVEAL: Record<string, string> = {
   'type-atfl':
@@ -164,20 +165,16 @@ for (const step of ANKLE_QUIZ) {
   assert(step.reveal === ANKLE_REVEAL[step.id], `${step.id} reveal stays notes-locked`)
   assert(step.aliases.includes(step.official), `${step.id} official is accepted`)
   assert(ankleTypeMatch(step, step.official), `${step.id} accepts its official`)
-  const short = ANKLE_SHORT[step.id]
-  if (!short) {
-    assert(step.official === 'inversion and plantarflexion', `${step.id} official stays the short mechanism pair`)
-    continue
-  }
-  const legacy = ANKLE_LEGACY[step.id] ?? ''
-  assert(step.official === short, `${step.id} blanks use the short name`)
-  assert(step.aliases.includes(legacy), `${step.id} keeps the previous official as an alias`)
-  assert(ankleTypeMatch(step, legacy), `${step.id} still accepts the previous official`)
-  assert(step.official.length < legacy.length, `${step.id} official is shorter than the previous phrase`)
+  const official = ANKLE_OFFICIAL[step.id]
+  assert(official != null && step.official === official, `${step.id} blanks use the normal name`)
+  const short = ANKLE_PR21[step.id]
+  if (!short) continue
+  assert(step.aliases.includes(short), `${step.id} keeps the short form as an alias`)
+  assert(ankleTypeMatch(step, short), `${step.id} still accepts the short form`)
 }
 assert(
-  pathway.official.includes('plyometrics') && pathway.official.includes('agility') && pathway.official.includes('sport'),
-  'Phase 3 official still names plyometrics, agility, and sport',
+  pathway.official === 'plyometrics, agility, and sport-specific training',
+  'Phase 3 official names plyometrics, agility, and sport-specific training',
 )
 assert(typeStep('type-atfl').hint === 'Grade II inversion sprain. The impression names one lateral ligament.', 'ATFL hint stays notes-locked')
 assert(tapStep('tap-atfl').prompt === 'Tap the anterior talofibular ligament.', 'ATFL tap prompt stays notes-locked')

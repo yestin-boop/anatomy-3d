@@ -258,7 +258,7 @@ const TAP_OTHER = 'Tap the anterior inferior tibiofibular ligament on the right 
 const BONE_WRONG =
   'That is bone. The AITFL is the ligament joining the distal tibia and fibula at the front of the syndesmosis.'
 
-/** Blanks use the short name. Each previous official phrase stays an alias. Hints, reveals, and tap prompts stay on the notes wording. */
+/** Blanks use the normal mid-length name. Previous officials and short forms stay aliases. Hints, reveals, and tap prompts stay on the notes wording. */
 export const HIGH_ANKLE_QUIZ: readonly HighAnkleQuizStep[] = [
   {
     kind: 'type',
@@ -285,7 +285,7 @@ export const HIGH_ANKLE_QUIZ: readonly HighAnkleQuizStep[] = [
     id: 'type-joint',
     region: 'JOINT',
     prompt: 'Type the joint this sprain involves.',
-    official: 'syndesmosis',
+    official: 'inferior tibiofibular joint',
     aliases: [
       'inferior tibiofibular joint',
       'inferior tibiofibular syndesmosis',
@@ -307,7 +307,7 @@ export const HIGH_ANKLE_QUIZ: readonly HighAnkleQuizStep[] = [
     id: 'type-mechanism',
     region: 'MECHANISM',
     prompt: 'Type the mechanism of a high ankle sprain.',
-    official: 'DF + eversion + tibial IR',
+    official: 'dorsiflexion, eversion, and tibial internal rotation',
     aliases: [
       'dorsiflexion and eversion with tibial internal rotation',
       'dorsiflexion and eversion of the ankle with internal rotation of the tibia',
@@ -332,7 +332,7 @@ export const HIGH_ANKLE_QUIZ: readonly HighAnkleQuizStep[] = [
     id: 'type-palpate',
     region: 'PALPATION',
     prompt: 'Type the ligament this assessment tells you to palpate.',
-    official: 'AITFL',
+    official: 'anterior inferior tibiofibular ligament',
     aliases: [
       'anterior inferior tibiofibular ligament',
       'anteroinferior tibiofibular ligament',
@@ -424,8 +424,9 @@ export const HIGH_ANKLE_QUIZ: readonly HighAnkleQuizStep[] = [
     id: 'type-external-rotation',
     region: 'SPECIAL TEST',
     prompt: 'What makes the External rotation test positive?',
-    official: 'pain with ER of the foot',
+    official: 'pain with external rotation of the foot',
     aliases: [
+      'pain with external rotation of the foot',
       'pain with external rotation of the foot and ankle relative to a stabilised tibia',
       'pain reproduced with external rotation of the foot and ankle',
       'pain around the syndesmosis with external rotation',
@@ -444,8 +445,9 @@ export const HIGH_ANKLE_QUIZ: readonly HighAnkleQuizStep[] = [
     id: 'type-phase-1',
     region: 'PHASE 1',
     prompt: 'Type the Phase 1 precautions in this high-ankle pathway.',
-    official: 'NWB with crutches, then CAM boot; avoid painful DF and eversion',
+    official: 'non-weight bearing with crutches, then a CAM boot; avoid painful dorsiflexion and eversion',
     aliases: [
+      'non-weight bearing with crutches, then a CAM boot; avoid painful dorsiflexion and eversion',
       'NWB with crutches, then CAM boot; avoid painful DF and eversion',
       'often non-weight bearing with crutches, progressing to a CAM boot',
       'often non-weight bearing with crutches, progressing to a CAM boot; avoid painful dorsiflexion and eversion',

@@ -745,11 +745,11 @@ async function assertRehabType(cdp) {
     if (!ok) throw new Error(`${surface}: ${check}: ${detail}`)
   }
   const steps = [
-    ['ankle', 'type-atfl', 'Type the ligament this case says is likely involved.', 'ATFL'],
-    ['high-ankle', 'type-palpate', 'Type the ligament this assessment tells you to palpate.', 'AITFL'],
-    ['high-ankle', 'type-mechanism', 'Type the mechanism of a high ankle sprain.', 'DF + eversion + tibial IR'],
+    ['ankle', 'type-atfl', 'Type the ligament this case says is likely involved.', 'anterior talofibular ligament'],
+    ['high-ankle', 'type-palpate', 'Type the ligament this assessment tells you to palpate.', 'anterior inferior tibiofibular ligament'],
+    ['high-ankle', 'type-mechanism', 'Type the mechanism of a high ankle sprain.', 'dorsiflexion, eversion, and tibial internal rotation'],
     ['high-ankle', 'type-squeeze', 'How do you perform the Squeeze test?', 'mid-calf squeeze'],
-    ['hamstring', 'type-totaps-stages', 'Name the six TOTAPS stages.', 'Talk, Observe, Touch, Active, Passive, Skill'],
+    ['hamstring', 'type-totaps-stages', 'Name the six TOTAPS stages.', 'Talk, Observe, Touch, Active movement, Passive movement, Skill test'],
   ]
   let touchPage = null
   const show = async (kind, id, keyboard, width, height, mobile) => {
@@ -778,7 +778,7 @@ async function assertRehabType(cdp) {
       const surface = `${label} ${id}`
       note(surface, 'prompt', report.prompt === prompt, report.prompt)
       note(surface, 'official', report.official === official, report.official)
-      note(surface, 'short blanks', report.wordText === rehabBlanks(official), report.wordText)
+      note(surface, 'official blanks', report.wordText === rehabBlanks(official), report.wordText)
       note(surface, 'context', report.context === 'Rehab · type it', report.context)
       note(surface, 'Skip stays full', report.skipText === 'Skip · show answer', report.skipText)
       note(surface, 'no card', report.promptPanel === false, String(report.promptPanel))
@@ -788,7 +788,7 @@ async function assertRehabType(cdp) {
   }
   const lifted = await show('ankle', 'type-atfl', 300, 390, 844, true)
   const limit = lifted.innerHeight - 300 + 8
-  note('phone ATFL keyboard', 'short blanks', lifted.wordText === rehabBlanks('ATFL'), lifted.wordText)
+  note('phone ATFL keyboard', 'official blanks', lifted.wordText === rehabBlanks('anterior talofibular ligament'), lifted.wordText)
   note('phone ATFL keyboard', 'word above the keyboard', lifted.wordBottom <= limit, `bottom ${lifted.wordBottom} limit ${limit}`)
   note('phone ATFL keyboard', 'prompt above the keyboard', lifted.promptBottom <= limit, `bottom ${lifted.promptBottom} limit ${limit}`)
   note('phone ATFL keyboard', 'Skip above the keyboard', lifted.skipBottom <= limit, `bottom ${lifted.skipBottom} limit ${limit}`)
