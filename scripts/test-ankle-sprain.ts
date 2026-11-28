@@ -133,10 +133,55 @@ assert(!ankleTypeMatch(mechanism, 'plantarflexion'), 'plantarflexion alone is no
 
 const pathway = typeStep('type-pathway')
 assert(ankleTypeMatch(pathway, 'plyometrics, agility, and sport-specific training'), 'pathway accepts the Phase 3 work')
+assert(ankleTypeMatch(pathway, 'plyometrics, agility, and sport training'), 'pathway accepts the short Phase 3 official')
 assert(ankleTypeMatch(pathway, 'plyometrics', 'confirm'), 'pathway accepts plyometrics on Enter')
 assert(ankleTypeMatch(pathway, 'hopping and jumping', 'confirm'), 'pathway accepts hopping and jumping on Enter')
 assert(!ankleTypeMatch(pathway, 'nordic hamstring curls'), 'the ankle pathway is not the hamstring Nordic example')
 assert(!pathway.reveal.includes('POLICE') && pathway.reveal.includes('RICE'), 'pathway reveal uses RICE')
+
+const ANKLE_SHORT: Record<string, string> = {
+  'type-atfl': 'ATFL',
+  'type-cfl': 'CFL',
+  'type-pathway': 'plyometrics, agility, and sport training',
+}
+const ANKLE_LEGACY: Record<string, string> = {
+  'type-atfl': 'anterior talofibular ligament',
+  'type-cfl': 'calcaneofibular ligament',
+  'type-pathway': 'plyometrics, agility, and sport-specific training',
+}
+const ANKLE_REVEAL: Record<string, string> = {
+  'type-atfl':
+    'The impression is a Grade II inversion sprain of the right ankle, with likely involvement of the anterior talofibular ligament (ATFL).',
+  'type-cfl':
+    'Inversion puts the lateral ligaments under high tension. The notes name the ATFL and the CFL, the calcaneofibular ligament.',
+  'type-mechanism':
+    'This mechanism is an inversion plantarflexion sprain: inversion and plantarflexion of the right ankle while cutting.',
+  'type-pathway':
+    'Phase 3 uses plyometrics (hopping, jumping), agility drills, and sport-specific training. Phase 1 is RICE, pain-free range of motion, and isometrics. Phase 2 is progressive weight-bearing, strengthening, and single-leg balance.',
+}
+for (const step of ANKLE_QUIZ) {
+  if (step.kind !== 'type') continue
+  assert(step.reveal === ANKLE_REVEAL[step.id], `${step.id} reveal stays notes-locked`)
+  assert(step.aliases.includes(step.official), `${step.id} official is accepted`)
+  assert(ankleTypeMatch(step, step.official), `${step.id} accepts its official`)
+  const short = ANKLE_SHORT[step.id]
+  if (!short) {
+    assert(step.official === 'inversion and plantarflexion', `${step.id} official stays the short mechanism pair`)
+    continue
+  }
+  const legacy = ANKLE_LEGACY[step.id] ?? ''
+  assert(step.official === short, `${step.id} blanks use the short name`)
+  assert(step.aliases.includes(legacy), `${step.id} keeps the previous official as an alias`)
+  assert(ankleTypeMatch(step, legacy), `${step.id} still accepts the previous official`)
+  assert(step.official.length < legacy.length, `${step.id} official is shorter than the previous phrase`)
+}
+assert(
+  pathway.official.includes('plyometrics') && pathway.official.includes('agility') && pathway.official.includes('sport'),
+  'Phase 3 official still names plyometrics, agility, and sport',
+)
+assert(typeStep('type-atfl').hint === 'Grade II inversion sprain. The impression names one lateral ligament.', 'ATFL hint stays notes-locked')
+assert(tapStep('tap-atfl').prompt === 'Tap the anterior talofibular ligament.', 'ATFL tap prompt stays notes-locked')
+assert(tapStep('tap-cfl').prompt === 'Tap the calcaneofibular ligament.', 'CFL tap prompt stays notes-locked')
 
 const start = anklePoseAt(0)
 const end = anklePoseAt(1)

@@ -140,6 +140,7 @@ export const HAMSTRING_LEARN: readonly HamLearnCard[] = [
 
 const TAP_OTHER = 'Tap a hamstring on the back of the right thigh.'
 
+/** Blanks use the short name. Each previous official phrase stays an alias. Hints, reveals, and tap prompts stay on the notes wording. */
 export const HAMSTRING_QUIZ: readonly HamQuizStep[] = [
   {
     kind: 'tap',
@@ -241,7 +242,7 @@ export const HAMSTRING_QUIZ: readonly HamQuizStep[] = [
     id: 'type-nordic',
     region: 'PHASE 2',
     prompt: 'Type the eccentric exercise named for phase 2.',
-    official: 'nordic hamstring curls',
+    official: 'nordic curls',
     aliases: [
       'nordic hamstring curls',
       'nordic hamstring curl',
@@ -303,8 +304,9 @@ export const HAMSTRING_QUIZ: readonly HamQuizStep[] = [
     id: 'type-totaps-stages',
     region: 'TOTAPS',
     prompt: 'Name the six TOTAPS stages.',
-    official: 'Talk, Observe, Touch, Active movement, Passive movement, and Skill test',
+    official: 'Talk, Observe, Touch, Active, Passive, Skill',
     aliases: [
+      'Talk, Observe, Touch, Active, Passive, Skill',
       'Talk, Observe, Touch, Active movement, Passive movement, and Skill test',
       'talk observe touch active movement passive movement skill test',
       'talk, observe, touch, active movement, passive movement, skill test',

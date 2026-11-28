@@ -733,6 +733,74 @@ async function assertRevision(cdp) {
   console.log(`${table.length} checks passed`)
 }
 
+function rehabBlanks(official) {
+  return String(official || '').replace(/[^\s]/g, '_')
+}
+
+async function assertRehabType(cdp) {
+  const table = []
+  const note = (surface, check, ok, detail) => {
+    table.push({ surface, check, ok, detail: String(detail) })
+    console.log(`${ok ? 'ok' : 'FAIL'}  ${surface}  ${check}  ${detail}`)
+    if (!ok) throw new Error(`${surface}: ${check}: ${detail}`)
+  }
+  const steps = [
+    ['ankle', 'type-atfl', 'Type the ligament this case says is likely involved.', 'ATFL'],
+    ['high-ankle', 'type-palpate', 'Type the ligament this assessment tells you to palpate.', 'AITFL'],
+    ['high-ankle', 'type-mechanism', 'Type the mechanism of a high ankle sprain.', 'DF + eversion + tibial IR'],
+    ['high-ankle', 'type-squeeze', 'How do you perform the Squeeze test?', 'mid-calf squeeze'],
+    ['hamstring', 'type-totaps-stages', 'Name the six TOTAPS stages.', 'Talk, Observe, Touch, Active, Passive, Skill'],
+  ]
+  let touchPage = null
+  const show = async (kind, id, keyboard, width, height, mobile) => {
+    await setViewport(cdp, width, height, mobile)
+    await delay(250)
+    if (touchPage !== mobile) {
+      await openApp(cdp, mobile)
+      touchPage = mobile
+    }
+    return cdp.evaluate(
+      `window.__anatomyQA.showRehabType(${JSON.stringify(kind)}, ${JSON.stringify(id)}, ${keyboard})`,
+      true,
+    )
+  }
+  const capture = async (name) => {
+    const png = await cdp.send('Page.captureScreenshot', { format: 'png' })
+    await writeFile(`${OUT}/rehab-type-${name}.png`, Buffer.from(png.data, 'base64'))
+  }
+  const layouts = [
+    ['phone', 390, 844, true, 0],
+    ['desktop', 1440, 900, false, 0],
+  ]
+  for (const [label, width, height, mobile, keyboard] of layouts) {
+    for (const [kind, id, prompt, official] of steps) {
+      const report = await show(kind, id, keyboard, width, height, mobile)
+      const surface = `${label} ${id}`
+      note(surface, 'prompt', report.prompt === prompt, report.prompt)
+      note(surface, 'official', report.official === official, report.official)
+      note(surface, 'short blanks', report.wordText === rehabBlanks(official), report.wordText)
+      note(surface, 'context', report.context === 'Rehab · type it', report.context)
+      note(surface, 'Skip stays full', report.skipText === 'Skip · show answer', report.skipText)
+      note(surface, 'no card', report.promptPanel === false, String(report.promptPanel))
+      if (label === 'desktop') note(surface, 'Skip stays 44px', report.skipHeight >= 44, `height ${report.skipHeight}`)
+      await capture(`${label}-${id}`)
+    }
+  }
+  const lifted = await show('ankle', 'type-atfl', 300, 390, 844, true)
+  const limit = lifted.innerHeight - 300 + 8
+  note('phone ATFL keyboard', 'short blanks', lifted.wordText === rehabBlanks('ATFL'), lifted.wordText)
+  note('phone ATFL keyboard', 'word above the keyboard', lifted.wordBottom <= limit, `bottom ${lifted.wordBottom} limit ${limit}`)
+  note('phone ATFL keyboard', 'prompt above the keyboard', lifted.promptBottom <= limit, `bottom ${lifted.promptBottom} limit ${limit}`)
+  note('phone ATFL keyboard', 'Skip above the keyboard', lifted.skipBottom <= limit, `bottom ${lifted.skipBottom} limit ${limit}`)
+  note('phone ATFL keyboard', 'Skip stays full', lifted.skipText === 'Skip · show answer', lifted.skipText)
+  await capture('phone-type-atfl-keyboard')
+  const licence = await cdp.evaluate(`(document.querySelector('.footer-attr')?.textContent || '').replace(/\\s+/g, ' ').trim()`)
+  note('attribution', 'BodyParts3D stays', /BodyParts3D/i.test(licence), licence)
+  console.log('REHAB TYPE QA')
+  console.log('surface | check | ok | detail')
+  for (const row of table) console.log(`${row.surface} | ${row.check} | ${row.ok ? 'pass' : 'fail'} | ${row.detail}`)
+}
+
 async function main() {
   await mkdir(OUT, { recursive: true })
   const chrome = launchChrome()
@@ -780,6 +848,11 @@ async function main() {
 
     if (process.env.QA_ASSERT_HIGH_ANKLE === '1') {
       await assertHighAnkleScene(cdp)
+      return
+    }
+
+    if (process.env.QA_ASSERT_REHAB === '1') {
+      await assertRehabType(cdp)
       return
     }
 
