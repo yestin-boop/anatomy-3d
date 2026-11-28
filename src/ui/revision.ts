@@ -11,6 +11,8 @@ export type RevisionId =
   | 'ankle-quiz'
   | 'high-ankle-learn'
   | 'high-ankle-quiz'
+  | 'achilles-learn'
+  | 'achilles-quiz'
   | 'hamstring-learn'
   | 'hamstring-quiz'
 
@@ -29,6 +31,8 @@ const IDS: readonly RevisionId[] = [
   'ankle-quiz',
   'high-ankle-learn',
   'high-ankle-quiz',
+  'achilles-learn',
+  'achilles-quiz',
   'hamstring-learn',
   'hamstring-quiz',
 ]
@@ -38,7 +42,7 @@ export function isRevisionId(value: unknown): value is RevisionId {
 }
 
 export function revisionId(
-  kind: 'actions' | 'ankle' | 'hamstring' | 'high-ankle',
+  kind: 'actions' | 'ankle' | 'hamstring' | 'high-ankle' | 'achilles',
   phase: 'learn' | 'quiz',
 ): RevisionId {
   return `${kind}-${phase}` as RevisionId

@@ -53,6 +53,20 @@ import {
   type HighAnkleLight,
   type HighAnkleSpan,
 } from '../data/highAnkleSprain'
+import {
+  ACHILLES_CALF_FRACTION,
+  ACHILLES_CALF_MESHES,
+  ACHILLES_CONTEXT_BONES,
+  ACHILLES_CONTRAST_LIGAMENTS,
+  ACHILLES_FRAME_MESHES,
+  ACHILLES_RIGHT_CALF,
+  ACHILLES_TENDON_MESHES,
+  achillesHotMeshes,
+  classifyAchillesMesh,
+  type AchillesHit,
+  type AchillesLight,
+  type AchillesSpan,
+} from '../data/achillesTendinopathy'
 import { classifyStudyMesh, type StudyFocus } from '../data/muscleActions'
 
 const _segV = new THREE.Vector3()
@@ -363,10 +377,12 @@ export class ThoraxScene {
   /** 'bone' | 'muscle' | 'cartilage' | 'ligament' per mesh name */
   private kindByName = new Map<string, MeshKind>()
   private ankleCase = false
-  /** Lateral sprain, or the separate high-ankle case that shares this ligament stage. */
-  private ankleProfile: 'lateral' | 'high' = 'lateral'
+  /** Lateral sprain, high-ankle, or the Achilles case. They share this stage and do not share a lesson. */
+  private ankleProfile: 'lateral' | 'high' | 'achilles' = 'lateral'
   private highLight: HighAnkleLight = 'none'
   private highSpan: HighAnkleSpan = 'mortise'
+  private achillesLight: AchillesLight = 'tendon'
+  private achillesSpan: AchillesSpan = 'heel'
   private anklePivot: THREE.Group | null = null
   private ankleHomes: Array<{ mesh: THREE.Mesh; parent: THREE.Object3D }> = []
   private ankleMotion: { t: number; duration: number; playing: boolean } | null = null
@@ -2116,6 +2132,8 @@ export class ThoraxScene {
     this.ankleProfile = 'lateral'
     this.highLight = 'none'
     this.highSpan = 'mortise'
+    this.achillesLight = 'tendon'
+    this.achillesSpan = 'heel'
     this.ankleEmphasis = 'none'
     this.ankleLabelsWanted = false
     this.studyFrameLocked = false
@@ -2137,6 +2155,10 @@ export class ThoraxScene {
 
   isHighAnkleCase(): boolean {
     return this.ankleCase && this.ankleProfile === 'high'
+  }
+
+  isAchillesCase(): boolean {
+    return this.ankleCase && this.ankleProfile === 'achilles'
   }
 
   /**
@@ -2179,6 +2201,43 @@ export class ThoraxScene {
     this.frameHighAnkle(span)
   }
 
+  /**
+   * Achilles stage. The packed calcaneal tendon stays in its resting seat.
+   * No tear gap, no region bands, and no new mesh.
+   */
+  async enterAchillesCase(): Promise<void> {
+    this.ankleProfile = 'achilles'
+    this.achillesLight = 'tendon'
+    this.achillesSpan = 'heel'
+    this.ankleCase = true
+    this.spinning = false
+    this.spin.rotation.y = 0
+    this.viewMode = false
+    this.targetIds = new Set()
+    this.controls.enablePan = true
+    this.controls.screenSpacePanning = true
+    this.controls.minDistance = VIEW_MIN_DISTANCE
+    await this.ensureLigamentsLoaded()
+    await this.ensureMusclesLoaded()
+    if (this.disposed || !this.ankleCase || this.ankleProfile !== 'achilles') return
+    this.buildAnklePivot()
+    this.ankleEmphasis = 'none'
+    this.ankleLigamentsVisible = true
+    this.ankleLabelsWanted = false
+    this.applyAnklePose(anklePoseAt(0))
+    this.frameAchilles(this.achillesSpan)
+  }
+
+  /** Light the tendon, or the tendon and the calf, and frame the posterior heel. */
+  setAchillesFocus(light: AchillesLight, span: AchillesSpan): void {
+    if (!this.ankleCase || this.ankleProfile !== 'achilles') return
+    this.achillesLight = light
+    this.achillesSpan = span
+    this.ankleLabelsWanted = false
+    this.applyAnkleLook()
+    this.frameAchilles(span)
+  }
+
   setAnkleEmphasis(emphasis: AnkleEmphasis): void {
     this.ankleEmphasis = emphasis
     if (this.ankleCase) this.applyAnkleLook()
@@ -2213,6 +2272,44 @@ export class ThoraxScene {
   pickHighAnkle(clientX: number, clientY: number): { hit: HighAnkleHit; meshName: string } | null {
     if (!this.ankleCase || this.ankleProfile !== 'high') return null
     return this.pickLigamentCase(clientX, clientY, classifyHighAnkleMesh, HIGH_ANKLE_RIGHT_LIGAMENTS)
+  }
+
+  pickAchilles(clientX: number, clientY: number): { hit: AchillesHit; meshName: string } | null {
+    if (!this.ankleCase || this.ankleProfile !== 'achilles') return null
+    const rect = this.mainCanvas.getBoundingClientRect()
+    if (rect.width <= 0 || rect.height <= 0) return null
+    this.pointerNdc.set(
+      ((clientX - rect.left) / rect.width) * 2 - 1,
+      -((clientY - rect.top) / rect.height) * 2 + 1,
+    )
+    this.raycaster.setFromCamera(this.pointerNdc, this.camera)
+    const targets: THREE.Object3D[] = []
+    for (const mesh of this.meshByName.values()) {
+      if (mesh.visible) targets.push(mesh)
+    }
+    const hits = this.raycaster.intersectObjects(targets, false)
+    let first: { hit: AchillesHit; meshName: string; distance: number } | null = null
+    let tendon: { hit: AchillesHit; meshName: string; distance: number } | null = null
+    for (const hit of hits) {
+      const obj = hit.object
+      if (!(obj instanceof THREE.Mesh) || !obj.name) continue
+      const kind = this.kindByName.get(obj.name)
+      if (kind !== 'ligament' && kind !== 'bone' && kind !== 'muscle' && kind !== 'tendon') continue
+      const picked = { hit: classifyAchillesMesh(obj.name), meshName: obj.name, distance: hit.distance }
+      if (!first) first = picked
+      if (!tendon && picked.hit === 'tendon') tendon = picked
+      if (first && tendon) break
+    }
+    // The free tendon is a thin cord on the heel. Prefer it when the ray is
+    // on it, and let a calf muscle that is clearly in front keep the tap.
+    if (tendon && (!first || tendon.distance <= first.distance + 0.012)) {
+      return { hit: tendon.hit, meshName: tendon.meshName }
+    }
+    const near = this.nearestRightLigament(0.014, ACHILLES_CONTRAST_LIGAMENTS)
+    if (near && (first == null || near.distance <= first.distance + 0.02)) {
+      return { hit: classifyAchillesMesh(near.name), meshName: near.name }
+    }
+    return first ? { hit: first.hit, meshName: first.meshName } : null
   }
 
   private pickLigamentCase<T extends string>(
@@ -2319,10 +2416,12 @@ export class ThoraxScene {
     inflate: number
     spinning: boolean
     screen: Record<string, { x: number; y: number; inFrame?: boolean } | null>
-    profile: 'lateral' | 'high'
-    span: 'lateral' | HighAnkleSpan
+    profile: 'lateral' | 'high' | 'achilles'
+    span: 'lateral' | HighAnkleSpan | AchillesSpan
     framed: { minY: number; maxY: number; centerY: number } | null
     tibia: { minY: number; maxY: number } | null
+    /** Packed-tendon seat, in millimetres. Null outside the Achilles case. */
+    seat: { distalMeanMm: number | null; proximalMeanMm: number | null } | null
   } {
     const round = (v: THREE.Vector3) => ({
       x: +v.x.toFixed(4),
@@ -2353,6 +2452,11 @@ export class ThoraxScene {
       'pitfl_r',
       'trans_tibfib_r',
       'ptfl_r',
+      'calcaneal_r',
+      'gastroc_med_r',
+      'gastroc_lat_r',
+      'soleus_r',
+      'calcaneus_r',
     ]) {
       points[name] = centerOf(name)
     }
@@ -2368,23 +2472,69 @@ export class ThoraxScene {
         y: Math.round(canvas.top + (-center.y * 0.5 + 0.5) * canvas.height),
       }
     }
-    const pickNames =
-      this.ankleProfile === 'high'
-        ? ['aitfl_r', 'pitfl_r', 'trans_tibfib_r', 'atfl_r', 'cfl_r', 'ptfl_r', 'deltoid_r', 'fibula_r', 'tibia_r']
-        : ['atfl_r', 'cfl_r', 'fibula_r']
-    for (const name of pickNames) {
-      const at = project(name)
-      if (!at) {
+    const pickNames: ReadonlyArray<readonly [string, number]> =
+      this.ankleProfile === 'achilles'
+        ? [
+            ['calcaneal_r', 0.48],
+            ['gastroc_med_r', 0.62],
+            ['gastroc_lat_r', 0.62],
+            ['soleus_r', 0.5],
+            ['calcaneus_r', 0.55],
+            ['atfl_r', 0.5],
+            ['cfl_r', 0.5],
+          ]
+        : this.ankleProfile === 'high'
+          ? [
+              ['aitfl_r', 0.5],
+              ['pitfl_r', 0.5],
+              ['trans_tibfib_r', 0.5],
+              ['atfl_r', 0.5],
+              ['cfl_r', 0.5],
+              ['ptfl_r', 0.5],
+              ['deltoid_r', 0.5],
+              ['fibula_r', 0.5],
+              ['tibia_r', 0.5],
+            ]
+          : [
+              ['atfl_r', 0.5],
+              ['cfl_r', 0.5],
+              ['fibula_r', 0.5],
+            ]
+    for (const [name, yFrac] of pickNames) {
+      const anchor =
+        this.ankleProfile === 'achilles'
+          ? this.meshSurfaceAnchor(name, yFrac)
+          : this.meshAnchor(name, yFrac)
+      if (!anchor || canvas.width <= 0) {
         picks[name] = null
         continue
       }
+      const ndc = anchor.clone().project(this.camera)
+      const at = {
+        x: Math.round(canvas.left + (ndc.x * 0.5 + 0.5) * canvas.width),
+        y: Math.round(canvas.top + (-ndc.y * 0.5 + 0.5) * canvas.height),
+      }
       picks[name] =
-        this.ankleProfile === 'high'
-          ? (this.pickHighAnkle(at.x, at.y)?.hit ?? null)
-          : (this.pickAnkle(at.x, at.y)?.hit ?? null)
+        this.ankleProfile === 'achilles'
+          ? (this.pickAchilles(at.x, at.y)?.hit ?? null)
+          : this.ankleProfile === 'high'
+            ? (this.pickHighAnkle(at.x, at.y)?.hit ?? null)
+            : (this.pickAnkle(at.x, at.y)?.hit ?? null)
     }
     const screen: Record<string, { x: number; y: number; inFrame?: boolean } | null> = {}
-    for (const name of ['talus_r', 'atfl_r', 'calcaneus_r', 'aitfl_r', 'pitfl_r', 'trans_tibfib_r', 'tibia_r']) {
+    for (const name of [
+      'talus_r',
+      'atfl_r',
+      'calcaneus_r',
+      'aitfl_r',
+      'pitfl_r',
+      'trans_tibfib_r',
+      'tibia_r',
+      'calcaneal_r',
+      'gastroc_med_r',
+      'gastroc_lat_r',
+      'soleus_r',
+    ]) {
       const at = project(name)
       if (!at || canvas.width <= 0) {
         screen[name] = null
@@ -2432,9 +2582,21 @@ export class ThoraxScene {
       spinning: this.spinning,
       screen,
       profile: this.ankleProfile,
-      span: this.ankleProfile === 'high' ? this.highSpan : 'lateral',
+      span:
+        this.ankleProfile === 'high'
+          ? this.highSpan
+          : this.ankleProfile === 'achilles'
+            ? this.achillesSpan
+            : 'lateral',
       framed,
       tibia,
+      seat:
+        this.ankleProfile === 'achilles'
+          ? {
+              distalMeanMm: this.meanGapMm('calcaneal_r', 0, 0.34, ['calcaneus_r']),
+              proximalMeanMm: this.meanGapMm('calcaneal_r', 0.66, 1, ACHILLES_RIGHT_CALF),
+            }
+          : null,
     }
   }
 
@@ -2597,6 +2759,143 @@ export class ThoraxScene {
     return box.max.y > box.min.y ? box : null
   }
 
+  /** Posterior right heel. The calf clip uses vertices, so the knee width is not the frame. */
+  private frameAchilles(span: AchillesSpan): void {
+    this.holdUserOrbit = false
+    this.spinning = false
+    this.spin.rotation.y = 0
+    const box = new THREE.Box3()
+    for (const name of ACHILLES_FRAME_MESHES) {
+      const mesh = this.meshByName.get(name)
+      if (!mesh) continue
+      mesh.updateWorldMatrix(true, false)
+      box.expandByObject(mesh)
+    }
+    const fraction = ACHILLES_CALF_FRACTION[span]
+    for (const name of ACHILLES_RIGHT_CALF) {
+      const clip = this.distalVertexBox(name, fraction)
+      if (clip) box.union(clip)
+    }
+    if (box.isEmpty()) return
+    const size = box.getSize(new THREE.Vector3())
+    box.expandByScalar(Math.max(0.012, Math.max(size.x, size.y, size.z) * 0.08))
+    this.frameLockedBox(box, 'posterior')
+  }
+
+  /** World box of the distal fraction of a mesh, from its own vertices. */
+  private distalVertexBox(name: string, fraction: number): THREE.Box3 | null {
+    const mesh = this.meshByName.get(name)
+    if (!mesh) return null
+    mesh.updateWorldMatrix(true, false)
+    const pos = mesh.geometry.getAttribute('position')
+    if (!pos) return null
+    const full = new THREE.Box3().setFromObject(mesh)
+    const height = full.max.y - full.min.y
+    if (!(height > 0)) return null
+    const limit = full.min.y + height * fraction
+    const box = new THREE.Box3()
+    const p = new THREE.Vector3()
+    const step = Math.max(1, Math.floor(pos.count / 5000))
+    for (let i = 0; i < pos.count; i += step) {
+      p.fromBufferAttribute(pos as THREE.BufferAttribute, i).applyMatrix4(mesh.matrixWorld)
+      if (p.y <= limit) box.expandByPoint(p)
+    }
+    return box.isEmpty() ? null : box
+  }
+
+  /** Box center in XZ, at a fraction of the mesh height. 0 is the distal end. */
+  private meshAnchor(name: string, yFrac: number): THREE.Vector3 | null {
+    const mesh = this.meshByName.get(name)
+    if (!mesh) return null
+    mesh.updateWorldMatrix(true, false)
+    const box = new THREE.Box3().setFromObject(mesh)
+    if (box.isEmpty()) return null
+    const point = box.getCenter(new THREE.Vector3())
+    point.y = box.min.y + (box.max.y - box.min.y) * yFrac
+    return point
+  }
+
+  /**
+   * A real vertex near the requested height, on the posterior surface.
+   * The Achilles cord is thinner than its bounding box, so a box centre
+   * can sit inside the heel and miss the tendon.
+   */
+  private meshSurfaceAnchor(name: string, yFrac: number): THREE.Vector3 | null {
+    const mesh = this.meshByName.get(name)
+    if (!mesh) return null
+    mesh.updateWorldMatrix(true, false)
+    const pos = mesh.geometry.getAttribute('position')
+    const box = new THREE.Box3().setFromObject(mesh)
+    if (!pos || box.isEmpty()) return this.meshAnchor(name, yFrac)
+    const y = box.min.y + (box.max.y - box.min.y) * yFrac
+    const band = Math.max((box.max.y - box.min.y) * 0.08, 0.008)
+    const sample = new THREE.Vector3()
+    let best: THREE.Vector3 | null = null
+    const stride = Math.max(1, Math.floor(pos.count / 900))
+    for (let i = 0; i < pos.count; i += stride) {
+      sample.fromBufferAttribute(pos as THREE.BufferAttribute, i).applyMatrix4(mesh.matrixWorld)
+      if (Math.abs(sample.y - y) > band) continue
+      if (!best || sample.z < best.z) best = sample.clone()
+    }
+    return best ?? this.meshAnchor(name, yFrac)
+  }
+
+  /**
+   * Mean nearest-vertex gap, in millimetres of the packed frame.
+   * Stride keeps the check cheap. It is a seat check, not a new fit.
+   */
+  private meanGapMm(
+    source: string,
+    yMinFrac: number,
+    yMaxFrac: number,
+    targets: readonly string[],
+  ): number | null {
+    const mesh = this.meshByName.get(source)
+    if (!mesh) return null
+    mesh.updateWorldMatrix(true, false)
+    const pos = mesh.geometry.getAttribute('position')
+    if (!pos) return null
+    const full = new THREE.Box3().setFromObject(mesh)
+    const height = full.max.y - full.min.y
+    if (!(height > 0)) return null
+    const y0 = full.min.y + height * yMinFrac
+    const y1 = full.min.y + height * yMaxFrac
+    const clouds: THREE.Vector3[] = []
+    const sample = new THREE.Vector3()
+    for (const name of targets) {
+      const other = this.meshByName.get(name)
+      if (!other) continue
+      other.updateWorldMatrix(true, false)
+      const op = other.geometry.getAttribute('position')
+      if (!op) continue
+      const step = Math.max(1, Math.floor(op.count / 700))
+      for (let i = 0; i < op.count; i += step) {
+        clouds.push(sample.fromBufferAttribute(op as THREE.BufferAttribute, i).applyMatrix4(other.matrixWorld).clone())
+      }
+    }
+    if (clouds.length === 0) return null
+    const step = Math.max(1, Math.floor(pos.count / 900))
+    let sum = 0
+    let n = 0
+    const q = new THREE.Vector3()
+    for (let i = 0; i < pos.count; i += step) {
+      q.fromBufferAttribute(pos as THREE.BufferAttribute, i).applyMatrix4(mesh.matrixWorld)
+      if (q.y < y0 || q.y > y1) continue
+      let best = Infinity
+      for (const c of clouds) {
+        const d = q.distanceToSquared(c)
+        if (d < best) best = d
+      }
+      if (Number.isFinite(best)) {
+        sum += Math.sqrt(best)
+        n += 1
+      }
+    }
+    if (n === 0) return null
+    const scale = Math.abs(this.body.scale.x) || 1
+    return +((sum / n) / scale).toFixed(2)
+  }
+
   private paintHighAnkleLigament(name: string, mesh: THREE.Mesh, mat: THREE.MeshStandardMaterial): void {
     const shown = (HIGH_ANKLE_RIGHT_LIGAMENTS as readonly string[]).includes(name) && this.ankleLigamentsVisible
     mesh.visible = shown
@@ -2657,6 +2956,11 @@ export class ThoraxScene {
   }
 
   private applyAnkleLook(): void {
+    if (this.ankleProfile === 'achilles') {
+      this.paintAchillesLook()
+      this.clearAnkleLabels()
+      return
+    }
     const context = new Set<string>(ANKLE_CONTEXT_BONES)
     const emphasized = new Set<string>()
     if (this.ankleEmphasis === 'atfl' || this.ankleEmphasis === 'both') emphasized.add('atfl_r')
@@ -2715,6 +3019,88 @@ export class ThoraxScene {
       }
     }
     this.syncAnkleLabels()
+  }
+
+  /**
+   * Posterior heel. The tendon is the gold cord. Calf muscles stay visible.
+   * Region bands are not painted. The tendon geometry is not moved.
+   */
+  private paintAchillesLook(): void {
+    const hot = new Set<string>(achillesHotMeshes(this.achillesLight))
+    const calf = new Set<string>(ACHILLES_CALF_MESHES)
+    const tendons = new Set<string>(ACHILLES_TENDON_MESHES)
+    const ligaments = new Set<string>(ACHILLES_CONTRAST_LIGAMENTS)
+    const context = new Set<string>(ACHILLES_CONTEXT_BONES)
+    for (const [name, mat] of this.materials) {
+      const mesh = this.meshByName.get(name)
+      if (!mesh) continue
+      const kind = this.kindByName.get(name) ?? 'bone'
+      if (kind === 'cartilage' || name === 'diaphragm') {
+        mesh.visible = false
+        continue
+      }
+      if (kind === 'muscle') {
+        const shown = calf.has(name)
+        mesh.visible = shown
+        if (!shown) continue
+        const right = name.endsWith('_r')
+        if (hot.has(name)) {
+          this.applyPalette(mat, MUSCLE_TARGET, { transparent: false, depthWrite: true })
+          mesh.renderOrder = 8
+        } else {
+          this.applyPalette(mat, VIEW_MUSCLE, { transparent: true, depthWrite: right })
+          mat.opacity = right ? 0.62 : 0.28
+          mat.emissive.setHex(0x000000)
+          mat.emissiveIntensity = 0
+          mesh.renderOrder = 4
+        }
+        mat.needsUpdate = true
+        continue
+      }
+      if (kind === 'tendon') {
+        const shown = tendons.has(name)
+        mesh.visible = shown
+        if (!shown) continue
+        const isHot = hot.has(name)
+        this.applyPalette(mat, isHot ? VIEW_TISSUE_SELECTED : VIEW_TISSUE, {
+          transparent: !isHot,
+          depthWrite: true,
+        })
+        if (!isHot) mat.opacity = 0.4
+        mat.polygonOffset = true
+        mat.polygonOffsetFactor = -2
+        mat.polygonOffsetUnits = -2
+        mesh.renderOrder = 16
+        mat.needsUpdate = true
+        continue
+      }
+      if (kind === 'ligament' || kind === 'fascia') {
+        const shown = ligaments.has(name)
+        mesh.visible = shown
+        if (!shown) continue
+        mat.color.setHex(LIGAMENT_DIM.color)
+        mat.emissive.setHex(LIGAMENT_DIM.emissive)
+        mat.emissiveIntensity = LIGAMENT_DIM.emissiveIntensity
+        mat.opacity = 0.45
+        mat.transparent = true
+        mat.depthWrite = false
+        mat.roughness = 0.42
+        mat.metalness = 0.02
+        mat.side = THREE.DoubleSide
+        mesh.renderOrder = 12
+        mat.needsUpdate = true
+        continue
+      }
+      mesh.visible = true
+      if (context.has(name)) {
+        this.applyPalette(mat, VIEW_BONE, { transparent: false, depthWrite: true })
+        mesh.renderOrder = 2
+      } else {
+        this.applyPalette(mat, BONE_CONTEXT_FADE, { transparent: true, depthWrite: false })
+        mat.opacity = 0.07
+        mesh.renderOrder = 0
+      }
+    }
   }
 
   private ankleLabelState(): { atfl: boolean; cfl: boolean } {
