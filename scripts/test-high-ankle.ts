@@ -113,8 +113,9 @@ assert(HIGH_ANKLE_QUIZ.every((step) => step.span === 'mortise' || step.id === 't
 
 const injury = typeStep('type-injury')
 assert(highAnkleTypeMatch(injury, 'syndesmotic sprain'), 'syndesmotic sprain live-matches')
-assert(highAnkleTypeMatch(injury, 'high ankle sprain', 'confirm'), 'high ankle sprain confirms')
-assert(highAnkleTypeMatch(injury, 'high-ankle sprain', 'confirm'), 'hyphenated high-ankle sprain confirms')
+assert(highAnkleTypeMatch(injury, 'high ankle sprain'), 'high ankle sprain is the short official and live-matches')
+assert(highAnkleTypeMatch(injury, 'high ankle sprain (syndesmotic sprain)'), 'the previous injury official still live-matches')
+assert(highAnkleTypeMatch(injury, 'high-ankle sprain'), 'hyphenated high-ankle sprain live-matches')
 assert(!highAnkleTypeMatch(injury, 'ATFL'), 'ATFL is not the name of this sprain')
 assert(!highAnkleTypeMatch(injury, 'inversion sprain'), 'inversion sprain is not this injury')
 
@@ -169,15 +170,24 @@ assert(gradeHighAnkleTap(tap, null).message === gradeHighAnkleTap(tap, 'other').
 
 const squeeze = typeStep('type-squeeze')
 assert(highAnkleTypeMatch(squeeze, 'squeeze test at mid-calf'), 'squeeze test at mid-calf live-matches')
-assert(highAnkleTypeMatch(squeeze, 'mid-calf squeeze', 'confirm'), 'mid-calf squeeze confirms when a longer alias continues it')
+assert(highAnkleTypeMatch(squeeze, 'mid-calf squeeze'), 'mid-calf squeeze is the short official and live-matches')
+assert(
+  highAnkleTypeMatch(squeeze, 'squeeze the tibia and fibula together at mid-calf, then move distally'),
+  'the previous squeeze official still live-matches',
+)
 assert(highAnkleTypeMatch(squeeze, 'squeeze tibia and fibula at mid-calf'), 'the short squeeze line live-matches')
 assert(!highAnkleTypeMatch(squeeze, 'squeeze', 'confirm'), 'the word squeeze alone is not the test')
 
 const positive = typeStep('type-squeeze-positive')
+assert(!highAnkleTypeMatch(positive, 'pain around the syndesmosis'), 'pain around the syndesmosis alone still waits for Enter')
 assert(highAnkleTypeMatch(positive, 'pain around the syndesmosis', 'confirm'), 'the short positive finding confirms')
 assert(
   highAnkleTypeMatch(positive, 'pain around the syndesmosis after fracture, contusion, and compartment syndrome have been ruled out'),
   'the finding plus the full caveat live-matches',
+)
+assert(
+  highAnkleTypeMatch(positive, 'pain around the syndesmosis, after fracture, contusion, and compartment syndrome have been ruled out'),
+  'the previous squeeze-positive official still live-matches',
 )
 assert(!highAnkleTypeMatch(positive, 'pain', 'confirm'), 'pain alone is not enough')
 assert(!highAnkleTypeMatch(positive, 'fracture', 'confirm'), 'the caveat alone is not the positive finding')
@@ -189,14 +199,77 @@ assert(!highAnkleTypeMatch(external, 'pain', 'confirm'), 'pain alone is not the 
 
 const phase1 = typeStep('type-phase-1')
 assert(highAnkleTypeMatch(phase1, 'avoid painful DF and eversion'), 'the short precaution live-matches')
-assert(highAnkleTypeMatch(phase1, 'NWB with crutches, then CAM boot'), 'the weight-bearing precaution live-matches')
+assert(highAnkleTypeMatch(phase1, 'NWB with crutches, then CAM boot', 'confirm'), 'the weight-bearing precaution confirms')
+assert(highAnkleTypeMatch(phase1, 'NWB with crutches, then CAM boot; avoid painful DF and eversion'), 'the short Phase 1 official live-matches')
+assert(
+  highAnkleTypeMatch(phase1, 'often non-weight bearing with crutches, progressing to a CAM boot; avoid painful dorsiflexion and eversion'),
+  'the previous Phase 1 official still live-matches',
+)
 assert(!highAnkleTypeMatch(phase1, 'RICE', 'confirm'), 'RICE is the lateral pathway, not this precaution')
 
 const phase4 = typeStep('type-phase-4')
 assert(highAnkleTypeMatch(phase4, 'jog-to-run progression', 'confirm'), 'jog-to-run confirms')
+assert(highAnkleTypeMatch(phase4, 'jog-to-run, then cutting and pivoting'), 'the short Phase 4 official live-matches')
+assert(
+  highAnkleTypeMatch(phase4, 'jog-to-run progression, then cutting, pivoting, and sport-specific drills'),
+  'the previous Phase 4 official still live-matches',
+)
 assert(highAnkleTypeMatch(phase4, 'cutting and pivoting'), 'cutting and pivoting live-matches')
 assert(highAnkleTypeMatch(phase4, 'sport-specific drills'), 'sport-specific drills live-matches')
 assert(!highAnkleTypeMatch(phase4, 'plyometrics', 'confirm'), 'plyometrics is not this phase')
+
+const HIGH_SHORT: Record<string, string> = {
+  'type-injury': 'high ankle sprain',
+  'type-joint': 'syndesmosis',
+  'type-mechanism': 'DF + eversion + tibial IR',
+  'type-palpate': 'AITFL',
+  'type-squeeze': 'mid-calf squeeze',
+  'type-squeeze-positive': 'pain around the syndesmosis; fracture, contusion, and compartment syndrome ruled out',
+  'type-external-rotation': 'pain with ER of the foot',
+  'type-phase-1': 'NWB with crutches, then CAM boot; avoid painful DF and eversion',
+  'type-phase-4': 'jog-to-run, then cutting and pivoting',
+}
+const HIGH_LEGACY: Record<string, string> = {
+  'type-injury': 'high ankle sprain (syndesmotic sprain)',
+  'type-joint': 'inferior tibiofibular joint (syndesmosis)',
+  'type-mechanism': 'dorsiflexion and eversion with tibial internal rotation',
+  'type-palpate': 'anterior inferior tibiofibular ligament',
+  'type-squeeze': 'squeeze the tibia and fibula together at mid-calf, then move distally',
+  'type-squeeze-positive': 'pain around the syndesmosis, after fracture, contusion, and compartment syndrome have been ruled out',
+  'type-external-rotation': 'pain with external rotation of the foot and ankle relative to a stabilised tibia',
+  'type-phase-1': 'often non-weight bearing with crutches, progressing to a CAM boot; avoid painful dorsiflexion and eversion',
+  'type-phase-4': 'jog-to-run progression, then cutting, pivoting, and sport-specific drills',
+}
+for (const step of HIGH_ANKLE_QUIZ) {
+  if (step.kind !== 'type') continue
+  const short = HIGH_SHORT[step.id]
+  const legacy = HIGH_LEGACY[step.id] ?? ''
+  assert(short != null && step.official === short, `${step.id} blanks use the short name`)
+  assert(step.aliases.includes(step.official), `${step.id} official is accepted`)
+  assert(step.aliases.includes(legacy), `${step.id} keeps the previous official as an alias`)
+  assert(highAnkleTypeMatch(step, step.official), `${step.id} accepts its short official`)
+  assert(highAnkleTypeMatch(step, legacy), `${step.id} still accepts the previous official`)
+  assert(step.official.length < legacy.length, `${step.id} official is shorter than the previous phrase`)
+}
+assert(
+  positive.official.includes('pain around the syndesmosis') &&
+    positive.official.includes('fracture') &&
+    positive.official.includes('contusion') &&
+    positive.official.includes('compartment syndrome'),
+  'squeeze-positive official keeps the finding and the three ruled-out conditions',
+)
+assert(positive.official !== 'pain around the syndesmosis', 'squeeze-positive official is not only the pain phrase')
+assert(
+  phase1.official.includes('avoid painful DF and eversion') && phase1.official.includes('NWB') && phase1.official.includes('CAM boot'),
+  'Phase 1 official keeps weight-bearing protection and the DF/eversion precaution',
+)
+assert(
+  phase4.official.includes('jog-to-run') && phase4.official.includes('cutting') && phase4.official.includes('pivoting'),
+  'Phase 4 official keeps jog-to-run, cutting, and pivoting',
+)
+assert(typeStep('type-palpate').hint === 'It is the anterior ligament of the syndesmosis, not the ATFL.', 'AITFL hint stays notes-locked')
+assert(typeStep('type-palpate').reveal === 'Palpate the AITFL, the anterior inferior tibiofibular ligament. It is not the ATFL.', 'AITFL reveal stays notes-locked')
+assert(tapStep('tap-aitfl').prompt === 'Tap the anterior inferior tibiofibular ligament.', 'AITFL tap prompt stays notes-locked')
 
 assert(classifyHighAnkleMesh('aitfl_r') === 'aitfl', 'right AITFL classifies as AITFL')
 assert(classifyHighAnkleMesh('pitfl_r') === 'pitfl', 'right PITFL classifies as PITFL')

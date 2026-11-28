@@ -4451,12 +4451,57 @@ async function qaShowHighAnkle(
   }
 }
 
+async function qaShowRehabType(
+  kind: 'ankle' | 'high-ankle' | 'hamstring',
+  id: string,
+  keyboardPx = 0,
+): Promise<Record<string, unknown>> {
+  pinForcedKeyboard(keyboardPx)
+  const quiz = kind === 'ankle' ? ANKLE_QUIZ : kind === 'high-ankle' ? HIGH_ANKLE_QUIZ : HAMSTRING_QUIZ
+  const index = quiz.findIndex((step) => step.id === id)
+  if (index < 0) throw new Error(`unknown rehab step ${kind}/${id}`)
+  if (kind === 'ankle') {
+    if (!state.caseActive || state.caseKind !== 'ankle') await startAnkleCase('quiz', index)
+    else startAnkleQuiz(index)
+  } else if (kind === 'high-ankle') {
+    if (!state.caseActive || state.caseKind !== 'high-ankle') await startHighAnkleCase('quiz', index)
+    else startHighAnkleQuiz(index)
+  } else if (!state.caseActive || state.caseKind !== 'hamstring') {
+    await startStudyCase('hamstring', 'quiz', index)
+  } else {
+    startStudyQuiz(index)
+  }
+  state.typed = ''
+  state.revealing = false
+  hiddenInput.value = ''
+  casePanel.hidden = true
+  playHud.hidden = false
+  renderCaseHud()
+  if (keyboardPx > 0) focusInputNow()
+  else hiddenInput.blur()
+  syncTapHint()
+  syncFramingInsetsNow()
+  await scene.whenPoseSettled()
+  syncFramingInsetsNow()
+  await scene.whenPoseSettled()
+  const step = quiz[index]
+  const skip = skipBtn.getBoundingClientRect()
+  return {
+    ...qaTypeBar(),
+    id: step?.id ?? '',
+    official: step && step.kind === 'type' ? step.official : '',
+    kind,
+    skipHeight: Math.round(skip.height),
+  }
+}
+
 function installQaHooks(): void {
   const api = {
     showQuiz: qaShowQuiz,
     menuSnapshot: qaMenuSnapshot,
     setRevision: qaSetRevision,
     showActionStep: qaShowActionStep,
+    showRehabType: qaShowRehabType,
     answer: qaAnswer,
     showView: qaShowView,
     startView,
