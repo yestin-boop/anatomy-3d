@@ -750,6 +750,14 @@ async function assertRehabType(cdp) {
     ['high-ankle', 'type-mechanism', 'Type the mechanism of a high ankle sprain.', 'dorsiflexion, eversion, and tibial internal rotation'],
     ['high-ankle', 'type-squeeze', 'How do you perform the Squeeze test?', 'mid-calf squeeze'],
     ['hamstring', 'type-totaps-stages', 'Name the six TOTAPS stages.', 'Talk, Observe, Touch, Active movement, Passive movement, Skill test'],
+    ['achilles', 'type-injury', 'Type the overuse condition this case is about.', 'Achilles tendinopathy'],
+    ['achilles', 'type-tendon', 'Type the name of this tendon.', 'Achilles tendon'],
+    ['achilles', 'type-overuse', 'Type the overuse mechanism for this tendon.', 'cumulative microtrauma from running and jumping'],
+    ['achilles', 'type-rupture', 'Type what a rupture of this tendon is.', 'sudden complete or partial tear'],
+    ['achilles', 'type-thompson', 'What happens in Thompson’s test when this tendon is ruptured?', 'calf squeeze does not move the foot'],
+    ['achilles', 'type-tendinosis', 'What does the lecture note beside tendinosis?', 'chronic degeneration, no inflammation'],
+    ['achilles', 'type-phase', 'Type the first phase of this tendinopathy rehab pathway.', 'symptom-management'],
+    ['achilles', 'type-return', 'Type the return-to-sport status in this pathway.', 'minimal symptoms, and not daily morning stiffness'],
   ]
   let touchPage = null
   const show = async (kind, id, keyboard, width, height, mobile) => {
@@ -794,9 +802,127 @@ async function assertRehabType(cdp) {
   note('phone ATFL keyboard', 'Skip above the keyboard', lifted.skipBottom <= limit, `bottom ${lifted.skipBottom} limit ${limit}`)
   note('phone ATFL keyboard', 'Skip stays full', lifted.skipText === 'Skip · show answer', lifted.skipText)
   await capture('phone-type-atfl-keyboard')
+  const achillesKb = await show('achilles', 'type-return', 300, 390, 844, true)
+  const achillesLimit = achillesKb.innerHeight - 300 + 8
+  const achillesOfficial = 'minimal symptoms, and not daily morning stiffness'
+  note('phone Achilles keyboard', 'official blanks', achillesKb.wordText === rehabBlanks(achillesOfficial), achillesKb.wordText)
+  note('phone Achilles keyboard', 'word above the keyboard', achillesKb.wordBottom <= achillesLimit, `bottom ${achillesKb.wordBottom} limit ${achillesLimit}`)
+  note('phone Achilles keyboard', 'prompt above the keyboard', achillesKb.promptBottom <= achillesLimit, `bottom ${achillesKb.promptBottom} limit ${achillesLimit}`)
+  note('phone Achilles keyboard', 'Skip above the keyboard', achillesKb.skipBottom <= achillesLimit, `bottom ${achillesKb.skipBottom} limit ${achillesLimit}`)
+  note('phone Achilles keyboard', 'Skip stays full', achillesKb.skipText === 'Skip · show answer', achillesKb.skipText)
+  await capture('phone-type-return-keyboard')
   const licence = await cdp.evaluate(`(document.querySelector('.footer-attr')?.textContent || '').replace(/\\s+/g, ' ').trim()`)
   note('attribution', 'BodyParts3D stays', /BodyParts3D/i.test(licence), licence)
   console.log('REHAB TYPE QA')
+  console.log('surface | check | ok | detail')
+  for (const row of table) console.log(`${row.surface} | ${row.check} | ${row.ok ? 'pass' : 'fail'} | ${row.detail}`)
+}
+
+async function assertAchillesScene(cdp) {
+  const table = []
+  const note = (surface, check, ok, detail) => {
+    table.push({ surface, check, ok, detail: String(detail) })
+    console.log(`${ok ? 'ok' : 'FAIL'}  ${surface}  ${check}  ${detail}`)
+    if (!ok) throw new Error(`${surface}: ${check}: ${detail}`)
+  }
+  let touchPage = null
+  const show = async (mode, width, height, mobile) => {
+    await setViewport(cdp, width, height, mobile)
+    await delay(250)
+    if (touchPage !== mobile) {
+      await openApp(cdp, mobile)
+      touchPage = mobile
+    }
+    return cdp.evaluate(`window.__anatomyQA.showAchilles(${JSON.stringify(mode)}, 0)`, true)
+  }
+  const shot = async (name) => {
+    const png = await cdp.send('Page.captureScreenshot', { format: 'png' })
+    await writeFile(`${OUT}/achilles-${name}.png`, Buffer.from(png.data, 'base64'))
+  }
+  const layouts = [
+    ['phone', 390, 844, true],
+    ['desktop', 1440, 900, false],
+  ]
+  for (const [label, width, height, mobile] of layouts) {
+    const menu = await show('menu', width, height, mobile)
+    note(label, 'menu title', menu.title === 'Achilles tendinopathy', menu.title)
+    note(label, 'menu subtitle', menu.sub === 'leisure basketball · running and jumping', menu.sub)
+    note(label, 'menu region', menu.region === 'ankle-foot' && menu.regionLabel === 'Ankle & foot', `${menu.region} ${menu.regionLabel}`)
+    note(label, 'menu row visible', menu.visible === true && menu.hudHidden === true && menu.panelHidden === true, JSON.stringify({ visible: menu.visible, hud: menu.hudHidden }))
+    await shot(`${label}-menu`)
+
+    const learn = await show('learn', width, height, mobile)
+    note(label, 'learn title', learn.title === 'Tendinopathy, or a tear', learn.title)
+    note(label, 'learn kicker', learn.kicker === 'Rehab · Achilles', learn.kicker)
+    note(label, 'study quiet', learn.studyQuiet === true && learn.ankleClass === false, `quiet ${learn.studyQuiet} ankle-class ${learn.ankleClass}`)
+    note(label, 'no type-it in study', learn.hudHidden === true && learn.panelHidden === false && learn.replayHidden === true, `hud ${learn.hudHidden} panel ${learn.panelHidden} replay ${learn.replayHidden}`)
+    note(label, 'achilles profile', learn.profile === 'achilles' && learn.active === true && learn.span === 'heel', `${learn.profile} ${learn.span}`)
+    note(label, 'posterior', learn.viewId === 'posterior', learn.viewId)
+    note(label, 'resting and still', learn.spinning === false && learn.pose && Math.abs(learn.pose.plantar) < 0.02 && Math.abs(learn.pose.invert) < 0.02, JSON.stringify(learn.pose))
+    const cam = learn.camera
+    const tgt = learn.target
+    note(label, 'camera behind the heel', cam && tgt && cam.z < tgt.z, `cam ${cam?.z} target ${tgt?.z}`)
+    note(label, 'camera on the right side', cam && tgt && cam.x < tgt.x, `cam ${cam?.x} target ${tgt?.x}`)
+    note(label, 'tendon loaded', Boolean(learn.points?.calcaneal_r), learn.points?.calcaneal_r ? 'yes' : 'missing')
+    note(label, 'tendon on screen', learn.screen?.calcaneal_r?.inFrame === true, JSON.stringify(learn.screen?.calcaneal_r))
+    note(label, 'calcaneus on screen', learn.screen?.calcaneus_r?.inFrame === true, JSON.stringify(learn.screen?.calcaneus_r))
+    const tibia = learn.tibia
+    const belowKnee = Boolean(learn.framed && tibia && learn.framed.maxY < tibia.maxY - 0.04)
+    note(label, 'frame stops short of the knee', belowKnee, `frameMax ${learn.framed?.maxY} tibia ${tibia?.minY}–${tibia?.maxY}`)
+    const distal = learn.seat?.distalMeanMm
+    const proximal = learn.seat?.proximalMeanMm
+    note(label, 'tendon seats on the calcaneus', typeof distal === 'number' && distal <= 12, `distal mean ${distal} mm`)
+    note(label, 'tendon meets the calf', typeof proximal === 'number' && proximal <= 12, `proximal mean ${proximal} mm`)
+    await shot(`${label}-learn`)
+
+    const anatomy = await show('anatomy', width, height, mobile)
+    note(label, 'anatomy title', anatomy.title === 'Achilles tendon', anatomy.title)
+    note(label, 'anatomy span', anatomy.span === 'calf' && anatomy.profile === 'achilles', anatomy.span)
+    note(
+      label,
+      'calf on screen',
+      anatomy.screen?.gastroc_med_r?.inFrame === true && anatomy.screen?.soleus_r?.inFrame === true,
+      JSON.stringify({ gastroc: anatomy.screen?.gastroc_med_r, soleus: anatomy.screen?.soleus_r }),
+    )
+    await shot(`${label}-anatomy`)
+
+    const thompson = await show('thompson', width, height, mobile)
+    note(label, 'thompson title', thompson.title === "Thompson's test", thompson.title)
+    note(label, 'thompson calf frame', thompson.span === 'calf', thompson.span)
+    note(label, 'thompson tendon on screen', thompson.screen?.calcaneal_r?.inFrame === true, JSON.stringify(thompson.screen?.calcaneal_r))
+    await shot(`${label}-thompson`)
+
+    const typed = await show('type', width, height, mobile)
+    note(label, 'type prompt', typed.prompt === 'Type the overuse condition this case is about.', typed.prompt)
+    note(label, 'type label', typed.label === 'TYPE IT · NAME IT', typed.label)
+    note(label, 'type context', typed.context === 'Rehab · type it', typed.context)
+    note(label, 'official blanks', typed.wordText === rehabBlanks('Achilles tendinopathy'), typed.wordText)
+    note(label, 'Skip stays full', typed.skipText === 'Skip · show answer', typed.skipText)
+    await shot(`${label}-type`)
+
+    const tap = await show('tap', width, height, mobile)
+    note(label, 'tap prompt', tap.prompt === 'Tap the Achilles tendon.', tap.prompt)
+    note(label, 'tap label', tap.label === 'TAP IT · TAP THE TENDON', tap.label)
+    note(label, 'tap context', tap.context === 'Rehab · tap it', tap.context)
+    note(label, 'tap tendon', tap.picks?.calcaneal_r === 'tendon', tap.picks?.calcaneal_r)
+    note(label, 'tap gastrocnemius', tap.picks?.gastroc_med_r === 'gastrocnemius', tap.picks?.gastroc_med_r)
+    note(label, 'tap stays still', tap.spinning === false && tap.pose && Math.abs(tap.pose.plantar) < 0.02, JSON.stringify(tap.pose))
+    await shot(`${label}-tap`)
+  }
+
+  const lifted = await cdp.evaluate(`window.__anatomyQA.showRehabType('achilles', 'type-return', 300)`, true)
+  const limit = lifted.innerHeight - 300 + 8
+  const official = 'minimal symptoms, and not daily morning stiffness'
+  note('phone keyboard', 'official blanks', lifted.wordText === rehabBlanks(official), lifted.wordText)
+  note('phone keyboard', 'word above the keyboard', lifted.wordBottom <= limit, `bottom ${lifted.wordBottom} limit ${limit}`)
+  note('phone keyboard', 'prompt above the keyboard', lifted.promptBottom <= limit, `bottom ${lifted.promptBottom} limit ${limit}`)
+  note('phone keyboard', 'Skip above the keyboard', lifted.skipBottom <= limit, `bottom ${lifted.skipBottom} limit ${limit}`)
+  note('phone keyboard', 'Skip stays full', lifted.skipText === 'Skip · show answer', lifted.skipText)
+  await shot('phone-return-keyboard')
+
+  const licence = await cdp.evaluate(`(document.querySelector('.footer-attr')?.textContent || '').replace(/\\s+/g, ' ').trim()`)
+  note('attribution', 'BodyParts3D stays', /BodyParts3D/i.test(licence), licence)
+  console.log('ACHILLES QA')
   console.log('surface | check | ok | detail')
   for (const row of table) console.log(`${row.surface} | ${row.check} | ${row.ok ? 'pass' : 'fail'} | ${row.detail}`)
 }
@@ -848,6 +974,11 @@ async function main() {
 
     if (process.env.QA_ASSERT_HIGH_ANKLE === '1') {
       await assertHighAnkleScene(cdp)
+      return
+    }
+
+    if (process.env.QA_ASSERT_ACHILLES === '1') {
+      await assertAchillesScene(cdp)
       return
     }
 
