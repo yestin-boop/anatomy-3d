@@ -612,6 +612,10 @@ html.touch-quiz .target-word {
   html.touch-quiz.sport-quiz:not(.phone-landscape) .tap-hint {
     margin: var(--space-1) 0 0;
   }
+  html.touch-quiz.sport-quiz:not(.phone-landscape) .type-choices {
+    margin-top: var(--space-2);
+    gap: 6px;
+  }
   html.touch-quiz.sport-quiz:not(.phone-landscape) .answer-actions {
     margin-top: var(--space-1);
   }
@@ -762,6 +766,66 @@ html.touch-quiz .target-word {
   margin-right: 0.4em;
   color: var(--wrong);
   font-weight: 700;
+}
+
+.type-choices {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 6px;
+  width: min(560px, 100%);
+  margin: var(--space-3) auto 0;
+}
+.type-choices[hidden] { display: none !important; }
+.type-choice {
+  appearance: none;
+  margin: 0;
+  min-height: var(--target-min);
+  padding: 8px 12px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-subtle);
+  background: var(--surface-inset);
+  color: var(--text-secondary);
+  font: 500 var(--type-caption)/1.3 var(--font);
+  letter-spacing: 0.01em;
+  text-align: center;
+  cursor: pointer;
+  text-shadow: var(--text-halo);
+  touch-action: manipulation;
+}
+.type-choice:active:not(:disabled) { transform: scale(0.985); }
+.type-choice:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+.type-choice.is-wrong {
+  color: var(--wrong);
+  border-color: var(--wrong);
+}
+html.touch-quiz .prompt-block.has-choices .type-choices {
+  margin-top: var(--space-2);
+}
+html.touch-quiz.keyboard-open .prompt-block.has-choices .type-label {
+  display: none;
+}
+html.touch-quiz.keyboard-open .prompt-block.has-choices .gloss-line {
+  margin-top: 0;
+}
+html.touch-quiz.keyboard-open .prompt-block.has-choices .type-choices {
+  margin-top: var(--space-1);
+  gap: 4px;
+}
+html.touch-quiz.keyboard-open .prompt-block.has-choices .type-choice {
+  min-height: var(--target-min);
+  padding: 4px 8px;
+}
+html.touch-quiz.keyboard-open .prompt-block.has-choices .answer-actions {
+  margin-top: var(--space-1);
+}
+html.touch-quiz.keyboard-open .prompt-block.has-choices .target-word,
+html.touch-quiz.keyboard-open .prompt-block.has-choices .target-word.is-long {
+  font-size: clamp(0.95rem, 3.4vw, 1.2rem);
+  line-height: 1.2;
 }
 
 .tap-hint {
@@ -1915,6 +1979,17 @@ html.touch-quiz.phone-landscape .case-quiz .gloss-line {
 html.touch-quiz.phone-landscape .case-quiz .prompt-block {
   flex-wrap: wrap;
   width: min(640px, 92vw);
+}
+html.touch-quiz.phone-landscape .case-quiz .type-choices {
+  flex: 1 1 100%;
+  flex-direction: row;
+  flex-wrap: wrap;
+  margin-top: var(--space-1);
+}
+html.touch-quiz.phone-landscape .case-quiz .type-choice {
+  flex: 1 1 42%;
+  min-height: var(--target-min);
+  padding: 4px 8px;
 }
 html.touch-quiz.phone-landscape .target-word,
 html.touch-quiz.phone-landscape.ankle-case .target-word {

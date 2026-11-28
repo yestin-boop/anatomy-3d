@@ -570,6 +570,160 @@ async function saveShot(cdp, name) {
   await writeFile(`${OUT}/${name}.png`, Buffer.from(png.data, 'base64'))
 }
 
+async function assertSportTypeIt(cdp) {
+  const table = []
+  const note = (surface, check, ok, detail) => {
+    table.push({ surface, check, ok, detail })
+    console.log(`${ok ? 'ok' : 'FAIL'}  ${surface}  ${check}  ${detail}`)
+    if (!ok) failRevision(surface, `${check}: ${detail}`)
+  }
+
+  await setViewport(cdp, 390, 844, true)
+  await openApp(cdp, true)
+  const phone = await cdp.evaluate(`window.__anatomyQA.showActionStep('type-rectus', 0)`, true)
+  note('phone sport type-it', 'rectus prompt', phone.prompt === 'Type what this muscle does at the knee and the hip.', phone.prompt)
+  note('phone sport type-it', 'context', phone.context === 'Sport · type it', phone.context)
+  note('phone sport type-it', 'Skip is compact', phone.skipHeight >= 30 && phone.skipHeight <= 36, `height ${phone.skipHeight}`)
+  note('phone sport type-it', 'Skip label is Skip', phone.skipText === 'Skip', phone.skipText)
+  const choiceTops = (phone.choices || []).map((choice) => choice.top)
+  const choiceBottoms = (phone.choices || []).map((choice) => choice.bottom)
+  note(
+    'phone sport type-it',
+    'choices under the prompt',
+    phone.choiceCount >= 3 && choiceTops.length > 0 && Math.min(...choiceTops) >= phone.glossBottom - 2,
+    `${phone.choiceCount} first ${choiceTops[0]} gloss ${phone.glossBottom}`,
+  )
+  note(
+    'phone sport type-it',
+    'cue under the choices',
+    choiceBottoms.length > 0 && phone.hintTop >= Math.max(...choiceBottoms) - 2 && phone.hintTop - Math.max(...choiceBottoms) <= 16,
+    `hint ${phone.hintTop} choices ${Math.max(...choiceBottoms, 0)}`,
+  )
+  note('phone sport type-it', 'Skip sits under the cue', phone.gapHintToSkip >= 0 && phone.gapHintToSkip <= 14, `gap ${phone.gapHintToSkip}`)
+  note('phone sport type-it', 'TAP TO TYPE', phone.tapVisible === true && phone.tapText === 'Tap to type', `${phone.tapText} visible ${phone.tapVisible}`)
+  note('phone sport type-it', 'answer word is not a field', phone.promptDisplay !== 'flex' && !phone.promptPanel, `${phone.promptDisplay} panel ${phone.promptPanel}`)
+  note('phone sport type-it', 'menu chip is compact', phone.menuHeight >= 28 && phone.menuHeight <= 36, `height ${phone.menuHeight}`)
+  note('phone sport type-it', 'look chip is compact', phone.lookHeight >= 28 && phone.lookHeight <= 36, `height ${phone.lookHeight}`)
+  await saveShot(cdp, 'phone-sport-type-rectus')
+
+  const phoneKb = await cdp.evaluate(`window.__anatomyQA.showActionStep('type-rectus', 300)`, true)
+  const limit = phoneKb.innerHeight - 300 + 8
+  note('phone sport keyboard', 'prompt above the keyboard', phoneKb.glossBottom <= limit && phoneKb.glossTop >= phoneKb.chromeBottom - 2, `gloss ${phoneKb.glossTop}-${phoneKb.glossBottom} chrome ${phoneKb.chromeBottom} limit ${limit}`)
+  note('phone sport keyboard', 'Skip above the keyboard', phoneKb.skipBottom <= limit, `bottom ${phoneKb.skipBottom} limit ${limit}`)
+  note(
+    'phone sport keyboard',
+    'choices above the keyboard',
+    (phoneKb.choices || []).length >= 3 &&
+      phoneKb.choices.every((choice) => choice.top >= phoneKb.chromeBottom - 2 && choice.bottom <= limit && choice.height >= 32),
+    JSON.stringify(phoneKb.choices),
+  )
+  note('phone sport keyboard', 'Skip stays compact', phoneKb.skipHeight >= 30 && phoneKb.skipHeight <= 36, `height ${phoneKb.skipHeight}`)
+  note('phone sport keyboard', 'Skip label is Skip', phoneKb.skipText === 'Skip', phoneKb.skipText)
+  await saveShot(cdp, 'phone-sport-type-keyboard')
+
+  const glut = await cdp.evaluate(`window.__anatomyQA.showActionStep('type-glut-med', 300)`, true)
+  const glutLimit = glut.innerHeight - 300 + 8
+  const glutBlanks = (glut.wordText || '').replace(/\s+/g, '')
+  note('phone glute med', 'short official blanks', glutBlanks === '_________', glut.wordText)
+  note('phone glute med', 'Skip label is Skip', glut.skipText === 'Skip' && glut.skipWidth <= 72, `${glut.skipText} ${glut.skipWidth}x${glut.skipHeight}`)
+  note('phone glute med', 'Skip above the keyboard', glut.skipBottom <= glutLimit, `bottom ${glut.skipBottom} limit ${glutLimit}`)
+  note('phone glute med', 'menu chip is compact', glut.menuHeight >= 28 && glut.menuHeight <= 36, `height ${glut.menuHeight}`)
+  note('phone glute med', 'look chip is compact', glut.lookHeight >= 28 && glut.lookHeight <= 36, `height ${glut.lookHeight}`)
+  await saveShot(cdp, 'phone-sport-glut-med-keyboard')
+  const glutOpen = await cdp.evaluate(`window.__anatomyQA.showActionStep('type-glut-med', 0)`, true)
+  note('phone glute med open', 'Skip stays Skip', glutOpen.skipText === 'Skip', glutOpen.skipText)
+  note('phone glute med open', 'TAP TO TYPE', glutOpen.tapVisible === true && glutOpen.tapText === 'Tap to type', `${glutOpen.tapText} visible ${glutOpen.tapVisible}`)
+  note('phone glute med open', 'no choices', glutOpen.choiceCount === 0, String(glutOpen.choiceCount))
+  await saveShot(cdp, 'phone-sport-glut-med')
+
+  const serratus = await cdp.evaluate(`window.__anatomyQA.showActionStep('type-serratus', 0)`, true)
+  const serratusTexts = (serratus.choices || []).map((choice) => choice.text)
+  note('phone serratus', 'choices include the official', serratusTexts.includes('protraction and upward rotation'), serratusTexts.join(' | '))
+  note(
+    'phone serratus',
+    'choices on screen',
+    (serratus.choices || []).length >= 3 &&
+      serratus.choices.every((choice) => choice.top >= serratus.chromeBottom - 2 && choice.bottom <= serratus.innerHeight - 4 && choice.height >= 32),
+    JSON.stringify(serratus.choices),
+  )
+  await saveShot(cdp, 'phone-sport-serratus')
+  const serratusEarly = await cdp.evaluate(`window.__anatomyQA.answer('protraction')`, true)
+  note('phone serratus', 'live protraction does not finish', serratusEarly.revealing === false && serratusEarly.typed === 'protraction', JSON.stringify(serratusEarly))
+  await saveShot(cdp, 'phone-sport-serratus-protraction')
+  await cdp.evaluate(`window.__anatomyQA.armRevealHold()`)
+  const serratusFull = await cdp.evaluate(
+    `window.__anatomyQA.showActionStep('type-serratus', 0).then(() => window.__anatomyQA.answer('protraction and upward rotation'))`,
+    true,
+  )
+  note('phone serratus', 'full official auto-succeeds', serratusFull.revealing === true, JSON.stringify(serratusFull))
+  await saveShot(cdp, 'phone-sport-serratus-official')
+  await cdp.evaluate(`window.__anatomyQA.releaseRevealHold()`)
+  const serratusKb = await cdp.evaluate(`window.__anatomyQA.showActionStep('type-serratus', 300)`, true)
+  const serratusLimit = serratusKb.innerHeight - 300 + 8
+  note(
+    'phone serratus keyboard',
+    'prompt, Skip, and choices stay above the keyboard',
+    serratusKb.glossTop >= serratusKb.chromeBottom - 2 &&
+      serratusKb.glossBottom <= serratusLimit &&
+      serratusKb.skipBottom <= serratusLimit &&
+      (serratusKb.choices || []).length >= 3 &&
+      serratusKb.choices.every((choice) => choice.top >= serratusKb.chromeBottom - 2 && choice.bottom <= serratusLimit && choice.height >= 32),
+    JSON.stringify({ gloss: [serratusKb.glossTop, serratusKb.glossBottom], skip: serratusKb.skipBottom, choices: serratusKb.choices }),
+  )
+  await saveShot(cdp, 'phone-sport-serratus-keyboard')
+
+  const adduct = await cdp.evaluate(`window.__anatomyQA.showActionStep('type-glut-med', 0).then(() => window.__anatomyQA.answer('adduction'))`, true)
+  note('phone sport answer', 'adduction is not abduction', adduct.revealing === false && adduct.id === 'type-glut-med', JSON.stringify(adduct))
+  const abduct = await cdp.evaluate(`window.__anatomyQA.showActionStep('type-glut-med', 0).then(() => window.__anatomyQA.answer('abduction'))`, true)
+  note('phone sport answer', 'abduction is enough', abduct.revealing === true && abduct.id === 'type-glut-med', JSON.stringify(abduct))
+
+  await setViewport(cdp, 1440, 900, false)
+  await openApp(cdp, false)
+  const desk = await cdp.evaluate(`window.__anatomyQA.showActionStep('type-rectus', 0)`, true)
+  note('desktop sport type-it', 'rectus prompt', desk.prompt === 'Type what this muscle does at the knee and the hip.', desk.prompt)
+  note('desktop sport type-it', 'Skip stays 44px', desk.skipHeight >= 44, `height ${desk.skipHeight}`)
+  note('desktop sport type-it', 'Skip label stays full', desk.skipText === 'Skip · show answer', desk.skipText)
+  note('desktop sport type-it', 'no TAP TO TYPE', desk.tapVisible === false, `visible ${desk.tapVisible} display ${desk.hintDisplay}`)
+  note('desktop sport type-it', 'prompt is not a landscape row', desk.promptDisplay !== 'flex' && !desk.promptPanel, desk.promptDisplay)
+  note('desktop sport type-it', 'answer word stays the display', (desk.wordText || '').includes('_') || (desk.wordText || '').length > 10, desk.wordText)
+  await saveShot(cdp, 'desktop-sport-type-rectus')
+
+  await setViewport(cdp, 844, 390, true)
+  const land = await cdp.evaluate(`window.__anatomyQA.showActionStep('type-glut-med', 0)`, true)
+  note('landscape sport', 'Skip label stays full', land.skipText === 'Skip · show answer', land.skipText)
+  note('landscape sport', 'Skip stays 44px', land.skipHeight >= 44, `height ${land.skipHeight}`)
+  note('landscape sport', 'menu stays 44px', land.menuHeight >= 44, `height ${land.menuHeight}`)
+  note('landscape sport', 'look stays 44px', land.lookHeight >= 44, `height ${land.lookHeight}`)
+
+  await setViewport(cdp, 1440, 900, false)
+  const deskGlut = await cdp.evaluate(`window.__anatomyQA.showActionStep('type-glut-med', 0)`, true)
+  note('desktop glute med', 'short blanks', (deskGlut.wordText || '').replace(/\s+/g, '') === '_________', deskGlut.wordText)
+  note('desktop glute med', 'Skip label stays full', deskGlut.skipText === 'Skip · show answer', deskGlut.skipText)
+  note('desktop glute med', 'Skip stays 44px', deskGlut.skipHeight >= 44, `height ${deskGlut.skipHeight}`)
+  await saveShot(cdp, 'desktop-sport-glut-med')
+
+  const field = await cdp.evaluate(`(() => {
+    const input = document.querySelector('#answer')
+    return {
+      autocomplete: input.getAttribute('autocomplete'),
+      autocorrect: input.getAttribute('autocorrect'),
+      spellcheck: input.getAttribute('spellcheck'),
+      autocapitalize: input.getAttribute('autocapitalize'),
+    }
+  })()`)
+  note(
+    'type-it field',
+    'autocomplete stays off',
+    field.autocomplete === 'off' && field.autocorrect === 'off' && field.spellcheck === 'false' && field.autocapitalize === 'none',
+    JSON.stringify(field),
+  )
+
+  console.log('\nQA table')
+  console.log(['surface', 'check', 'result'].join('\t'))
+  for (const row of table) console.log([row.surface, row.check, row.ok ? 'pass' : 'fail'].join('\t'))
+  console.log(`${table.length} checks passed`)
+}
+
 async function assertRevision(cdp) {
   const table = []
   const note = (surface, check, ok, detail) => {
@@ -644,93 +798,7 @@ async function assertRevision(cdp) {
   await checkMenu('phone', 390, 844, true)
   await checkMenu('desktop', 1440, 900, false)
 
-  await setViewport(cdp, 390, 844, true)
-  await openApp(cdp, true)
-  const phone = await cdp.evaluate(`window.__anatomyQA.showActionStep('type-rectus', 0)`, true)
-  note('phone sport type-it', 'rectus prompt', phone.prompt === 'Type what this muscle does at the knee and the hip.', phone.prompt)
-  note('phone sport type-it', 'context', phone.context === 'Sport · type it', phone.context)
-  note('phone sport type-it', 'Skip is compact', phone.skipHeight >= 30 && phone.skipHeight <= 36, `height ${phone.skipHeight}`)
-  note('phone sport type-it', 'Skip label is Skip', phone.skipText === 'Skip', phone.skipText)
-  note('phone sport type-it', 'cue sits under the prompt', phone.gapPromptToHint >= 0 && phone.gapPromptToHint <= 12, `gap ${phone.gapPromptToHint}`)
-  note('phone sport type-it', 'Skip sits under the cue', phone.gapHintToSkip >= 0 && phone.gapHintToSkip <= 14, `gap ${phone.gapHintToSkip}`)
-  note('phone sport type-it', 'TAP TO TYPE', phone.tapVisible === true && phone.tapText === 'Tap to type', `${phone.tapText} visible ${phone.tapVisible}`)
-  note('phone sport type-it', 'answer word is not a field', phone.promptDisplay !== 'flex' && !phone.promptPanel, `${phone.promptDisplay} panel ${phone.promptPanel}`)
-  note('phone sport type-it', 'menu chip is compact', phone.menuHeight >= 28 && phone.menuHeight <= 36, `height ${phone.menuHeight}`)
-  note('phone sport type-it', 'look chip is compact', phone.lookHeight >= 28 && phone.lookHeight <= 36, `height ${phone.lookHeight}`)
-  await saveShot(cdp, 'phone-sport-type-rectus')
-
-  const phoneKb = await cdp.evaluate(`window.__anatomyQA.showActionStep('type-rectus', 300)`, true)
-  const limit = phoneKb.innerHeight - 300 + 8
-  note('phone sport keyboard', 'prompt above the keyboard', phoneKb.promptBottom <= limit, `bottom ${phoneKb.promptBottom} limit ${limit}`)
-  note('phone sport keyboard', 'Skip above the keyboard', phoneKb.skipBottom <= limit, `bottom ${phoneKb.skipBottom} limit ${limit}`)
-  note('phone sport keyboard', 'Skip stays compact', phoneKb.skipHeight >= 30 && phoneKb.skipHeight <= 36, `height ${phoneKb.skipHeight}`)
-  note('phone sport keyboard', 'Skip label is Skip', phoneKb.skipText === 'Skip', phoneKb.skipText)
-  await saveShot(cdp, 'phone-sport-type-keyboard')
-
-  const glut = await cdp.evaluate(`window.__anatomyQA.showActionStep('type-glut-med', 300)`, true)
-  const glutLimit = glut.innerHeight - 300 + 8
-  const glutBlanks = (glut.wordText || '').replace(/\s+/g, '')
-  note('phone glute med', 'short official blanks', glutBlanks === '_________', glut.wordText)
-  note('phone glute med', 'Skip label is Skip', glut.skipText === 'Skip' && glut.skipWidth <= 72, `${glut.skipText} ${glut.skipWidth}x${glut.skipHeight}`)
-  note('phone glute med', 'Skip above the keyboard', glut.skipBottom <= glutLimit, `bottom ${glut.skipBottom} limit ${glutLimit}`)
-  note('phone glute med', 'menu chip is compact', glut.menuHeight >= 28 && glut.menuHeight <= 36, `height ${glut.menuHeight}`)
-  note('phone glute med', 'look chip is compact', glut.lookHeight >= 28 && glut.lookHeight <= 36, `height ${glut.lookHeight}`)
-  await saveShot(cdp, 'phone-sport-glut-med-keyboard')
-  const glutOpen = await cdp.evaluate(`window.__anatomyQA.showActionStep('type-glut-med', 0)`, true)
-  note('phone glute med open', 'Skip stays Skip', glutOpen.skipText === 'Skip', glutOpen.skipText)
-  note('phone glute med open', 'TAP TO TYPE', glutOpen.tapVisible === true && glutOpen.tapText === 'Tap to type', `${glutOpen.tapText} visible ${glutOpen.tapVisible}`)
-  await saveShot(cdp, 'phone-sport-glut-med')
-
-  const adduct = await cdp.evaluate(`window.__anatomyQA.showActionStep('type-glut-med', 0).then(() => window.__anatomyQA.answer('adduction'))`, true)
-  note('phone sport answer', 'adduction is not abduction', adduct.revealing === false && adduct.id === 'type-glut-med', JSON.stringify(adduct))
-  const abduct = await cdp.evaluate(`window.__anatomyQA.showActionStep('type-glut-med', 0).then(() => window.__anatomyQA.answer('abduction'))`, true)
-  note('phone sport answer', 'abduction is enough', abduct.revealing === true && abduct.id === 'type-glut-med', JSON.stringify(abduct))
-
-  await setViewport(cdp, 1440, 900, false)
-  await openApp(cdp, false)
-  const desk = await cdp.evaluate(`window.__anatomyQA.showActionStep('type-rectus', 0)`, true)
-  note('desktop sport type-it', 'rectus prompt', desk.prompt === 'Type what this muscle does at the knee and the hip.', desk.prompt)
-  note('desktop sport type-it', 'Skip stays 44px', desk.skipHeight >= 44, `height ${desk.skipHeight}`)
-  note('desktop sport type-it', 'Skip label stays full', desk.skipText === 'Skip · show answer', desk.skipText)
-  note('desktop sport type-it', 'no TAP TO TYPE', desk.tapVisible === false, `visible ${desk.tapVisible} display ${desk.hintDisplay}`)
-  note('desktop sport type-it', 'prompt is not a landscape row', desk.promptDisplay !== 'flex' && !desk.promptPanel, desk.promptDisplay)
-  note('desktop sport type-it', 'answer word stays the display', (desk.wordText || '').includes('_') || (desk.wordText || '').length > 10, desk.wordText)
-  await saveShot(cdp, 'desktop-sport-type-rectus')
-
-  await setViewport(cdp, 844, 390, true)
-  const land = await cdp.evaluate(`window.__anatomyQA.showActionStep('type-glut-med', 0)`, true)
-  note('landscape sport', 'Skip label stays full', land.skipText === 'Skip · show answer', land.skipText)
-  note('landscape sport', 'Skip stays 44px', land.skipHeight >= 44, `height ${land.skipHeight}`)
-  note('landscape sport', 'menu stays 44px', land.menuHeight >= 44, `height ${land.menuHeight}`)
-  note('landscape sport', 'look stays 44px', land.lookHeight >= 44, `height ${land.lookHeight}`)
-
-  await setViewport(cdp, 1440, 900, false)
-  const deskGlut = await cdp.evaluate(`window.__anatomyQA.showActionStep('type-glut-med', 0)`, true)
-  note('desktop glute med', 'short blanks', (deskGlut.wordText || '').replace(/\s+/g, '') === '_________', deskGlut.wordText)
-  note('desktop glute med', 'Skip label stays full', deskGlut.skipText === 'Skip · show answer', deskGlut.skipText)
-  note('desktop glute med', 'Skip stays 44px', deskGlut.skipHeight >= 44, `height ${deskGlut.skipHeight}`)
-  await saveShot(cdp, 'desktop-sport-glut-med')
-
-  const field = await cdp.evaluate(`(() => {
-    const input = document.querySelector('#answer')
-    return {
-      autocomplete: input.getAttribute('autocomplete'),
-      autocorrect: input.getAttribute('autocorrect'),
-      spellcheck: input.getAttribute('spellcheck'),
-      autocapitalize: input.getAttribute('autocapitalize'),
-    }
-  })()`)
-  note(
-    'type-it field',
-    'autocomplete stays off',
-    field.autocomplete === 'off' && field.autocorrect === 'off' && field.spellcheck === 'false' && field.autocapitalize === 'none',
-    JSON.stringify(field),
-  )
-
-  console.log('\nQA table')
-  console.log(['surface', 'check', 'result'].join('\t'))
-  for (const row of table) console.log([row.surface, row.check, row.ok ? 'pass' : 'fail'].join('\t'))
-  console.log(`${table.length} checks passed`)
+  await assertSportTypeIt(cdp)
 }
 
 function rehabBlanks(official) {
@@ -785,6 +853,50 @@ async function assertRehabType(cdp) {
     const png = await cdp.send('Page.captureScreenshot', { format: 'png' })
     await writeFile(`${OUT}/rehab-type-${name}.png`, Buffer.from(png.data, 'base64'))
   }
+  const choiceKeys = new Set([
+    'ankle:type-mechanism',
+    'ankle:type-pathway',
+    'hamstring:type-mechanism',
+    'hamstring:type-palpate',
+    'hamstring:type-totaps-stages',
+    'high-ankle:type-mechanism',
+    'high-ankle:type-squeeze-positive',
+    'high-ankle:type-external-rotation',
+    'high-ankle:type-phase-1',
+    'high-ankle:type-phase-4',
+    'achilles:type-overuse',
+    'achilles:type-rupture',
+    'achilles:type-thompson',
+    'achilles:type-tendinosis',
+    'achilles:type-return',
+    'lisfranc:type-mechanism',
+    'lisfranc:type-energy',
+    'lisfranc:type-tests',
+    'lisfranc:type-piano',
+    'lisfranc:type-compression',
+    'lisfranc:type-nwb',
+  ])
+  const noteChoices = (surface, report, kind) => {
+    const texts = (report.choices || []).map((choice) => choice.text)
+    if (choiceKeys.has(`${kind}:${report.id}`)) {
+      note(surface, 'has choices', report.choiceCount >= 3 && report.choiceCount <= 4, String(report.choiceCount))
+      note(surface, 'official is a choice', texts.includes(report.official), texts.join(' | '))
+      note(surface, 'official is not first', texts[0] !== report.official, texts[0] || '')
+      for (const choice of report.choices || []) {
+        note(
+          surface,
+          'choice on screen',
+          choice.top >= report.chromeBottom - 2 &&
+            choice.bottom <= report.innerHeight - 4 &&
+            choice.height >= 32 &&
+            choice.width >= 80,
+          JSON.stringify(choice),
+        )
+      }
+      return
+    }
+    note(surface, 'no choices', report.choiceCount === 0, String(report.choiceCount))
+  }
   const layouts = [
     ['phone', 390, 844, true, 0],
     ['desktop', 1440, 900, false, 0],
@@ -799,6 +911,7 @@ async function assertRehabType(cdp) {
       note(surface, 'context', report.context === 'Rehab · type it', report.context)
       note(surface, 'Skip stays full', report.skipText === 'Skip · show answer', report.skipText)
       note(surface, 'no card', report.promptPanel === false, String(report.promptPanel))
+      noteChoices(surface, report, kind)
       if (label === 'desktop') note(surface, 'Skip stays 44px', report.skipHeight >= 44, `height ${report.skipHeight}`)
       await capture(`${label}-${id}`)
     }
@@ -819,6 +932,14 @@ async function assertRehabType(cdp) {
   note('phone Lisfranc keyboard', 'prompt above the keyboard', lisfrancKb.promptBottom <= lisfrancLimit, `bottom ${lisfrancKb.promptBottom} limit ${lisfrancLimit}`)
   note('phone Lisfranc keyboard', 'Skip above the keyboard', lisfrancKb.skipBottom <= lisfrancLimit, `bottom ${lisfrancKb.skipBottom} limit ${lisfrancLimit}`)
   note('phone Lisfranc keyboard', 'Skip stays full', lisfrancKb.skipText === 'Skip · show answer', lisfrancKb.skipText)
+  note(
+    'phone Lisfranc keyboard',
+    'choices above the keyboard',
+    (lisfrancKb.choices || []).length >= 3 &&
+      lisfrancKb.glossTop >= lisfrancKb.chromeBottom - 2 &&
+      lisfrancKb.choices.every((choice) => choice.top >= lisfrancKb.chromeBottom - 2 && choice.bottom <= lisfrancLimit && choice.height >= 32),
+    JSON.stringify(lisfrancKb.choices),
+  )
   await capture('phone-type-nwb-keyboard')
   const achillesKb = await show('achilles', 'type-return', 300, 390, 844, true)
   const achillesLimit = achillesKb.innerHeight - 300 + 8
@@ -828,7 +949,55 @@ async function assertRehabType(cdp) {
   note('phone Achilles keyboard', 'prompt above the keyboard', achillesKb.promptBottom <= achillesLimit, `bottom ${achillesKb.promptBottom} limit ${achillesLimit}`)
   note('phone Achilles keyboard', 'Skip above the keyboard', achillesKb.skipBottom <= achillesLimit, `bottom ${achillesKb.skipBottom} limit ${achillesLimit}`)
   note('phone Achilles keyboard', 'Skip stays full', achillesKb.skipText === 'Skip · show answer', achillesKb.skipText)
+  note(
+    'phone Achilles keyboard',
+    'choices above the keyboard',
+    (achillesKb.choices || []).length >= 3 &&
+      achillesKb.glossTop >= achillesKb.chromeBottom - 2 &&
+      achillesKb.choices.every((choice) => choice.top >= achillesKb.chromeBottom - 2 && choice.bottom <= achillesLimit && choice.height >= 32),
+    JSON.stringify(achillesKb.choices),
+  )
   await capture('phone-type-return-keyboard')
+  const tendinosisKb = await show('achilles', 'type-tendinosis', 300, 390, 844, true)
+  const tendinosisLimit = tendinosisKb.innerHeight - 300 + 8
+  const tendinosisOfficial = 'chronic degeneration, no inflammation'
+  note('phone tendinosis keyboard', 'official blanks', tendinosisKb.wordText === rehabBlanks(tendinosisOfficial), tendinosisKb.wordText)
+  note(
+    'phone tendinosis keyboard',
+    'prompt above the keyboard',
+    tendinosisKb.glossTop >= tendinosisKb.chromeBottom - 2 && tendinosisKb.glossBottom <= tendinosisLimit,
+    `gloss ${tendinosisKb.glossTop}-${tendinosisKb.glossBottom} limit ${tendinosisLimit}`,
+  )
+  note('phone tendinosis keyboard', 'Skip above the keyboard', tendinosisKb.skipBottom <= tendinosisLimit, `bottom ${tendinosisKb.skipBottom}`)
+  note(
+    'phone tendinosis keyboard',
+    'choices above the keyboard',
+    (tendinosisKb.choices || []).some((choice) => choice.text === tendinosisOfficial) &&
+      tendinosisKb.choices.every((choice) => choice.top >= tendinosisKb.chromeBottom - 2 && choice.bottom <= tendinosisLimit && choice.height >= 32),
+    JSON.stringify(tendinosisKb.choices),
+  )
+  await capture('phone-type-tendinosis-keyboard')
+  const tendinosisOpen = await show('achilles', 'type-tendinosis', 0, 390, 844, true)
+  note('phone tendinosis', 'choices visible', (tendinosisOpen.choices || []).some((choice) => choice.text === tendinosisOfficial), String(tendinosisOpen.choiceCount))
+  const tendinosisWrong = await cdp.evaluate(`window.__anatomyQA.choose('sudden overload')`, true)
+  note(
+    'phone tendinosis',
+    'distractor tap stays wrong',
+    tendinosisWrong.revealing === false && /tendinitis/i.test(tendinosisWrong.prompt),
+    tendinosisWrong.prompt,
+  )
+  await capture('phone-type-tendinosis-wrong')
+  const tendinosisRight = await cdp.evaluate(
+    `window.__anatomyQA.showRehabType('achilles', 'type-tendinosis', 0).then(() => window.__anatomyQA.choose('chronic degeneration, no inflammation'))`,
+    true,
+  )
+  note(
+    'phone tendinosis',
+    'official tap fills the phrase',
+    tendinosisRight.revealing === true && tendinosisRight.word === tendinosisOfficial,
+    `${tendinosisRight.word} revealing ${tendinosisRight.revealing}`,
+  )
+  await capture('phone-type-tendinosis-correct')
   const licence = await cdp.evaluate(`(document.querySelector('.footer-attr')?.textContent || '').replace(/\\s+/g, ' ').trim()`)
   note('attribution', 'BodyParts3D stays', /BodyParts3D/i.test(licence), licence)
   console.log('REHAB TYPE QA')
@@ -1142,6 +1311,11 @@ async function main() {
 
     if (process.env.QA_ASSERT_REHAB === '1') {
       await assertRehabType(cdp)
+      return
+    }
+
+    if (process.env.QA_ASSERT_TYPE_CHOICES === '1') {
+      await assertSportTypeIt(cdp)
       return
     }
 

@@ -25,6 +25,8 @@ export type HamTypeStep = {
   prompt: string
   official: string
   aliases: string[]
+  /** Long phrases only. One entry is the official wording. */
+  choices?: readonly string[]
   hint: string
   reveal: string
   focus: StudyFocus
@@ -222,6 +224,12 @@ export const HAMSTRING_QUIZ: readonly HamQuizStep[] = [
       'eccentric tensile force',
       'tension during sprinting',
     ],
+    choices: [
+      'eccentric tensile overload',
+      'grade II',
+      'nordic hamstring curls',
+      'away from the pain',
+    ],
     hint: 'Tension, pulling lengthwise, while the muscle is lengthening in the sprint.',
     reveal: 'A hamstring strain in a sprint is an eccentric tensile overload. The force is tension.',
     focus: ALL_SWING,
@@ -270,6 +278,12 @@ export const HAMSTRING_QUIZ: readonly HamQuizStep[] = [
       'start away from the painful site',
       'palpate away from the painful site',
     ],
+    choices: [
+      'away from the pain',
+      'eccentric tensile overload',
+      'stop testing',
+      'nordic hamstring curls',
+    ],
     hint: 'TOTAPS Touch, with consent. Do not start on the sorest spot.',
     reveal: 'With consent, palpate from away from the painful site. If a stage shows a problem, stop. Do not go straight back to play.',
     focus: ALL,
@@ -315,6 +329,12 @@ export const HAMSTRING_QUIZ: readonly HamQuizStep[] = [
       'talk observe touch active passive skill test',
       'talk observe touch active passive skill',
       'talk, observe, touch, active, passive, skill',
+    ],
+    choices: [
+      'Talk, Observe, Touch, Active movement, Passive movement, Skill test',
+      'stop testing',
+      'away from the pain',
+      'eccentric tensile overload',
     ],
     hint: 'The pitch-side mnemonic: Talk, Observe, Touch, then the two movement checks, then a skill test.',
     reveal: 'TOTAPS is Talk, Observe, Touch, Active movement, Passive movement, and Skill test. If any stage reveals a problem, stop testing.',

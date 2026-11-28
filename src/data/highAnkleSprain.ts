@@ -48,6 +48,8 @@ export type HighAnkleTypeStep = {
   prompt: string
   official: string
   aliases: string[]
+  /** Long phrases only. One entry is the official wording. */
+  choices?: readonly string[]
   hint: string
   reveal: string
   light: HighAnkleLight
@@ -317,6 +319,12 @@ export const HIGH_ANKLE_QUIZ: readonly HighAnkleQuizStep[] = [
       'dorsiflexion, eversion, and tibial internal rotation',
       'eversion and dorsiflexion with tibial internal rotation',
     ],
+    choices: [
+      'dorsiflexion, eversion, and tibial internal rotation',
+      'inversion and plantarflexion',
+      'pain with external rotation of the foot',
+      'mid-calf squeeze',
+    ],
     hint: 'The ankle goes up and out, and the tibia turns in.',
     reveal: 'The mechanism is dorsiflexion and eversion of the ankle with internal rotation of the tibia.',
     light: 'aitfl-pitfl',
@@ -413,6 +421,12 @@ export const HIGH_ANKLE_QUIZ: readonly HighAnkleQuizStep[] = [
       'pain in the lower leg',
       'pain near the syndesmosis',
     ],
+    choices: [
+      'pain around the syndesmosis; fracture, contusion, and compartment syndrome ruled out',
+      'pain with external rotation of the foot',
+      'mid-calf squeeze',
+      'inversion and plantarflexion',
+    ],
     hint: 'A positive test is pain at the syndesmosis. The lecture will not read that test until something more serious is out of the way.',
     reveal:
       'Pain around the syndesmosis, or pain in the lower leg, may indicate a syndesmosis injury, provided fracture, contusion, and compartment syndrome have been ruled out. Fracture should be excluded before the test.',
@@ -433,6 +447,12 @@ export const HIGH_ANKLE_QUIZ: readonly HighAnkleQuizStep[] = [
       'external rotation of a plantigrade foot with the tibia stabilised, pain around the syndesmosis',
       'pain on ER with the tibia stabilised',
       'pain with ER of the foot',
+    ],
+    choices: [
+      'pain with external rotation of the foot',
+      'mid-calf squeeze',
+      'pain around the syndesmosis; fracture, contusion, and compartment syndrome ruled out',
+      'inversion and plantarflexion',
     ],
     hint: 'Stabilise the tibia. Turn the foot out. Pain means the test is positive.',
     reveal:
@@ -457,6 +477,12 @@ export const HIGH_ANKLE_QUIZ: readonly HighAnkleQuizStep[] = [
       'avoid painful DF and eversion',
       'NWB crutches CAM boot, avoid painful DF and eversion',
     ],
+    choices: [
+      'non-weight bearing with crutches, then a CAM boot; avoid painful dorsiflexion and eversion',
+      'jog-to-run, then cutting and pivoting',
+      'dorsiflexion, eversion, and tibial internal rotation',
+      'mid-calf squeeze',
+    ],
     hint: 'Protection first. The motions to avoid are the same ones in the mechanism.',
     reveal:
       'Phase 1 is often non-weight bearing with crutches, with progression to a CAM boot. Avoid painful dorsiflexion and eversion. Goals are to control pain and swelling, restore pain-free range of motion, and protect healing structures with a splint, brace, or heel lift.',
@@ -477,6 +503,12 @@ export const HIGH_ANKLE_QUIZ: readonly HighAnkleQuizStep[] = [
       'cutting and pivoting',
       'sport-specific drills',
       'dynamic strengthening and proprioceptive exercises, jog-to-run, cutting and pivoting',
+    ],
+    choices: [
+      'jog-to-run, then cutting and pivoting',
+      'non-weight bearing with crutches, then a CAM boot; avoid painful dorsiflexion and eversion',
+      'pain with external rotation of the foot',
+      'mid-calf squeeze',
     ],
     hint: 'Return to activity: run, then cut and pivot, then the sport. Clearance is not yours alone.',
     reveal:
