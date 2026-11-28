@@ -430,7 +430,8 @@ assert(!hamstringTypeMatch(grade, 'grade I'), 'grade I is not this case')
 const nordic = typeStep(HAMSTRING_QUIZ, 'type-nordic') as HamTypeStep
 assert(hamstringTypeMatch(nordic, 'Nordic hamstring curls'), 'Nordic hamstring curls match')
 assert(hamstringTypeMatch(nordic, 'nordic curls'), 'nordic curls match')
-assert(nordic.official === 'nordic curls', 'nordic blanks use the short name')
+assert(nordic.official === 'nordic hamstring curls', 'nordic blanks use the normal name')
+assert(nordic.aliases.includes('nordic curls'), 'nordic keeps the short form as an alias')
 assert(nordic.reveal === 'Phase 2 uses progressive eccentric exercises, such as Nordic hamstring curls.', 'nordic reveal stays notes-locked')
 assert(!hamstringTypeMatch(nordic, 'leg curl'), 'a generic leg curl is not the named exercise')
 
@@ -522,10 +523,27 @@ assert(hamstringTypeMatch(totapsStop, 'stop testing'), 'TOTAPS stop rule accepts
 assert(hamstringTypeMatch(totapsStop, 'do not immediately return to play'), 'TOTAPS stop rule accepts do not return to play')
 assert(!hamstringTypeMatch(totapsStop, 'return to play'), 'returning to play is not the stop rule')
 const totapsStages = typeStep(HAMSTRING_QUIZ, 'type-totaps-stages') as HamTypeStep
-assert(totapsStages.official === 'Talk, Observe, Touch, Active, Passive, Skill', 'TOTAPS blanks name the six short stages')
+assert(
+  totapsStages.official === 'Talk, Observe, Touch, Active movement, Passive movement, Skill test',
+  'TOTAPS blanks use the normal stage names',
+)
 assert(totapsStages.official !== 'TOTAPS', 'TOTAPS blanks are not the bare acronym')
-assert(hamstringTypeMatch(totapsStages, 'Talk, Observe, Touch, Active, Passive, Skill'), 'TOTAPS stages accept the short six names')
-assert(hamstringTypeMatch(totapsStages, 'Talk, Observe, Touch, Active movement, Passive movement, and Skill test'), 'TOTAPS stages still accept the full stage names')
+assert(
+  totapsStages.official.includes('Active movement') &&
+    totapsStages.official.includes('Passive movement') &&
+    totapsStages.official.includes('Skill test'),
+  'TOTAPS blanks name Active movement, Passive movement, and Skill test',
+)
+assert(hamstringTypeMatch(totapsStages, 'Talk, Observe, Touch, Active movement, Passive movement, Skill test'), 'TOTAPS stages accept the normal stage names')
+assert(
+  hamstringTypeMatch(totapsStages, 'Talk, Observe, Touch, Active, Passive, Skill', 'confirm'),
+  'TOTAPS stages still accept the six-word short list on Enter',
+)
+assert(
+  !hamstringTypeMatch(totapsStages, 'Talk, Observe, Touch, Active, Passive, Skill'),
+  'the six-word list waits while it is a prefix of skill test',
+)
+assert(hamstringTypeMatch(totapsStages, 'Talk, Observe, Touch, Active movement, Passive movement, and Skill test'), 'TOTAPS stages still accept the previous official')
 assert(hamstringTypeMatch(totapsStages, 'talk observe touch active passive skill test'), 'TOTAPS stages accept a compact six-name form')
 assert(!hamstringTypeMatch(totapsStages, 'totaps'), 'the mnemonic alone is not the six stages')
 assert(!hamstringTypeMatch(totapsStages, 'talk'), 'a single stage is not the six-name answer')

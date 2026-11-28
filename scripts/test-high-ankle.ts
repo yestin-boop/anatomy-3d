@@ -120,13 +120,16 @@ assert(!highAnkleTypeMatch(injury, 'ATFL'), 'ATFL is not the name of this sprain
 assert(!highAnkleTypeMatch(injury, 'inversion sprain'), 'inversion sprain is not this injury')
 
 const joint = typeStep('type-joint')
-assert(highAnkleTypeMatch(joint, 'syndesmosis'), 'syndesmosis live-matches')
-assert(highAnkleTypeMatch(joint, 'inferior tibiofibular joint', 'confirm'), 'the joint name confirms')
+assert(highAnkleTypeMatch(joint, 'inferior tibiofibular joint'), 'inferior tibiofibular joint is the official and live-matches')
+assert(highAnkleTypeMatch(joint, 'syndesmosis'), 'syndesmosis still live-matches')
+assert(highAnkleTypeMatch(joint, 'inferior tibiofibular joint (syndesmosis)'), 'the previous joint official still live-matches')
 assert(highAnkleTypeMatch(joint, 'distal tibiofibular joint'), 'distal tibiofibular joint live-matches')
 assert(!highAnkleTypeMatch(joint, 'talocrural joint', 'confirm'), 'the talocrural joint is not this joint')
 
 const mechanism = typeStep('type-mechanism')
+assert(highAnkleTypeMatch(mechanism, 'dorsiflexion, eversion, and tibial internal rotation'), 'the normal mechanism wording live-matches')
 assert(highAnkleTypeMatch(mechanism, 'DF + eversion + tibial IR'), 'the short DF alias live-matches')
+assert(highAnkleTypeMatch(mechanism, 'dorsiflexion and eversion with tibial internal rotation'), 'the previous mechanism official still live-matches')
 assert(
   highAnkleTypeMatch(mechanism, 'dorsiflexion and eversion of the ankle with internal rotation of the tibia'),
   'the lecture sentence live-matches',
@@ -193,11 +196,20 @@ assert(!highAnkleTypeMatch(positive, 'pain', 'confirm'), 'pain alone is not enou
 assert(!highAnkleTypeMatch(positive, 'fracture', 'confirm'), 'the caveat alone is not the positive finding')
 
 const external = typeStep('type-external-rotation')
+assert(highAnkleTypeMatch(external, 'pain with external rotation of the foot'), 'the normal external-rotation wording live-matches')
 assert(highAnkleTypeMatch(external, 'pain with ER of the foot'), 'the short external-rotation alias live-matches')
+assert(
+  highAnkleTypeMatch(external, 'pain with external rotation of the foot and ankle relative to a stabilised tibia'),
+  'the previous external-rotation official still live-matches',
+)
 assert(highAnkleTypeMatch(external, 'pain on ER with the tibia stabilised'), 'stabilised tibia alias live-matches')
 assert(!highAnkleTypeMatch(external, 'pain', 'confirm'), 'pain alone is not the external rotation test')
 
 const phase1 = typeStep('type-phase-1')
+assert(
+  highAnkleTypeMatch(phase1, 'non-weight bearing with crutches, then a CAM boot; avoid painful dorsiflexion and eversion'),
+  'the normal Phase 1 wording live-matches',
+)
 assert(highAnkleTypeMatch(phase1, 'avoid painful DF and eversion'), 'the short precaution live-matches')
 assert(highAnkleTypeMatch(phase1, 'NWB with crutches, then CAM boot', 'confirm'), 'the weight-bearing precaution confirms')
 assert(highAnkleTypeMatch(phase1, 'NWB with crutches, then CAM boot; avoid painful DF and eversion'), 'the short Phase 1 official live-matches')
@@ -218,7 +230,18 @@ assert(highAnkleTypeMatch(phase4, 'cutting and pivoting'), 'cutting and pivoting
 assert(highAnkleTypeMatch(phase4, 'sport-specific drills'), 'sport-specific drills live-matches')
 assert(!highAnkleTypeMatch(phase4, 'plyometrics', 'confirm'), 'plyometrics is not this phase')
 
-const HIGH_SHORT: Record<string, string> = {
+const HIGH_OFFICIAL: Record<string, string> = {
+  'type-injury': 'high ankle sprain',
+  'type-joint': 'inferior tibiofibular joint',
+  'type-mechanism': 'dorsiflexion, eversion, and tibial internal rotation',
+  'type-palpate': 'anterior inferior tibiofibular ligament',
+  'type-squeeze': 'mid-calf squeeze',
+  'type-squeeze-positive': 'pain around the syndesmosis; fracture, contusion, and compartment syndrome ruled out',
+  'type-external-rotation': 'pain with external rotation of the foot',
+  'type-phase-1': 'non-weight bearing with crutches, then a CAM boot; avoid painful dorsiflexion and eversion',
+  'type-phase-4': 'jog-to-run, then cutting and pivoting',
+}
+const HIGH_PR21: Record<string, string> = {
   'type-injury': 'high ankle sprain',
   'type-joint': 'syndesmosis',
   'type-mechanism': 'DF + eversion + tibial IR',
@@ -242,14 +265,16 @@ const HIGH_LEGACY: Record<string, string> = {
 }
 for (const step of HIGH_ANKLE_QUIZ) {
   if (step.kind !== 'type') continue
-  const short = HIGH_SHORT[step.id]
+  const official = HIGH_OFFICIAL[step.id]
   const legacy = HIGH_LEGACY[step.id] ?? ''
-  assert(short != null && step.official === short, `${step.id} blanks use the short name`)
+  const short = HIGH_PR21[step.id] ?? ''
+  assert(official != null && step.official === official, `${step.id} blanks use the normal name`)
   assert(step.aliases.includes(step.official), `${step.id} official is accepted`)
   assert(step.aliases.includes(legacy), `${step.id} keeps the previous official as an alias`)
-  assert(highAnkleTypeMatch(step, step.official), `${step.id} accepts its short official`)
+  assert(step.aliases.includes(short), `${step.id} keeps the short form as an alias`)
+  assert(highAnkleTypeMatch(step, step.official), `${step.id} accepts its official`)
   assert(highAnkleTypeMatch(step, legacy), `${step.id} still accepts the previous official`)
-  assert(step.official.length < legacy.length, `${step.id} official is shorter than the previous phrase`)
+  assert(highAnkleTypeMatch(step, short), `${step.id} still accepts the short form`)
 }
 assert(
   positive.official.includes('pain around the syndesmosis') &&
@@ -260,8 +285,10 @@ assert(
 )
 assert(positive.official !== 'pain around the syndesmosis', 'squeeze-positive official is not only the pain phrase')
 assert(
-  phase1.official.includes('avoid painful DF and eversion') && phase1.official.includes('NWB') && phase1.official.includes('CAM boot'),
-  'Phase 1 official keeps weight-bearing protection and the DF/eversion precaution',
+  phase1.official.includes('non-weight bearing') &&
+    phase1.official.includes('CAM boot') &&
+    phase1.official.includes('avoid painful dorsiflexion and eversion'),
+  'Phase 1 official keeps weight-bearing protection and the dorsiflexion/eversion precaution',
 )
 assert(
   phase4.official.includes('jog-to-run') && phase4.official.includes('cutting') && phase4.official.includes('pivoting'),

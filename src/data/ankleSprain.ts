@@ -189,17 +189,17 @@ const TAP_WRONG_BASE: Record<AnkleHit, string> = {
   other: '',
 }
 
-/** Blanks use the short name. Each previous official phrase stays an alias. Hints, reveals, and tap prompts stay on the notes wording. */
+/** Blanks use the normal mid-length name. Previous officials and short forms stay aliases. Hints, reveals, and tap prompts stay on the notes wording. */
 export const ANKLE_QUIZ: readonly AnkleQuizStep[] = [
   {
     kind: 'type',
     id: 'type-atfl',
     region: 'LIKELY INVOLVED',
     prompt: 'Type the ligament this case says is likely involved.',
-    official: 'ATFL',
+    official: 'anterior talofibular ligament',
     aliases: [
-      'ATFL',
       'anterior talofibular ligament',
+      'ATFL',
       'anterior talo-fibular ligament',
       'anterior talofibular',
       'atfl',
@@ -213,8 +213,8 @@ export const ANKLE_QUIZ: readonly AnkleQuizStep[] = [
     id: 'type-cfl',
     region: 'ALSO AT RISK',
     prompt: 'Type the other lateral ligament inversion puts under high tension.',
-    official: 'CFL',
-    aliases: ['CFL', 'calcaneofibular ligament', 'calcaneo-fibular ligament', 'calcaneofibular', 'cfl'],
+    official: 'calcaneofibular ligament',
+    aliases: ['calcaneofibular ligament', 'CFL', 'calcaneo-fibular ligament', 'calcaneofibular', 'cfl'],
     hint: 'Inversion loads the lateral ligaments. The notes name the ATFL and this one.',
     reveal:
       'Inversion puts the lateral ligaments under high tension. The notes name the ATFL and the CFL, the calcaneofibular ligament.',
@@ -299,7 +299,7 @@ export const ANKLE_QUIZ: readonly AnkleQuizStep[] = [
     id: 'type-pathway',
     region: 'PHASE 3',
     prompt: 'Type the Phase 3 work in this Grade II ankle pathway.',
-    official: 'plyometrics, agility, and sport training',
+    official: 'plyometrics, agility, and sport-specific training',
     aliases: [
       'plyometrics, agility, and sport training',
       'plyometrics, agility, and sport-specific training',
